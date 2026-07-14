@@ -14,8 +14,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -88,8 +90,15 @@ public class DbLoader {
         }
     }
 
+    /**
+     * @param ocrTextByImageId 이미지 ID(ExtractedImage.getImageId()) -> OCR 인식 텍스트.
+     *                         OCR을 안 쓰거나 아직 안 돌렸으면 null 또는 빈 맵을 넘기면 된다.
+     *                         OCR 계산 자체는 이 클래스의 책임이 아니고, 호출하는 쪽(파이프라인)이
+     *                         OcrProvider 등으로 미리 계산해서 넘겨준다.
+     */
     public long saveDocument(ExtractedDocument doc, String imageOutputDir,
-                              boolean runOcr, String ocrLang) throws Exception {
+                             Map<String, String> ocrTextByImageId) throws Exception {
+        Map<String, String> ocrMap = ocrTextByImageId != null ? ocrTextByImageId : Collections.emptyMap();
         new File(imageOutputDir).mkdirs();
 
         String fileType = fileExtension(doc.getSourcePath());
@@ -133,11 +142,8 @@ public class DbLoader {
                 fos.write(image.getData());
             }
 
-            String ocrText = null;
-            if (runOcr) {
-                ocrText = OcrExtractor.recognize(image.getData(), ocrLang);
-                if (ocrText != null && ocrText.isEmpty()) ocrText = null;
-            }
+            String ocrText = ocrMap.get(image.getImageId());
+            if (ocrText != null && ocrText.isEmpty()) ocrText = null;
 
             try (PreparedStatement ps = conn.prepareStatement(
                     "INSERT INTO images_extracted (document_id, image_ref, file_href, caption, original_filename, file_path, ocr_text) " +

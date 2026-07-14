@@ -36,7 +36,7 @@ import java.util.List;
  * 한계: Python hwp5_extractor.py와 마찬가지로, 이미지는 '어느 문단에 정확히
  * 붙어있었는지'까지는 복원하지 않고 문서 전체의 BinData를 통째로 추출한다.
  */
-public class HwpExtractor {
+public class HwpExtractor implements DocumentExtractor{
 
     public ExtractedDocument parse(String path) throws Exception {
         HWPFile hwpFile = HWPReader.fromFile(path);

@@ -45,7 +45,7 @@ import java.util.Map;
  *   - Picture.img().binaryItemIDRef()로 이미지 참조, Picture.shapeComment().text()로
  *     원본 파일명 등 캡션 후보를 바로 얻을 수 있음 (Python에서 정규식으로 파싱했던 것보다 간단)
  */
-public class HwpxExtractor {
+public class HwpxExtractor implements DocumentExtractor{
 
     public ExtractedDocument parse(String path) throws Exception {
         HWPXFile hwpxFile = HWPXReader.fromFilepath(path);

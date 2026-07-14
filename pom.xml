@@ -34,7 +34,7 @@
             hwplib이 배포용(DRM) 문서를 읽을 때 javax.xml.bind.DatatypeConverter를
             사용하는데, 이 클래스는 JDK 11부터 표준 JDK에서 제거되었다.
             일반 문서 읽기에는 영향 없지만, 혹시 배포용 문서를 다루게 될 경우를
-            대비해 명시적으로 추가해둔다.
+            대비해 명시적으로 추가해둔다. (OCR과는 무관, hwplib 자체 호환성 이슈)
         -->
         <dependency>
             <groupId>javax.xml.bind</groupId>
@@ -47,13 +47,6 @@
             <groupId>kr.dogfoot</groupId>
             <artifactId>hwpxlib</artifactId>
             <version>1.0.8</version>
-        </dependency>
-
-        <!-- OCR (Tesseract JNA 래퍼) -->
-        <dependency>
-            <groupId>net.sourceforge.tess4j</groupId>
-            <artifactId>tess4j</artifactId>
-            <version>5.18.0</version>
         </dependency>
 
         <!-- SQLite JDBC 드라이버 -->
