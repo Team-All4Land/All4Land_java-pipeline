@@ -40,3 +40,14 @@ Thumbs.db
 *.env
 application-local.properties
 application-local.yml
+
+# 파이프라인 산출물 (배치 실행 결과 - 커밋 대상 아님)
+out/
+out2/
+out3/
+images/
+input/
+*.db
+*.sqlite
+*.raw.json
+*.schema.json

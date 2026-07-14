@@ -17,6 +17,9 @@ public interface Extractor {
     /** 이 엔진이 해당 확장자(소문자, 점 제외)를 지원하는지 여부. */
     boolean supports(String ext);
 
+    /** documents.engine 컬럼에 기록되는 엔진 식별자 (예: "hwplib", "pdfbox"). */
+    String engineName();
+
     /** 파일에서 원시 콘텐츠(문단/표/이미지 메타)를 추출한다. */
     RawDocument extractRaw(Path file) throws IOException;
 

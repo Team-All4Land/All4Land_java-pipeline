@@ -11,12 +11,18 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>11</maven.compiler.release>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <pdfbox.version>3.0.3</pdfbox.version>
         <jackson.version>2.17.2</jackson.version>
         <junit.version>5.11.0</junit.version>
+        <picocli.version>4.7.7</picocli.version>
+        <postgresql.version>42.7.7</postgresql.version>
+        <hikaricp.version>6.3.2</hikaricp.version>
+        <flyway.version>11.10.0</flyway.version>
+        <tess4j.version>5.13.0</tess4j.version>
+        <!-- 기본: db 태그 테스트 제외. 실제 PG로 돌릴 때 -Dgroups=db -DexcludedGroups= 로 재정의 -->
+        <groups></groups>
+        <excludedGroups>db</excludedGroups>
     </properties>
 
     <dependencies>
@@ -51,9 +57,42 @@
         </dependency>
 
         <dependency>
-            <groupId>org.xerial</groupId>
-            <artifactId>sqlite-jdbc</artifactId>
-            <version>3.53.2.0</version>
+            <groupId>info.picocli</groupId>
+            <artifactId>picocli</artifactId>
+            <version>${picocli.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${postgresql.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>${hikaricp.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+
+        <!-- Flyway 10+는 PostgreSQL 지원이 별도 모듈로 분리됨 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+
+        <!-- 임베디드 이미지 OCR(ocr 옵션). 네이티브 Tesseract 미설치 시에도
+             TesseractOcr가 lazy-init으로 격리하므로 파이프라인은 정상 동작 -->
+        <dependency>
+            <groupId>net.sourceforge.tess4j</groupId>
+            <artifactId>tess4j</artifactId>
+            <version>${tess4j.version}</version>
         </dependency>
 
         <dependency>
@@ -71,7 +110,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <release>11</release>
+                    <release>17</release>
                 </configuration>
             </plugin>
 
@@ -81,6 +120,21 @@
                 <version>3.2.5</version>
                 <configuration>
                     <argLine>-Dfile.encoding=UTF-8</argLine>
+                    <!-- 한글 파일명(samples/*.hwp 등) 경로 처리는 sun.jnu.encoding이
+                         UTF-8이어야 함 - 이는 -D로 재정의되지 않고 프로세스 로캘에서
+                         결정되므로 포크된 테스트 JVM에 LANG을 명시한다 -->
+                    <environmentVariables>
+                        <LANG>C.UTF-8</LANG>
+                    </environmentVariables>
+                    <!-- DB 태그 테스트는 실제 PostgreSQL이 있을 때만:
+                         mvn test -Dgroups=db -DexcludedGroups= -Ddb.test.url=... -->
+                    <groups>${groups}</groups>
+                    <excludedGroups>${excludedGroups}</excludedGroups>
+                    <!-- 기본 패턴(**/*Test.java)은 *IT.java를 잡지 않으므로 명시 추가 -->
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
                 </configuration>
             </plugin>
 
@@ -107,8 +161,10 @@
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.onnara.extract.RunPipeline</mainClass>
+                                    <mainClass>com.onnara.extract.cli.Main</mainClass>
                                 </transformer>
+                                <!-- JDBC 드라이버·Flyway 등 META-INF/services 병합 -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
                         </configuration>
                     </execution>

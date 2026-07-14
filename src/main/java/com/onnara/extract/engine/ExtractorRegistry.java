@@ -1,10 +1,15 @@
 package com.onnara.extract.engine;
 
+import com.onnara.extract.engine.hml.HmlExtractor;
+import com.onnara.extract.engine.hwp.HwplibExtractor;
+import com.onnara.extract.engine.hwpx.OwpmlExtractor;
 import com.onnara.extract.engine.pdf.PdfBoxExtractor;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * 확장자 → 네이티브 Extractor 매핑.
@@ -16,9 +21,15 @@ public final class ExtractorRegistry {
 
     private static final List<Extractor> EXTRACTORS = new ArrayList<>();
 
+    /** 파이프라인이 입력 폴더에서 수집하는 확장자 목록. */
+    private static final Set<String> EXTENSIONS =
+            new LinkedHashSet<>(List.of("hwp", "hwpx", "hml", "pdf"));
+
     static {
         register(new PdfBoxExtractor());
-        // 이후 단계: HwplibExtractor / OwpmlExtractor / HmlExtractor 등록
+        register(new HwplibExtractor());
+        register(new OwpmlExtractor());
+        register(new HmlExtractor());
     }
 
     private ExtractorRegistry() {
@@ -37,5 +48,20 @@ public final class ExtractorRegistry {
             }
         }
         throw new IllegalArgumentException("지원하지 않는 확장자입니다: " + ext);
+    }
+
+    /** 엔진 이름(hwplib/owpml/hml-dom/pdfbox)으로 강제 선택 (--engine 옵션). 없으면 예외. */
+    public static Extractor forEngineName(String engineName) {
+        for (Extractor e : EXTRACTORS) {
+            if (e.engineName().equals(engineName)) {
+                return e;
+            }
+        }
+        throw new IllegalArgumentException("등록되지 않은 엔진입니다: " + engineName);
+    }
+
+    /** 지원 확장자 집합 (입력 폴더 재귀 스캔용). */
+    public static Set<String> supportedExtensions() {
+        return Set.copyOf(EXTENSIONS);
     }
 }

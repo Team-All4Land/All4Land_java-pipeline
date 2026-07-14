@@ -55,6 +55,11 @@ public class PdfBoxExtractor implements Extractor {
     }
 
     @Override
+    public String engineName() {
+        return "pdfbox";
+    }
+
+    @Override
     public RawDocument extractRaw(Path file) throws IOException {
         RawDocument raw = new RawDocument(file.getFileName().toString(), "pdf", false);
 

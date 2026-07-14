@@ -1,179 +1,205 @@
-# HWP/HWPX/HWPML 추출 파이프라인 (Java)
+# 공유수면 고시문 추출 파이프라인 (Java)
 
-관공서에서 주로 배포되는 한글 문서(`.hwp`, `.hwpx`, `.hml`)에서 **본문 텍스트,
-표, 이미지**를 구조화된 형태로 추출해 SQLite 데이터베이스에 저장하는 CLI
-파이프라인입니다. 공유수면 점용·사용 고시문, 준공검사 확인증, 방치선박 제거
-공고 등 정형화된 관공서 고시 문서를 대량으로 파싱해 데이터화하는 용도로
-작성되었습니다.
+공유수면 점용·사용 고시류 문서(**HWP / HWPX / HML / PDF — 네이티브·스캔본 모두**)에서
+텍스트·표·이미지를 추출하고, 표준 필드 스키마로 정규화한 뒤 **PostgreSQL DB에
+적재**하는 배치 파이프라인입니다.
 
-Python으로 먼저 만들어진 파이프라인을 동일한 로직/스키마로 Java로 옮긴
-버전입니다.
+핵심 원칙: **판별(detect) → 추출(engine) → 매핑(common) → 적재(db)** 4계층 분리.
+PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 스캔본 처리만 별도의 Python
+API 서비스(`ocr-service/`, 이 저장소 범위 밖)로 분리하고, Java 파이프라인이
+HTTP로 호출합니다.
 
-## 주요 기능
-
-- **다중 포맷 지원**: `.hwp`(바이너리 5.0), `.hwpx`(OOXML 계열 ZIP), `.hml`(HWPML,
-  구버전 XML) 세 포맷을 하나의 공통 모델(`ExtractedDocument`)로 파싱
-- **표 구조 보존**: 병합 셀을 실제 크기로 복제한 `grid`(CSV/DataFrame 변환용)와
-  `rowSpan`/`colSpan`을 보존한 `cells`(정밀 복원용) 두 형태로 동시 저장
-- **이미지 추출**: 문서 내 이미지를 원본 바이트 그대로 파일로 저장하고, 매직바이트로
-  실제 포맷(jpg/png/bmp/gif)을 판별해 확장자 부여
-- **캡션/제목 자동 인식**: 표·이미지 주변 문단에서 `<표 1>`, `[그림 2]` 같은
-  캡션 패턴을 찾아 연결하고, "OO청 고시 제2026-88호" 형식의 고시문에서 실제
-  제목을 자동 추정
-- **폴더 재귀 처리 + 폴더/파일 확장자 필터링**: 폴더를 지정하면 지원 확장자 파일만
-  재귀적으로 찾아 순서대로 처리
-- **포맷/OCR 확장 포인트**: `DocumentExtractor`, `OcrProvider` 인터페이스만
-  구현하면 PDF 등 다른 포맷이나 임의의 OCR 엔진을 코드 수정 없이 연결 가능
-
-## 기술 스택
-
-| 구분 | 내용 |
-|---|---|
-| 언어 / 빌드 | Java 11, Maven |
-| `.hwp` 파싱 | `kr.dogfoot:hwplib` (Apache-2.0) |
-| `.hwpx` 파싱 | `kr.dogfoot:hwpxlib` (Apache-2.0) |
-| `.hml` 파싱 | 표준 JDK `javax.xml.parsers` (DOM) |
-| 저장소 | `org.xerial:sqlite-jdbc` (Apache-2.0) |
-| 배포용 문서 호환 | `javax.xml.bind:jaxb-api` (hwplib의 JDK11 호환용) |
-| 패키징 | `maven-shade-plugin` (fat-jar) |
-
-의존 라이브러리는 모두 permissive(Apache-2.0) 라이선스로, 상업적 사용에
-제약이 없습니다.
-
-## 프로젝트 구조
+## 전체 흐름
 
 ```
-├── pom.xml                          # Maven 빌드 설정 (fat-jar, shade-plugin)
-├── samples/                         # 테스트용 실제 고시문 샘플 (.hwp/.hwpx/.hml)
-├── images/                          # 추출된 이미지 저장 기본 디렉터리(예시 결과물)
-└── src/main/java/com/onnara/extract
-    ├── RunPipeline.java             # 진입점 (CLI)
-    ├── DocumentExtractor.java       # 파서 공통 인터페이스
-    ├── HwpExtractor.java            # .hwp 파서 (hwplib 사용)
-    ├── HwpxExtractor.java           # .hwpx 파서 (hwpxlib 사용)
-    ├── HwpmlExtractor.java          # .hml(HWPML) 파서 (표준 라이브러리만 사용)
-    ├── TextPatterns.java            # 캡션 패턴 매칭 + 고시문 제목 추정
-    ├── DbLoader.java                # SQLite 저장 (JDBC)
-    ├── OcrProvider.java             # OCR 연동용 인터페이스 (구현체 미포함)
-    └── model/
-        ├── ExtractedDocument.java   # 문서 전체(제목/날짜/문단/표/이미지)
-        ├── ExtractedTable.java      # 표 (grid + cells)
-        ├── ExtractedCell.java       # 표 셀 (병합 정보 포함)
-        └── ExtractedImage.java      # 이미지 (바이트, 캡션, 원본 파일명)
+입력 파일 (.hwp / .hwpx / .hml / .pdf)   ← 모든 확장자가 스캔본일 수 있음
+        │
+        ▼
+CLI: extract.jar pipeline (picocli)
+        │
+        │  [1차 분기] 스캔본 판별 — DetectorRegistry
+        │
+        ├── 스캔본 ──► ScanOcrClient ──HTTP──► ocr-service (별도 Python, 범위 밖)
+        │
+        └── 네이티브 ── [2차 분기] 확장자별 Extractor
+                ├─ .hwp   →  HwplibExtractor  (hwplib)
+                ├─ .hwpx  →  OwpmlExtractor   (hwpxlib)
+                ├─ .hml   →  HmlExtractor     (JDK DOM, 외부 의존성 없음)
+                └─ .pdf   →  PdfBoxExtractor  (Apache PDFBox + 선분 클러스터링 표 탐지)
+        │
+        ▼
+raw JSON (공통 계약 — snake_case, Jackson DTO)
+        ▼
+Mapper.mapToSchema (라벨 정규화 + 동의어 사전 매핑 + 값 정규화)
+        ▼
+표준 스키마 JSON {"source_file", "records": [...], "images": [...]}
+        ▼
+DbLoader (PostgreSQL JDBC + HikariCP)
+        ▼
+PostgreSQL (documents / ref_files 2테이블) + images/ 폴더
 ```
 
-## 설치 방법
+## 지원 형식
 
-### 요구 사항
+| 형식 | 판별기 | 추출 엔진 | 비고 |
+|---|---|---|---|
+| `.hwp` | `HwpScanDetector` | `HwplibExtractor` (hwplib) | 이미지 위치 복원 불가(BinData 전체 추출) |
+| `.hwpx` | `HwpxScanDetector` | `OwpmlExtractor` (hwpxlib) | 인라인 태그(`<hp:fwSpace/>` 등) 텍스트 잘림 방지 처리 |
+| `.hml` | `HmlScanDetector` | `HmlExtractor` (JDK DOM) | ColSpan/RowSpan 병합 구조 복원 |
+| `.pdf` | `PdfScanDetector` | `PdfBoxExtractor` | 선분 클러스터링 표 탐지, 도장 제외 휴리스틱 |
 
-- JDK 11 이상
+스캔 판별 기준: 네이티브 본문 텍스트량이 거의 없으면서(형식별 임계치 미만)
+임베디드 이미지가 있으면 스캔본으로 판정합니다.
+
+## 디렉터리 구조
+
+```
+src/main/java/com/onnara/extract/
+├── cli/          picocli 진입점 — Main + 5개 서브커맨드
+├── detect/       1차 분기: 스캔본 판별 (ScanDetector 구현체 4종)
+├── engine/       2차 분기: 확장자별 네이티브 추출기 (Extractor 구현체 4종)
+├── common/       형식 공통 계층 — raw JSON 모델, 매퍼, 동의어 사전, 날짜/주소 휴리스틱
+├── ocr/          임베디드 이미지 OCR (Tess4J, --ocr 옵션)
+├── scan/         스캔본 처리 — Python OCR 서비스 HTTP 클라이언트
+└── db/           PostgreSQL 적재 (HikariCP + Flyway)
+
+src/main/resources/
+├── application.properties   DB·OCR 서비스 접속 설정
+└── db/migration/            Flyway 마이그레이션 (V1__init.sql)
+
+src/test/java/...   JUnit 5 — detect/engine/common/scan 단위 테스트 + samples/ 기반 회귀 테스트
+samples/             실제 고시문 픽스처 (형식·스캔 여부별)
+```
+
+## 요구 사항
+
+- JDK 17 이상
 - Maven 3.6 이상
-- (표준 사용 시) 인터넷 연결 — Maven Central에서 `hwplib`/`hwpxlib`/`sqlite-jdbc`를
-  내려받습니다.
+- (DB 적재 시) PostgreSQL 접근 가능한 인스턴스
+- (`--ocr` 사용 시) 네이티브 Tesseract + 한국어 데이터(`kor.traineddata`) 설치,
+  `TESSDATA_PREFIX` 환경변수. 미설치 환경에서는 `--ocr`를 켜도 배치가 실패하지
+  않고 경고만 남깁니다.
+- 한글 파일명 경로를 다루므로 로캘이 UTF-8이어야 합니다(`LANG=C.UTF-8` 등).
+  `mvn test`는 surefire 설정에 이미 반영되어 있어 별도 조치가 필요 없습니다.
 
-### 클론 및 빌드
+## 빌드
 
 ```bash
-git clone <repository-url>
-cd All4Land_java-pipeline
-
-# 모든 의존성을 하나로 묶은 실행 가능 jar 생성
 mvn package
 ```
 
-빌드가 끝나면 `target/hwp-extract-pipeline-1.0.0-jar-with-dependencies.jar`가
-생성됩니다.
+`target/extract-pipeline-1.0.0.jar`(fat-jar)가 생성됩니다.
 
-## 사용 예제
+## CLI 사용법
 
-### 1. 폴더 전체 일괄 처리
+```
+java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
+```
 
-`samples/` 폴더의 모든 `.hwp`/`.hwpx`/`.hml` 파일을 재귀적으로 찾아 파싱하고,
-결과를 `test.db`(SQLite)에 저장하며, 추출된 이미지는 `images/` 폴더에 저장합니다.
+| 명령 | 역할 |
+|---|---|
+| `pipeline -i input/ -o out/ [--db-url ...] [--ocr-url ...] [--no-db]` | 배치: 판별→추출→매핑→적재 일괄 |
+| `detect 파일...\|폴더 [--json]` | 스캔 여부 분류 결과 출력 |
+| `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--ocr] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
+| `map raw.json... -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
+| `load schema.json... [--db-url ...]` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
+
+공통 옵션: `--raw`(원시 결과도 저장), `--no-images`(이미지 저장 생략),
+`--ocr`(임베디드 이미지 Tesseract OCR). 파일 단위 실패는 `[실패] <파일>: <사유>`
+로그만 남기고 배치는 계속 진행합니다(배치 격리).
+
+### 예시
 
 ```bash
-java -jar target/hwp-extract-pipeline-1.0.0-jar-with-dependencies.jar \
-    samples --db test.db --images-dir images
+# DB 없이 추출+매핑만 (스모크 테스트)
+java -jar target/extract-pipeline-1.0.0.jar pipeline -i samples -o out/ --no-db
+
+# 스캔 여부만 확인
+java -jar target/extract-pipeline-1.0.0.jar detect samples --json
+
+# PostgreSQL까지 적재
+java -jar target/extract-pipeline-1.0.0.jar pipeline -i input/ -o out/ \
+    --db-url jdbc:postgresql://localhost:5432/extract --db-user extract
 ```
 
-실행 결과 예시:
+## 설정 (`application.properties`)
+
+```properties
+db.url=jdbc:postgresql://localhost:5432/extract
+db.user=extract
+db.password=
+db.pool.max-size=5
+
+ocr.service.url=http://127.0.0.1:8000
+ocr.service.timeout-sec=300
+ocr.service.retries=2
+```
+
+- DB 비밀번호는 파일에 평문으로 두지 말고 환경변수 `PGPASSWORD` 또는
+  `DB_PASSWORD`로 주입하세요. CLI `--db-password` > 환경변수 > 파일 순으로
+  우선합니다.
+- 모든 값은 CLI 옵션(`--db-url`, `--ocr-url` 등)으로 재정의할 수 있습니다.
+
+## 스캔본 OCR 서비스 (ocr-service, 범위 밖)
+
+PaddleOCR-VL을 구동하는 Python FastAPI 서비스는 이 저장소에 포함되지 않습니다.
+`scan/ScanOcrClient`가 기대하는 계약은 다음과 같습니다.
 
 ```
-[완료] 방치선박 제거공고(군산-2).hwpx -> document_id=1, 표 3개, 이미지 2개, 문단 15개
-[완료] 공유수면 점용사용 허가 고시문.hwp -> document_id=2, 표 5개, 이미지 0개, 문단 22개
-...
-총 8개 중 8개 처리 완료. 표 24개, 이미지 6개 -> test.db
+GET  /health
+  → 200 {"status": "ok", "model_loaded": true}
+
+POST /v1/parse   (multipart/form-data)
+  요청 — 둘 중 하나:
+    file      : 스캔 PDF 원본
+    images[]  : 스캔 HWP/HWPX/HML에서 Java가 추출한 임베디드 이미지들
+  공통 메타: source_file, file_type
+  응답: 200 → raw JSON 계약(§ 위 다이어그램) + is_scanned=true (+markdown 필드는 무시)
+        422/500 → {"error": "..."}
 ```
 
-### 2. 파일 하나만 처리
+서비스가 없거나 응답하지 않으면 스캔본 파일만 `[실패]` 처리되고, 네이티브
+파일들은 정상적으로 배치가 진행됩니다.
+
+## 데이터베이스 스키마 (PostgreSQL)
+
+Flyway 마이그레이션(`src/main/resources/db/migration/V1__init.sql`)이 2테이블을
+생성합니다.
+
+| 테이블 | 설명 |
+|---|---|
+| `documents` | 문서 1레코드 = 1행. 15개 표준 필드(`agency`, `notice_no`, `notice_date`, `title`, `approval_no`, `location`, `area`, `work_period_start/end` 등) + `engine`/`is_scanned` + 매핑 안 된 라벨을 보존하는 `extras JSONB` |
+| `ref_files` | 이미지 1개 = 1행. `documents.seq`를 참조하며 `ON DELETE CASCADE` |
+
+적재 규칙: 같은 `source_file` 재적재 시 기존 행을 삭제 후 재삽입(멱등,
+CASCADE로 `ref_files` 자동 정리). 파일 단위로 세이브포인트를 잡아 한 파일의
+실패가 배치 전체를 막지 않습니다.
+
+## 테스트
 
 ```bash
-java -jar target/hwp-extract-pipeline-1.0.0-jar-with-dependencies.jar \
-    "samples/공유수면 점용사용 승인사항 고시.hwp" --db output.db
+mvn test                # 단위 + samples/ 기반 회귀 테스트 (DB 불필요)
+
+# 실제 PostgreSQL이 있을 때만: DbLoader 통합 테스트
+mvn test -Dgroups=db -DexcludedGroups= \
+    -Ddb.test.url=jdbc:postgresql://localhost:5432/extract \
+    -Ddb.test.user=extract -Ddb.test.password=extract
 ```
 
-### 3. 옵션
+`ScanOcrClient`는 JDK 내장 `HttpServer`로 목 서버를 띄워 검증하므로 외부
+서비스 없이도 실행됩니다.
 
-| 옵션 | 기본값 | 설명 |
-|---|---|---|
-| (첫 번째 인자, 필수) | - | 처리할 파일 또는 폴더 경로 |
-| `--db` | `hwpx_extract.db` | 결과를 저장할 SQLite 파일 경로 |
-| `--images-dir` | `extracted_images` | 추출된 이미지를 저장할 디렉터리 |
+## 새 형식(확장자)·엔진 통합 절차
 
-### 4. 저장된 데이터 조회 (SQLite)
-
-```bash
-sqlite3 test.db "SELECT id, title, file_type FROM documents;"
-sqlite3 test.db "SELECT table_ref, row_count, col_count, caption FROM tables_extracted WHERE document_id = 1;"
-```
-
-### 5. 다른 포맷(PDF 등) 추가하기
-
-`DocumentExtractor`를 구현한 뒤 `RunPipeline`의 `EXTRACTORS` 맵에 한 줄만
-등록하면 됩니다. `RunPipeline`이나 `DbLoader`는 포맷 중립적으로 설계되어
-있어 수정할 필요가 없습니다.
-
-```java
-EXTRACTORS.put("pdf", new PdfExtractor());
-```
-
-### 6. OCR 연동하기
-
-이 프로젝트는 OCR 구현체를 포함하지 않습니다. `OcrProvider` 인터페이스를
-구현해서 `RunPipeline.ocrProvider`에 연결하면, 문서 내 모든 이미지에 대해
-자동으로 호출되어 결과가 `images_extracted.ocr_text` 컬럼에 저장됩니다.
-
-```java
-ocrProvider = imageData -> myTeamOcrService.recognize(imageData);
-```
-
-연결하지 않으면(`null`) `ocr_text`는 전부 `NULL`로 저장됩니다.
-
-## 데이터베이스 스키마
-
-| 테이블 | 주요 컬럼 | 설명 |
-|---|---|---|
-| `documents` | `source_path`, `file_type`, `title`, `created_date`, `full_text` | 문서 1건당 1행 |
-| `tables_extracted` | `document_id`, `table_ref`, `row_count`, `col_count`, `caption`, `grid_json`, `cells_json` | 표 1개당 1행 (JSON은 별도 라이브러리 없이 직접 직렬화) |
-| `images_extracted` | `document_id`, `image_ref`, `file_href`, `caption`, `original_filename`, `file_path`, `ocr_text` | 이미지 1개당 1행 |
-
-기존 스키마로 만들어진 DB 파일을 다시 열어도 `migrate()`가 없는 컬럼을 자동으로
-`ALTER TABLE`로 추가합니다.
-
-## 검증 내역 및 알아둘 점
-
-라이브러리 소스를 직접 컴파일하고 `samples/`의 실제 고시문 파일로 실행해
-검증했습니다. 그 과정에서 발견/수정한 문제:
-
-- `hwpxlib`의 `sectionXMLFileList()`는 `Iterable`이 아니라 `ObjectList` → 인덱스
-  루프로 처리
-- `hwpxlib`의 표 순회는 `getTrList()`/`getTcList()`가 아니라 `trs()`/`tcs()`
-- `hwplib`의 `Paragraph.getControlList()`는 컨트롤이 없는 문단에서 `null`을
-  반환(빈 리스트 아님) → null 체크 필요
-- 배포용(DRM) 문서를 읽을 때 `hwplib`가 JDK 11에서 제거된
-  `javax.xml.bind.DatatypeConverter`를 사용 → `pom.xml`에 `jaxb-api`를 명시적으로
-  추가해 대비 (일반 문서 읽기에는 영향 없음)
-
-Windows에서 OCR을 직접 붙이는 경우 별도의 OCR 엔진(Tesseract 등) 설치가
-필요할 수 있습니다. 이는 이 프로젝트가 아니라 `OcrProvider` 구현체 쪽의
-책임입니다.
+1. **detect 등록**: `XyzScanDetector implements ScanDetector` 구현 후
+   `DetectorRegistry`에 확장자 매핑 추가 (스캔 변형이 없으면 항상 `false` 스텁).
+2. **Extractor 구현**: `engine/xyz/XyzExtractor implements Extractor` —
+   `extractRaw`가 raw JSON 계약을 지키도록 구현. 병합 셀은 `cells`에 span을
+   채우고, 이미지 저장 시 `path`를 기록(`ImageFormats.extensionFor`로 매직바이트
+   확장자 판별 권장). `saveImages`는 `extractRaw`의 이미지와 순서·이름이
+   동일해야 한다.
+3. **레지스트리 연결**: `ExtractorRegistry`에 등록. CLI는 수정 불필요.
+4. **동의어 보강**: 새 문서에서 매핑 안 된 라벨이 `extras`에 남으면
+   `common/Synonyms`의 `LABEL_SYNONYMS`에 추가.
+5. **DB는 수정 불필요**: raw JSON 계약만 지키면 `DbLoader`가 그대로 동작.
+6. **테스트**: `src/test/java/.../engine/xyz/`에 `samples/` 기반 회귀 테스트 추가.
