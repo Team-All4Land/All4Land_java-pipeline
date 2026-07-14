@@ -1,0 +1,42 @@
+# Maven 빌드 산출물
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# 컴파일된 클래스 파일
+*.class
+
+# 로그 파일
+*.log
+
+# IDE 관련 (IntelliJ)
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# IDE 관련 (Eclipse)
+.classpath
+.project
+.settings/
+bin/
+
+# IDE 관련 (VS Code)
+.vscode/
+
+# OS 관련
+.DS_Store
+Thumbs.db
+
+# 환경 설정 / 민감 정보
+*.env
+application-local.properties
+application-local.yml
