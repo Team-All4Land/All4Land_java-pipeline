@@ -32,7 +32,7 @@ import java.util.Set;
  * 형태로 XML 안에 직접 박혀있다 (압축 없음).
  * 표 셀 속성은 ColAddr/RowAddr/ColSpan/RowSpan (파스칼 케이스).
  */
-public class HwpmlExtractor {
+public class HwpmlExtractor implements DocumentExtractor {
 
     public ExtractedDocument parse(String path) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
