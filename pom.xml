@@ -5,61 +5,85 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.onnara</groupId>
-    <artifactId>hwp-extract-pipeline</artifactId>
+    <artifactId>extract-pipeline</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>11</maven.compiler.release>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <pdfbox.version>3.0.3</pdfbox.version>
+        <jackson.version>2.17.2</jackson.version>
+        <junit.version>5.11.0</junit.version>
     </properties>
 
-    <!--
-        의존성 라이선스 정리 (전부 permissive, 회사 사용에 문제없음)
-        - kr.dogfoot:hwplib / kr.dogfoot:hwpxlib : Apache-2.0
-          (neolord0 개인 개발자 프로젝트, GitHub star 500+, Maven Central에 정식 배포됨)
-        - net.sourceforge.tess4j:tess4j : Apache-2.0 (Tesseract JNA 래퍼)
-        - org.xerial:sqlite-jdbc : Apache-2.0
-    -->
     <dependencies>
-        <!-- HWP(5.0 바이너리) 파싱 -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>kr.dogfoot</groupId>
             <artifactId>hwplib</artifactId>
             <version>1.1.10</version>
         </dependency>
 
-        <!--
-            hwplib이 배포용(DRM) 문서를 읽을 때 javax.xml.bind.DatatypeConverter를
-            사용하는데, 이 클래스는 JDK 11부터 표준 JDK에서 제거되었다.
-            일반 문서 읽기에는 영향 없지만, 혹시 배포용 문서를 다루게 될 경우를
-            대비해 명시적으로 추가해둔다. (OCR과는 무관, hwplib 자체 호환성 이슈)
-        -->
         <dependency>
             <groupId>javax.xml.bind</groupId>
             <artifactId>jaxb-api</artifactId>
             <version>2.3.1</version>
         </dependency>
 
-        <!-- HWPX(ZIP+XML) 파싱 -->
         <dependency>
             <groupId>kr.dogfoot</groupId>
             <artifactId>hwpxlib</artifactId>
             <version>1.0.8</version>
         </dependency>
 
-        <!-- SQLite JDBC 드라이버 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.xerial</groupId>
             <artifactId>sqlite-jdbc</artifactId>
             <version>3.53.2.0</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <!-- 실행 가능한 fat-jar 생성 (모든 의존성을 하나의 jar로 묶음) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>11</release>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <argLine>-Dfile.encoding=UTF-8</argLine>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -71,12 +95,6 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <!--
-                                BouncyCastle 등 전자서명된 jar를 다른 jar들과 합치면
-                                서명은 남아있는데 클래스 내용은 섞여버려서
-                                "Invalid signature file digest" 에러가 난다.
-                                서명 파일 자체를 uber-jar에서 빼서 해결한다.
-                            -->
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
