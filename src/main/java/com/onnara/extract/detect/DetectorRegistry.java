@@ -18,7 +18,9 @@ public final class DetectorRegistry {
 
     static {
         register("pdf", new PdfScanDetector());
-        // 이후 단계: hwp / hwpx / hml 판별기 등록
+        register("hwp", new HwpScanDetector());
+        register("hwpx", new HwpxScanDetector());
+        register("hml", new HmlScanDetector());
     }
 
     private DetectorRegistry() {
