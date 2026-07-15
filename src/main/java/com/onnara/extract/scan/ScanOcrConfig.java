@@ -16,6 +16,7 @@ import java.time.Duration;
  */
 public record ScanOcrConfig(String command, Path script, Duration timeout) {
 
+    /** application.properties의 {@code ocr.cli.*} 키에서 실행 설정을 읽어 생성한다. */
     public static ScanOcrConfig fromProperties(AppProperties props) {
         String command = props.get("ocr.cli.command", "python3");
         Path script = Path.of(props.get("ocr.cli.script", "ocr-cli/paddleocr_vl_cli.py"));

@@ -29,6 +29,7 @@ public final class Dates {
     private static final Pattern RANGE_SEPARATOR = Pattern.compile(
             "\\s*(?:[~～∼–—]|부터)\\s*");
 
+    /** 인스턴스화 방지 — 정적 정규화 함수만 제공하는 유틸리티 클래스. */
     private Dates() {
     }
 
@@ -68,6 +69,7 @@ public final class Dates {
         return Optional.of(new String[]{parts[0].trim(), parts[1].trim()});
     }
 
+    /** 연/월/일 문자열을 검증(월 1~12, 일 1~31)하고 {@code yyyy-MM-dd}로 조합한다. 범위를 벗어나면 empty. */
     private static Optional<String> build(String y, String mo, String d) {
         int year = Integer.parseInt(y);
         int month = Integer.parseInt(mo);

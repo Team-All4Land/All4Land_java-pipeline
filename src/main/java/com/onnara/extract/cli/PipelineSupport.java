@@ -27,6 +27,7 @@ import java.util.stream.Stream;
  */
 final class PipelineSupport {
 
+    /** 인스턴스화 방지 — pipeline/extract가 공유하는 정적 헬퍼 모음. */
     private PipelineSupport() {
     }
 
@@ -119,6 +120,7 @@ final class PipelineSupport {
         }
     }
 
+    /** 객체를 들여쓰기 JSON으로 저장한다(상위 폴더는 자동 생성). */
     static void writeJson(Object obj, Path dest) throws IOException {
         if (dest.getParent() != null) {
             Files.createDirectories(dest.getParent());
@@ -126,12 +128,14 @@ final class PipelineSupport {
         Json.PRETTY.writeValue(dest.toFile(), obj);
     }
 
+    /** 소문자 확장자(점 제외). 확장자가 없으면 빈 문자열. */
     static String extensionOf(Path file) {
         String name = file.getFileName().toString();
         int dot = name.lastIndexOf('.');
         return dot < 0 ? "" : name.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
+    /** 확장자를 제외한 파일명(출력 파일명 어간으로 사용). */
     static String stem(Path file) {
         String name = file.getFileName().toString();
         int dot = name.lastIndexOf('.');

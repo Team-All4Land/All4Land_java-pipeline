@@ -31,8 +31,10 @@ public final class ScanOcrRunner {
     /** 실패 시 사용자에게 보여줄 서브프로세스 로그 꼬리 길이. */
     private static final int LOG_TAIL_CHARS = 2000;
 
+    /** 실행 커맨드·스크립트 경로·타임아웃 설정. */
     private final ScanOcrConfig config;
 
+    /** 실행 설정을 주입해 생성한다. */
     public ScanOcrRunner(ScanOcrConfig config) {
         this.config = config;
     }

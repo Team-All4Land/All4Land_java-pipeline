@@ -31,21 +31,31 @@ import java.util.concurrent.Callable;
 @Command(name = "pipeline", description = "배치: 판별→추출→매핑→적재 일괄")
 public class PipelineCommand implements Callable<Integer> {
 
+    /** 재귀 스캔할 입력 폴더(기본 input). */
     @Option(names = {"-i", "--input"}, defaultValue = "input", description = "입력 폴더")
     Path input;
 
+    /** 스키마/원시 JSON과 images/가 저장될 출력 폴더(기본 out). */
     @Option(names = {"-o", "--output"}, defaultValue = "out", description = "출력 폴더")
     Path output;
 
+    /** true면 스키마 JSON과 함께 원시 결과(*.raw.json)도 저장. */
     @Option(names = "--raw", description = "원시 결과(*.raw.json)도 함께 저장")
     boolean raw;
 
+    /** true면 이미지 파일 저장을 생략. */
     @Option(names = "--no-images", description = "이미지 저장 생략")
     boolean noImages;
 
+    /** true면 DB 적재 단계를 건너뛴다(DB 없는 스모크런용). */
     @Option(names = "--no-db", description = "DB 적재 생략 (DB 없는 스모크런용)")
     boolean noDb;
 
+    /**
+     * 입력 폴더를 재귀 수집해 파일별로 판별→추출→매핑→저장하고, --no-db가 아니면
+     * 마지막에 DB로 적재한다. 스캔본이 있으면 시작 전에 OCR 스크립트 존재를 확인한다.
+     * 파일 단위 실패는 [실패] 로그로 격리하며, 하나라도 실패하면 종료 코드 1.
+     */
     @Override
     public Integer call() throws Exception {
         AppProperties props = AppProperties.load();
@@ -116,6 +126,7 @@ public class PipelineCommand implements Callable<Integer> {
         return ready;
     }
 
+    /** 커넥션 풀을 열어 스키마를 마이그레이션한 뒤 수집된 스키마 결과들을 documents/ref_files에 적재한다. */
     private void loadToDatabase(AppProperties props, List<SchemaResult> schemas) throws Exception {
         try (HikariDataSource dataSource = DataSourceFactory.create(props)) {
             DbSchema.migrate(dataSource);

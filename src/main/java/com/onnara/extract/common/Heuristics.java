@@ -32,9 +32,11 @@ public final class Heuristics {
     private static final Pattern SIGNER_PATTERN = Pattern.compile(
             "^[가-힣·\\s]{2,30}(청장|시장|군수|구청장|도지사|지사|본부장|장관|사업소장|소장)$");
 
+    /** 인스턴스화 방지 — 정적 휴리스틱 함수만 제공하는 유틸리티 클래스. */
     private Heuristics() {
     }
 
+    /** 문단이 표·그림 캡션("&lt;표 1&gt;", "그림 2" 등)으로 시작하는지 판정한다. */
     public static boolean looksLikeCaption(String text) {
         if (text == null) {
             return false;

@@ -21,8 +21,14 @@ import java.util.zip.ZipFile;
  */
 public class HwpxScanDetector implements ScanDetector {
 
+    /** 본문 텍스트가 이 글자 수 미만이면서 BinData 이미지가 있으면 스캔본으로 본다. */
     private static final int MIN_TEXT_CHARS = 50;
 
+    /**
+     * ZIP 엔트리를 훑어 {@code Contents/section*.xml}의 텍스트 길이와
+     * {@code BinData/} 이미지 개수를 집계하고, 텍스트가 임계치 미만이면서
+     * 이미지가 있으면 스캔본(true)으로 판정한다.
+     */
     @Override
     public boolean isScanned(Path file) {
         try (ZipFile zip = new ZipFile(file.toFile())) {

@@ -8,8 +8,10 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** 형식별 스캔 판별기와 DetectorRegistry 라우팅의 samples/ 기반 회귀 테스트. */
 class DetectorsTest {
 
+    /** 네이티브 HWP 샘플이 스캔본으로 오탐되지 않는지 검증한다. */
     @Test
     void nativeHwpSamplesAreNotScanned() {
         assertFalse(new HwpScanDetector().isScanned(
@@ -18,6 +20,7 @@ class DetectorsTest {
                 TestFixtures.sample("공유수면 점용사용 승인사항 고시.hwp")));
     }
 
+    /** 네이티브 HWPX 샘플이 스캔본으로 오탐되지 않는지 검증한다. */
     @Test
     void nativeHwpxSamplesAreNotScanned() {
         assertFalse(new HwpxScanDetector().isScanned(
@@ -26,6 +29,7 @@ class DetectorsTest {
                 TestFixtures.sample("방치선박 제거공고(부안-11).hwpx")));
     }
 
+    /** 네이티브 HML 샘플이 스캔본으로 오탐되지 않는지 검증한다. */
     @Test
     void nativeHmlSamplesAreNotScanned() {
         assertFalse(new HmlScanDetector().isScanned(
@@ -42,6 +46,7 @@ class DetectorsTest {
         assertTrue(new HwpxScanDetector().isScanned(file));
     }
 
+    /** DetectorRegistry가 확장자에 맞는 판별기로 라우팅하는지 검증한다. */
     @Test
     void registryRoutesByExtension() {
         assertFalse(DetectorRegistry.isScanned(

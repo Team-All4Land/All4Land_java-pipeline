@@ -34,16 +34,22 @@ import java.util.List;
  */
 public class HwplibExtractor implements Extractor {
 
+    /** {@code hwp} 확장자만 지원한다. */
     @Override
     public boolean supports(String ext) {
         return "hwp".equals(ext);
     }
 
+    /** 엔진 식별자 "hwplib". */
     @Override
     public String engineName() {
         return "hwplib";
     }
 
+    /**
+     * 섹션·문단을 순회하며 문단 텍스트와 표를 등장 순서로 content에 담고,
+     * 문서 전체 BinData 이미지를 메타로 추가한다.
+     */
     @Override
     public RawDocument extractRaw(Path file) throws IOException {
         HWPFile hwpFile = read(file);
@@ -76,6 +82,7 @@ public class HwplibExtractor implements Extractor {
         return raw;
     }
 
+    /** BinData 이미지를 outDir에 쓰고 저장 경로 목록을 반환한다(extractRaw의 이미지 순서·이름과 일치). */
     @Override
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
         HWPFile hwpFile = read(file);
@@ -89,6 +96,7 @@ public class HwplibExtractor implements Extractor {
         return saved;
     }
 
+    /** hwplib으로 파일을 파싱한다. 실패 시 IOException으로 감싼다. */
     private static HWPFile read(Path file) throws IOException {
         try {
             return HWPReader.fromFile(file.toString());
@@ -97,6 +105,10 @@ public class HwplibExtractor implements Extractor {
         }
     }
 
+    /**
+     * hwplib ControlTable을 raw 표 모델로 변환한다. 셀의 행/열/병합 span을 읽어
+     * cells를 채우고, 병합 셀 텍스트를 덮인 모든 칸에 복제해 grid를 구성한다.
+     */
     private static RawTable parseTable(ControlTable ct, Path file) throws IOException {
         int rowCount = ct.getTable().getRowCount();
         int colCount = ct.getTable().getColumnCount();
@@ -154,12 +166,14 @@ public class HwplibExtractor implements Extractor {
         return out;
     }
 
+    /** 확장자를 제외한 파일명(이미지 파일명 접두사로 사용). */
     private static String stemOf(Path file) {
         String name = file.getFileName().toString();
         int dot = name.lastIndexOf('.');
         return dot < 0 ? name : name.substring(0, dot);
     }
 
+    /** 수집된 이미지 1건: 저장 파일명과 원본 바이트. */
     private record ImageEntry(String name, byte[] data) {
     }
 }

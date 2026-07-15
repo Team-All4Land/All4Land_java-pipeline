@@ -25,9 +25,14 @@ import java.util.concurrent.Callable;
 @Command(name = "load", description = "스키마 JSON → PostgreSQL 적재 전용")
 public class LoadCommand implements Callable<Integer> {
 
+    /** 적재할 스키마 JSON 파일 목록. */
     @Parameters(paramLabel = "SCHEMA_JSON", description = "스키마 JSON 파일 목록")
     List<Path> schemaFiles;
 
+    /**
+     * 스키마 JSON들을 읽어 PostgreSQL에 적재한다(스키마 마이그레이션 후 멱등 적재).
+     * 읽기·적재 실패는 파일 단위로 격리하며, 하나라도 실패하면 종료 코드 1.
+     */
     @Override
     public Integer call() throws Exception {
         AppProperties props = AppProperties.load();

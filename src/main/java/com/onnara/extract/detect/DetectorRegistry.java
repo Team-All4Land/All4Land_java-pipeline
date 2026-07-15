@@ -14,8 +14,10 @@ import java.util.Map;
  */
 public final class DetectorRegistry {
 
+    /** 확장자(소문자, 점 제외) → 판별기. */
     private static final Map<String, ScanDetector> DETECTORS = new LinkedHashMap<>();
 
+    /** 기본 지원 형식 4종을 등록한다. */
     static {
         register("pdf", new PdfScanDetector());
         register("hwp", new HwpScanDetector());
@@ -23,9 +25,11 @@ public final class DetectorRegistry {
         register("hml", new HmlScanDetector());
     }
 
+    /** 인스턴스화 방지 — 정적 레지스트리 클래스. */
     private DetectorRegistry() {
     }
 
+    /** 확장자에 판별기를 등록한다(새 형식 통합 시 호출). */
     public static void register(String ext, ScanDetector detector) {
         DETECTORS.put(ext.toLowerCase(Locale.ROOT), detector);
     }

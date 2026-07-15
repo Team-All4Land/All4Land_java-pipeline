@@ -24,6 +24,7 @@ import java.util.List;
  */
 public final class DbLoader implements AutoCloseable {
 
+    /** documents 1행 삽입 + 생성된 seq 반환(레코드당 1회 실행). */
     private static final String INSERT_DOCUMENT = """
             INSERT INTO documents (
                 source_file, file_type, is_scanned, engine,
@@ -35,14 +36,18 @@ public final class DbLoader implements AutoCloseable {
             RETURNING seq
             """;
 
+    /** 멱등 재적재를 위한 기존 행 삭제(ref_files는 CASCADE로 함께 정리). */
     private static final String DELETE_DOCUMENTS = "DELETE FROM documents WHERE source_file = ?";
 
+    /** ref_files 1행 삽입(이미지 1건당 1회, 배치 실행). */
     private static final String INSERT_REF_FILE = """
             INSERT INTO ref_files (document_seq, image_name, file_path) VALUES (?, ?, ?)
             """;
 
+    /** 배치 전체에서 공유하는 커넥션(수동 커밋). */
     private final Connection conn;
 
+    /** 커넥션을 확보하고 자동 커밋을 꺼 파일 단위 세이브포인트 격리를 준비한다. */
     public DbLoader(DataSource dataSource) throws SQLException {
         this.conn = dataSource.getConnection();
         this.conn.setAutoCommit(false);
@@ -118,6 +123,7 @@ public final class DbLoader implements AutoCloseable {
         return representativeSeq;
     }
 
+    /** 레코드 1건을 documents에 삽입하고 생성된 seq를 반환한다(파일 메타 + 15개 필드 + extras 바인딩). */
     private long insertRecord(PreparedStatement insert, SchemaResult file, NoticeRecord record)
             throws SQLException {
         int i = 1;
@@ -148,6 +154,7 @@ public final class DbLoader implements AutoCloseable {
         }
     }
 
+    /** ISO 날짜 문자열을 DATE 파라미터로 바인딩한다. null·파싱 실패는 SQL NULL. */
     private static void setDate(PreparedStatement ps, int index, String isoDate) throws SQLException {
         if (isoDate == null) {
             ps.setNull(index, Types.DATE);
@@ -161,6 +168,7 @@ public final class DbLoader implements AutoCloseable {
         }
     }
 
+    /** extras 맵을 JSON 문자열로 직렬화해 jsonb 파라미터로 바인딩한다. null이면 SQL NULL. */
     private static void setJsonb(PreparedStatement ps, int index, Object extras) throws SQLException {
         if (extras == null) {
             ps.setNull(index, Types.OTHER);
@@ -176,6 +184,7 @@ public final class DbLoader implements AutoCloseable {
         ps.setObject(index, jsonb);
     }
 
+    /** 커넥션을 닫는다(try-with-resources 종료 시 호출). */
     @Override
     public void close() throws SQLException {
         conn.close();

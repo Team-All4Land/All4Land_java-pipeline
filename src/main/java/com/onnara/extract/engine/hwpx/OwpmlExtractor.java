@@ -45,22 +45,26 @@ import java.util.Map;
  */
 public class OwpmlExtractor implements Extractor {
 
+    /** {@code hwpx} 확장자만 지원한다. */
     @Override
     public boolean supports(String ext) {
         return "hwpx".equals(ext);
     }
 
+    /** 엔진 식별자 "owpml". */
     @Override
     public String engineName() {
         return "owpml";
     }
 
+    /** 파일을 파싱해 raw 문서만 반환한다(이미지는 메타로만 포함). */
     @Override
     public RawDocument extractRaw(Path file) throws IOException {
         ParseResult result = parse(file);
         return result.raw;
     }
 
+    /** manifest에서 복원한 이미지들을 outDir에 쓰고 저장 경로 목록을 반환한다. */
     @Override
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
         ParseResult result = parse(file);
@@ -133,6 +137,7 @@ public class OwpmlExtractor implements Extractor {
         return new ParseResult(raw, images);
     }
 
+    /** Picture가 참조하는 manifest 바이너리(binaryItemIDRef)를 찾아 이미지 목록에 추가한다. */
     private static void addImage(List<ImageEntry> images, Picture pic,
                                  Map<String, byte[]> binDataMap, String stem) {
         if (pic.img() == null) {
@@ -146,6 +151,7 @@ public class OwpmlExtractor implements Extractor {
                 stem + "_img" + images.size() + "." + ImageFormats.extensionFor(data), data));
     }
 
+    /** 셀 하위 문단 구조(ParaListCore)에서 Picture RunItem을 모두 찾아 반환한다. */
     private static List<Picture> findPictures(ParaListCore paraListCore) {
         List<Picture> result = new ArrayList<>();
         if (paraListCore == null) {
@@ -166,6 +172,10 @@ public class OwpmlExtractor implements Extractor {
         return result;
     }
 
+    /**
+     * hwpxlib Table을 raw 표 모델로 변환한다. Tc의 주소·병합 span과 셀 문단 텍스트를
+     * 읽어 cells를 채우고, 병합 범위를 grid에 복제한다.
+     */
     private static RawTable parseTable(Table table) {
         int rowCount = table.rowCnt();
         int colCount = table.colCnt();
@@ -263,15 +273,18 @@ public class OwpmlExtractor implements Extractor {
         return sb.toString();
     }
 
+    /** 확장자를 제외한 파일명(이미지 파일명 접두사로 사용). */
     private static String stemOf(Path file) {
         String name = file.getFileName().toString();
         int dot = name.lastIndexOf('.');
         return dot < 0 ? name : name.substring(0, dot);
     }
 
+    /** 수집된 이미지 1건: 저장 파일명과 원본 바이트. */
     private record ImageEntry(String name, byte[] data) {
     }
 
+    /** 단일 파싱 패스 결과: raw 문서 + 순서가 고정된 이미지 목록. */
     private record ParseResult(RawDocument raw, List<ImageEntry> images) {
     }
 }

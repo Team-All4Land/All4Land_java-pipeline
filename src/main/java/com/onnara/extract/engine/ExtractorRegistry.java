@@ -19,12 +19,14 @@ import java.util.Set;
  */
 public final class ExtractorRegistry {
 
+    /** 등록된 엔진들 — forExtension이 앞에서부터 supports를 물어 첫 매칭을 쓴다. */
     private static final List<Extractor> EXTRACTORS = new ArrayList<>();
 
     /** 파이프라인이 입력 폴더에서 수집하는 확장자 목록. */
     private static final Set<String> EXTENSIONS =
             new LinkedHashSet<>(List.of("hwp", "hwpx", "hml", "pdf"));
 
+    /** 기본 지원 엔진 4종을 등록한다. */
     static {
         register(new PdfBoxExtractor());
         register(new HwplibExtractor());
@@ -32,9 +34,11 @@ public final class ExtractorRegistry {
         register(new HmlExtractor());
     }
 
+    /** 인스턴스화 방지 — 정적 레지스트리 클래스. */
     private ExtractorRegistry() {
     }
 
+    /** 엔진을 등록한다(새 형식 통합 시 호출). */
     public static void register(Extractor extractor) {
         EXTRACTORS.add(extractor);
     }

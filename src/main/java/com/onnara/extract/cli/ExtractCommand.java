@@ -19,21 +19,30 @@ import java.util.concurrent.Callable;
 @Command(name = "extract", description = "형식/엔진 지정 추출 (+매핑)")
 public class ExtractCommand implements Callable<Integer> {
 
+    /** 추출할 파일 또는 폴더(폴더는 지원 확장자만 재귀 수집). */
     @Parameters(paramLabel = "FILE", description = "추출할 파일 또는 폴더")
     List<Path> targets;
 
+    /** 스키마/원시 JSON과 images/가 저장될 출력 폴더. */
     @Option(names = {"-o", "--output"}, required = true, description = "출력 폴더")
     Path outputDir;
 
+    /** true면 스키마 JSON과 함께 원시 결과(*.raw.json)도 저장. */
     @Option(names = "--raw", description = "원시 결과(*.raw.json)도 함께 저장")
     boolean raw;
 
+    /** true면 이미지 파일 저장을 생략. */
     @Option(names = "--no-images", description = "이미지 저장 생략")
     boolean noImages;
 
+    /** 지정 시 스캔 판별을 건너뛰고 해당 엔진으로 강제 추출. */
     @Option(names = "--engine", description = "엔진 강제 지정 (예: hwplib, owpml, hml-dom, pdfbox)")
     String engine;
 
+    /**
+     * 각 파일을 추출·매핑해 out/&lt;이름&gt;.schema.json(+--raw 시 raw.json)을 저장한다.
+     * 파일 단위 실패는 [실패] 로그로 격리하며, 하나라도 실패하면 종료 코드 1.
+     */
     @Override
     public Integer call() throws Exception {
         List<Path> files = PipelineSupport.collectInputs(targets);

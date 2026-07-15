@@ -44,6 +44,7 @@ public final class TableDetector {
      */
     private static final double AXIS_EPS = 0.05;
 
+    /** 인스턴스화 방지 — 정적 탐지 함수만 제공하는 유틸리티 클래스. */
     private TableDetector() {
     }
 
@@ -59,6 +60,7 @@ public final class TableDetector {
             this.bottom = bottom;
         }
 
+        /** 탐지된 표의 raw 모델을 반환한다. */
         public RawTable getTable() {
             return table;
         }
@@ -99,6 +101,7 @@ public final class TableDetector {
     // 격자 좌표 클러스터링 (_table_grid_coords 포팅)
     // ------------------------------------------------------------------
 
+    /** 병합·검증을 마친 격자선 좌표: 세로선 x 목록과 가로선 y 목록. */
     private static final class GridCoords {
         final List<Double> xs;
         final List<Double> ys;
@@ -109,6 +112,11 @@ public final class TableDetector {
         }
     }
 
+    /**
+     * 커버리지가 충분한 세로선을 고르고, 그 세로선 3개 이상과 교차하는 가로선만
+     * 표 격자로 인정한 뒤(제목 밑줄·여백선 배제), 가까운 좌표를 병합해 격자 좌표를 만든다.
+     * 표로 볼 만한 격자가 없으면 null.
+     */
     private static GridCoords gridCoords(EdgeCollector c) {
         // 수직 격자선 후보: 총 커버리지가 충분한 x 좌표
         List<Integer> strongV = new ArrayList<>();
@@ -187,6 +195,10 @@ public final class TableDetector {
     // explicit 격자 → 셀 텍스트 추출 (pdfplumber explicit 전략 대체)
     // ------------------------------------------------------------------
 
+    /**
+     * 격자 좌표로 만든 각 셀 사각형 영역의 텍스트를 뽑아 행×열 격자로 반환한다
+     * (PDFTextStripperByArea로 셀별 영역 추출 — pdfplumber explicit 전략 대체).
+     */
     private static List<List<String>> extractGrid(PDPage page, List<Double> xs, List<Double> ys)
             throws IOException {
         PDFTextStripperByArea stripper = new PDFTextStripperByArea();
@@ -241,6 +253,7 @@ public final class TableDetector {
         private Point2D.Double currentPoint;
         private Point2D.Double subpathStart;
 
+        /** 페이지 높이를 저장한다(장치 좌표 → top-origin 변환에 사용). */
         EdgeCollector(PDPage page) {
             super(page);
             this.pageHeight = page.getMediaBox().getHeight();
@@ -257,12 +270,14 @@ public final class TableDetector {
             subpathStart = currentPoint;
         }
 
+        /** 새 서브패스를 시작한다(현재 점·시작 점 갱신, 선분 없음). */
         @Override
         public void moveTo(float x, float y) {
             currentPoint = new Point2D.Double(x, y);
             subpathStart = currentPoint;
         }
 
+        /** 현재 점에서 목표 점까지 선분을 쌓는다(확정은 stroke/fill 시). */
         @Override
         public void lineTo(float x, float y) {
             Point2D.Double next = new Point2D.Double(x, y);
@@ -278,11 +293,13 @@ public final class TableDetector {
             currentPoint = new Point2D.Double(x3, y3);
         }
 
+        /** 현재 경로 점을 반환한다(PDFBox 요구 콜백). */
         @Override
         public Point2D getCurrentPoint() {
             return currentPoint;
         }
 
+        /** 서브패스를 닫는 선분(현재 점→시작 점)을 쌓는다. */
         @Override
         public void closePath() {
             if (currentPoint != null && subpathStart != null) {
@@ -297,36 +314,43 @@ public final class TableDetector {
             pathSegments.clear();
         }
 
+        /** 선을 그리며 끝나는 경로 — 쌓인 선분을 edge로 확정한다. */
         @Override
         public void strokePath() {
             commitSegments();
         }
 
+        /** 채움으로 끝나는 경로 — 얇은 채움 사각형도 표선이므로 확정한다. */
         @Override
         public void fillPath(int windingRule) {
             commitSegments();
         }
 
+        /** 채움+선 경로 — 쌓인 선분을 edge로 확정한다. */
         @Override
         public void fillAndStrokePath(int windingRule) {
             commitSegments();
         }
 
+        /** 클리핑 경로는 표선이 아니므로 무시한다. */
         @Override
         public void clip(int windingRule) {
             // no-op
         }
 
+        /** 이미지 그리기는 표선과 무관하므로 무시한다. */
         @Override
         public void drawImage(PDImage pdImage) {
             // no-op
         }
 
+        /** 그라데이션 채움은 표선과 무관하므로 무시한다. */
         @Override
         public void shadingFill(COSName shadingName) {
             // no-op
         }
 
+        /** 두 점을 잇는 선분을 장치 좌표로 임시 목록에 쌓는다(확정 전). */
         private void addSegment(Point2D a, Point2D b) {
             pathSegments.add(new double[] {a.getX(), a.getY(), b.getX(), b.getY()});
         }

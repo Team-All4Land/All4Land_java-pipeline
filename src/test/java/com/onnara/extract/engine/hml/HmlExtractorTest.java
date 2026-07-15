@@ -15,10 +15,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** {@link HmlExtractor} HML 추출(BOM·표 격자·base64 이미지)의 samples/ 기반 회귀 테스트. */
 class HmlExtractorTest {
 
     private final HmlExtractor extractor = new HmlExtractor();
 
+    /** UTF-8 BOM 문서에서 표가 파싱되고 grid 크기·span이 유효한지 검증한다. */
     @Test
     void parsesUtf8BomAndTableGrid() throws Exception {
         Path file = TestFixtures.sample(
@@ -46,6 +48,7 @@ class HmlExtractorTest {
         }
     }
 
+    /** BINDATA base64 이미지가 디코딩되어 크기가 채워지는지 검증한다. */
     @Test
     void decodesEmbeddedBase64Image() throws Exception {
         Path file = TestFixtures.sample("8_공유수면 점용 사용 변경허가 고시(한국해양소년단).hml");
@@ -55,6 +58,7 @@ class HmlExtractorTest {
         assertTrue(raw.getImages().get(0).getSize() > 0);
     }
 
+    /** saveImages 결과가 extractRaw의 이미지 순서·이름과 일치하는지 검증한다. */
     @Test
     void saveImagesMatchesExtractRawOrderAndNames(@TempDir Path tempDir) throws Exception {
         Path file = TestFixtures.sample("8_공유수면 점용 사용 변경허가 고시(한국해양소년단).hml");

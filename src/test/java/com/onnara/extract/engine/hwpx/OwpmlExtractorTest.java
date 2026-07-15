@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** {@link OwpmlExtractor} HWPX 추출(인라인 태그 잘림·병합 셀·이미지)의 samples/ 기반 회귀 테스트. */
 class OwpmlExtractorTest {
 
     private final OwpmlExtractor extractor = new OwpmlExtractor();
@@ -37,6 +38,7 @@ class OwpmlExtractorTest {
         assertTrue(allText.contains("전북특별자치도 군산시 오식도동"));
     }
 
+    /** 표에 병합 셀 span(>1)이 복원되고 grid 행 수가 일치하는지 검증한다. */
     @Test
     void restoresMergedCellSpans() throws Exception {
         Path file = TestFixtures.sample("방치선박 제거공고(군산-2).hwpx");
@@ -58,6 +60,7 @@ class OwpmlExtractorTest {
         }
     }
 
+    /** saveImages 결과가 extractRaw의 이미지 순서·이름과 일치하는지 검증한다. */
     @Test
     void saveImagesMatchesExtractRawOrderAndNames(@TempDir Path tempDir) throws Exception {
         Path file = TestFixtures.sample("방치선박 제거공고(부안-11).hwpx");
@@ -70,6 +73,7 @@ class OwpmlExtractorTest {
         }
     }
 
+    /** 문단·표 셀 텍스트를 한 문자열로 이어붙인다(잘림 검증용). */
     private static String fullText(RawDocument raw) {
         StringBuilder sb = new StringBuilder();
         raw.getContent().forEach(c -> {
@@ -82,6 +86,7 @@ class OwpmlExtractorTest {
         return sb.toString();
     }
 
+    /** 실패 메시지에 실을 앞부분 200자 발췌. */
     private static String snippet(String text) {
         return text.substring(0, Math.min(200, text.length()));
     }

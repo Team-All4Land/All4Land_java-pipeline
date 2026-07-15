@@ -49,16 +49,22 @@ public class PdfBoxExtractor implements Extractor {
     private static final int STAMP_MAX_DIM = 300;
     private static final int STAMP_RED_DOMINANCE = 25;
 
+    /** {@code pdf} 확장자만 지원한다. */
     @Override
     public boolean supports(String ext) {
         return "pdf".equals(ext);
     }
 
+    /** 엔진 식별자 "pdfbox". */
     @Override
     public String engineName() {
         return "pdfbox";
     }
 
+    /**
+     * 페이지마다 표(TableDetector)와 표 밖 문단을 각각 뽑아 top 좌표로 정렬해
+     * content에 담고, 도장을 제외한 내장 이미지를 메타로 추가한다.
+     */
     @Override
     public RawDocument extractRaw(Path file) throws IOException {
         RawDocument raw = new RawDocument(file.getFileName().toString(), "pdf", false);
@@ -97,6 +103,7 @@ public class PdfBoxExtractor implements Extractor {
         return raw;
     }
 
+    /** 도장을 제외한 내장 이미지를 outDir에 쓰고 저장 경로 목록을 반환한다. */
     @Override
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
         List<Path> saved = new ArrayList<>();
@@ -111,6 +118,7 @@ public class PdfBoxExtractor implements Extractor {
         return saved;
     }
 
+    /** 확장자를 제외한 파일명(이미지 파일명 접두사로 사용). */
     private static String stemOf(Path file) {
         String name = file.getFileName().toString();
         int dot = name.lastIndexOf('.');
@@ -131,12 +139,14 @@ public class PdfBoxExtractor implements Extractor {
             this.content = content;
         }
 
+        /** top 좌표 오름차순 정렬(위→아래). 동률은 삽입 순서 유지. */
         @Override
         public int compareTo(Item o) {
             return Double.compare(top, o.top);
         }
     }
 
+    /** 텍스트 한 줄과 그 세로 위치(top/bottom) — 표 영역 판정·문단 병합에 사용. */
     private static final class Line {
         String text;
         double top;
@@ -198,10 +208,12 @@ public class PdfBoxExtractor implements Extractor {
         private double currentTop = Double.POSITIVE_INFINITY;
         private double currentBottom = Double.NEGATIVE_INFINITY;
 
+        /** 좌표순 정렬을 켜 줄 순서를 시각적 위→아래로 맞춘다. */
         LineCollector() throws IOException {
             setSortByPosition(true);
         }
 
+        /** 조각 텍스트를 현재 줄에 이어 붙이고 top/bottom 경계를 갱신한다. */
         @Override
         protected void writeString(String text, List<TextPosition> textPositions) {
             currentText.append(text);
@@ -212,22 +224,26 @@ public class PdfBoxExtractor implements Extractor {
             }
         }
 
+        /** 단어 구분자를 현재 줄에 넣는다. */
         @Override
         protected void writeWordSeparator() {
             currentText.append(getWordSeparator());
         }
 
+        /** 줄 구분자를 만나면 현재 줄을 확정한다. */
         @Override
         protected void writeLineSeparator() {
             flushLine();
         }
 
+        /** 페이지 끝에서 남은 줄을 확정한 뒤 상위 처리를 이어간다. */
         @Override
         protected void endPage(PDPage page) throws IOException {
             flushLine();
             super.endPage(page);
         }
 
+        /** 누적된 현재 줄을 lines에 추가하고 버퍼·경계를 초기화한다. */
         private void flushLine() {
             String text = currentText.toString().trim();
             if (!text.isEmpty()) {
@@ -243,6 +259,7 @@ public class PdfBoxExtractor implements Extractor {
     // 이미지 추출 (_iter_images / _is_stamp 포팅)
     // ------------------------------------------------------------------
 
+    /** 수집된 이미지 1건: 저장 파일명과 인코딩된 바이트. */
     private static final class ImageEntry {
         final String name;
         final byte[] data;
@@ -323,6 +340,7 @@ public class PdfBoxExtractor implements Extractor {
         return (double) (r - Math.max(g, b)) / count >= STAMP_RED_DOMINANCE;
     }
 
+    /** PDFBox suffix를 저장 확장자로 정규화한다(jpg→jpeg, 기록 불가 형식은 png). */
     private static String imageExtension(PDImageXObject image) {
         String suffix = image.getSuffix();
         if (suffix == null) {
@@ -365,6 +383,7 @@ public class PdfBoxExtractor implements Extractor {
         return bos.toByteArray();
     }
 
+    /** 이미지의 단일 필터명을 반환한다(필터 배열이면 null) — 원본 JPEG 재사용 판단용. */
     private static COSName firstFilter(PDImageXObject image) {
         COSBase filters = image.getCOSObject().getDictionaryObject(COSName.FILTER);
         if (filters instanceof COSName) {
@@ -373,6 +392,7 @@ public class PdfBoxExtractor implements Extractor {
         return null;
     }
 
+    /** 알파 채널을 흰 배경에 합성해 제거한다(JPEG는 투명도를 지원하지 않으므로). */
     private static BufferedImage stripAlpha(BufferedImage src) {
         BufferedImage rgb = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_RGB);
         rgb.getGraphics().drawImage(src, 0, 0, java.awt.Color.WHITE, null);

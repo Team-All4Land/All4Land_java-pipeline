@@ -13,12 +13,15 @@ import java.util.Properties;
  */
 public final class AppProperties {
 
+    /** 로드된 application.properties 키·값. */
     private final Properties props;
 
+    /** load()만 인스턴스를 만든다(외부 생성 방지). */
     private AppProperties(Properties props) {
         this.props = props;
     }
 
+    /** classpath에서 application.properties를 읽어 로더를 만든다(파일이 없으면 빈 설정). */
     public static AppProperties load() {
         Properties p = new Properties();
         try (InputStream in = AppProperties.class.getClassLoader()

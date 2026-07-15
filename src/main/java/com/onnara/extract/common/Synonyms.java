@@ -33,9 +33,11 @@ public final class Synonyms {
     private static final Pattern LEADING_NUMBERING = Pattern.compile(
             "^\\s*(?:[-–—·o○]\\s*)?(?:\\d{1,2}\\s*[.)]|\\d{1,2}(?=\\s)|[가-힣]\\s*[.)]|[①-⑳㉮-㉻])?\\s*");
 
+    /** 인스턴스화 방지 — 정적 사전·함수만 제공하는 유틸리티 클래스. */
     private Synonyms() {
     }
 
+    /** canonical 필드 → 동의어 라벨 목록 사전을 구성한다(클래스 로드 시 1회). */
     private static Map<String, List<String>> createDictionary() {
         Map<String, List<String>> d = new LinkedHashMap<>();
         d.put("agency", List.of("기관", "고시기관", "관리청", "처분청"));
@@ -68,6 +70,7 @@ public final class Synonyms {
         return Map.copyOf(d);
     }
 
+    /** {@link #LABEL_SYNONYMS}를 뒤집어 "동의어 라벨 → canonical 필드" 역인덱스를 만든다. */
     private static Map<String, String> createLookup() {
         Map<String, String> m = new LinkedHashMap<>();
         LABEL_SYNONYMS.forEach((canonical, synonyms) -> {
