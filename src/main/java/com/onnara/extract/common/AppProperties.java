@@ -6,10 +6,9 @@ import java.io.UncheckedIOException;
 import java.util.Properties;
 
 /**
- * classpath의 application.properties 로더.
+ * classpath의 application.properties 로더 — 실행 설정의 단일 출처.
  *
- * <p>우선순위: CLI 명시값 &gt; 환경변수 &gt; 파일. CLI 값은 각 호출부에서
- * 넘겨받고, 환경변수 매핑은 {@link #get(String, String)} 호출 전에
+ * <p>우선순위: 환경변수 &gt; 파일. 환경변수 매핑이 필요한 키(비밀번호 등)만
  * {@link #getWithEnv}로 조회한다.
  */
 public final class AppProperties {

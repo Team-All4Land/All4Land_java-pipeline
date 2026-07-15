@@ -8,9 +8,8 @@ import com.onnara.extract.db.DbLoader;
 import com.onnara.extract.db.DbSchema;
 import com.onnara.extract.db.LoadStats;
 import com.onnara.extract.detect.DetectorRegistry;
-import com.onnara.extract.ocr.TesseractOcr;
-import com.onnara.extract.scan.ScanOcrClient;
 import com.onnara.extract.scan.ScanOcrConfig;
+import com.onnara.extract.scan.ScanOcrRunner;
 import com.zaxxer.hikari.HikariDataSource;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -24,8 +23,10 @@ import java.util.concurrent.Callable;
 /**
  * {@code pipeline}: 판별 → 추출 → 매핑 → 적재 일괄 실행 (§8).
  *
- * <p>흐름(§8): input/ 재귀 스캔 → 스캔본이 있으면 OCR 서비스 health 확인 →
+ * <p>흐름(§8): input/ 재귀 스캔 → 스캔본이 있으면 OCR 스크립트 존재 확인 →
  * 파일별 detect → extract → map → schema.json 저장 → (--no-db가 아니면) DB 적재.
+ *
+ * <p>DB·OCR 실행 설정은 application.properties에서만 읽는다(로컬 실행 전제).
  */
 @Command(name = "pipeline", description = "배치: 판별→추출→매핑→적재 일괄")
 public class PipelineCommand implements Callable<Integer> {
@@ -36,26 +37,11 @@ public class PipelineCommand implements Callable<Integer> {
     @Option(names = {"-o", "--output"}, defaultValue = "out", description = "출력 폴더")
     Path output;
 
-    @Option(names = "--db-url", description = "PostgreSQL JDBC URL 재정의")
-    String dbUrl;
-
-    @Option(names = "--db-user", description = "DB 사용자 재정의")
-    String dbUser;
-
-    @Option(names = "--db-password", description = "DB 비밀번호 재정의")
-    String dbPassword;
-
-    @Option(names = "--ocr-url", description = "OCR 서비스 URL 재정의")
-    String ocrUrl;
-
     @Option(names = "--raw", description = "원시 결과(*.raw.json)도 함께 저장")
     boolean raw;
 
     @Option(names = "--no-images", description = "이미지 저장 생략")
     boolean noImages;
-
-    @Option(names = "--ocr", description = "임베디드 이미지 Tesseract OCR 수행")
-    boolean ocr;
 
     @Option(names = "--no-db", description = "DB 적재 생략 (DB 없는 스모크런용)")
     boolean noDb;
@@ -69,20 +55,20 @@ public class PipelineCommand implements Callable<Integer> {
             return 0;
         }
 
-        ScanOcrClient scanClient = new ScanOcrClient(ScanOcrConfig.fromProperties(props, ocrUrl));
-        boolean ocrHealthy = checkOcrHealthIfNeeded(files, scanClient);
-        TesseractOcr tesseractOcr = ocr ? new TesseractOcr() : null;
+        ScanOcrConfig ocrConfig = ScanOcrConfig.fromProperties(props);
+        ScanOcrRunner scanRunner = new ScanOcrRunner(ocrConfig);
+        boolean ocrReady = checkOcrRunnerIfNeeded(files, scanRunner, ocrConfig);
 
         List<SchemaResult> schemas = new ArrayList<>();
         int ok = 0;
         int failed = 0;
         for (Path file : files) {
             try {
-                if (!ocrHealthy && DetectorRegistry.isScanned(file)) {
-                    throw new IOException("OCR 서비스에 연결할 수 없어 스캔본을 처리할 수 없습니다");
+                if (!ocrReady && DetectorRegistry.isScanned(file)) {
+                    throw new IOException("OCR 실행 스크립트가 없어 스캔본을 처리할 수 없습니다");
                 }
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
-                        file, null, output, !noImages, ocr, tesseractOcr, scanClient);
+                        file, null, output, !noImages, scanRunner);
                 SchemaResult schema = Mapper.mapToSchema(result.raw(), result.engine());
 
                 String stem = PipelineSupport.stem(file);
@@ -106,8 +92,8 @@ public class PipelineCommand implements Callable<Integer> {
         return failed == 0 ? 0 : 1;
     }
 
-    /** 스캔본이 1건 이상일 때만 서비스 상태를 확인한다(§8) — 스캔본이 없으면 서비스 없이도 배치가 동작한다. */
-    private boolean checkOcrHealthIfNeeded(List<Path> files, ScanOcrClient scanClient) {
+    /** 스캔본이 1건 이상일 때만 OCR 스크립트 존재를 확인한다(§8) — 스캔본이 없으면 스크립트 없이도 배치가 동작한다. */
+    private boolean checkOcrRunnerIfNeeded(List<Path> files, ScanOcrRunner scanRunner, ScanOcrConfig ocrConfig) {
         boolean anyScanned = false;
         for (Path file : files) {
             try {
@@ -122,15 +108,16 @@ public class PipelineCommand implements Callable<Integer> {
         if (!anyScanned) {
             return true;
         }
-        boolean healthy = scanClient.health();
-        if (!healthy) {
-            System.out.println("[경고] OCR 서비스에 연결할 수 없습니다. 스캔본 파일은 [실패] 처리됩니다.");
+        boolean ready = scanRunner.isAvailable();
+        if (!ready) {
+            System.out.println("[경고] OCR 실행 스크립트를 찾을 수 없습니다(" + ocrConfig.script()
+                    + "). 스캔본 파일은 [실패] 처리됩니다.");
         }
-        return healthy;
+        return ready;
     }
 
     private void loadToDatabase(AppProperties props, List<SchemaResult> schemas) throws Exception {
-        try (HikariDataSource dataSource = DataSourceFactory.create(props, dbUrl, dbUser, dbPassword)) {
+        try (HikariDataSource dataSource = DataSourceFactory.create(props)) {
             DbSchema.migrate(dataSource);
             try (DbLoader loader = new DbLoader(dataSource)) {
                 LoadStats stats = loader.loadAll(schemas);

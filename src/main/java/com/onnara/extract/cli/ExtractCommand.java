@@ -5,9 +5,8 @@ import com.onnara.extract.common.Mapper;
 import com.onnara.extract.common.model.SchemaResult;
 import com.onnara.extract.engine.Extractor;
 import com.onnara.extract.engine.ExtractorRegistry;
-import com.onnara.extract.ocr.TesseractOcr;
-import com.onnara.extract.scan.ScanOcrClient;
 import com.onnara.extract.scan.ScanOcrConfig;
+import com.onnara.extract.scan.ScanOcrRunner;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -32,21 +31,14 @@ public class ExtractCommand implements Callable<Integer> {
     @Option(names = "--no-images", description = "이미지 저장 생략")
     boolean noImages;
 
-    @Option(names = "--ocr", description = "임베디드 이미지 Tesseract OCR 수행")
-    boolean ocr;
-
     @Option(names = "--engine", description = "엔진 강제 지정 (예: hwplib, owpml, hml-dom, pdfbox)")
     String engine;
-
-    @Option(names = "--ocr-url", description = "OCR 서비스 URL 재정의")
-    String ocrUrl;
 
     @Override
     public Integer call() throws Exception {
         List<Path> files = PipelineSupport.collectInputs(targets);
         AppProperties props = AppProperties.load();
-        ScanOcrClient scanClient = new ScanOcrClient(ScanOcrConfig.fromProperties(props, ocrUrl));
-        TesseractOcr tesseractOcr = ocr ? new TesseractOcr() : null;
+        ScanOcrRunner scanRunner = new ScanOcrRunner(ScanOcrConfig.fromProperties(props));
         Extractor forcedExtractor = engine != null ? ExtractorRegistry.forEngineName(engine) : null;
 
         int ok = 0;
@@ -54,7 +46,7 @@ public class ExtractCommand implements Callable<Integer> {
         for (Path file : files) {
             try {
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
-                        file, forcedExtractor, outputDir, !noImages, ocr, tesseractOcr, scanClient);
+                        file, forcedExtractor, outputDir, !noImages, scanRunner);
                 SchemaResult schema = Mapper.mapToSchema(result.raw(), result.engine());
 
                 String stem = PipelineSupport.stem(file);

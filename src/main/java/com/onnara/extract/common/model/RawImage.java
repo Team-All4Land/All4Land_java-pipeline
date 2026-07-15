@@ -10,7 +10,8 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  *
  * <ul>
  *   <li>{@code path}: 저장 경로 — DB 적재(ref_files)에 필요. saveImages 실행 시 채워진다.</li>
- *   <li>{@code ocr_text}: --ocr 활성화 시 Tesseract가 채우는 선택 필드.</li>
+ *   <li>{@code ocr_text}: 선택 필드 — 현재 Java 파이프라인은 채우지 않지만
+ *       raw JSON 계약(Python 산출물 호환) 유지를 위해 남겨둔다.</li>
  * </ul>
  */
 @JsonPropertyOrder({"name", "path", "size", "ocr_text"})
