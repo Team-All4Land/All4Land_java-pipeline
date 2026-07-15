@@ -1,0 +1,11 @@
+# PaddleOCR-VL CLI 의존성 (스캔본을 처리할 때만 필요)
+# 설치: pip install -r requirements.txt
+#
+# GPU 권장: paddlepaddle-gpu==3.2.1 (CUDA 12.6). CPU도 동작하나 VLM 추론이 느리다.
+# 첫 실행 시 VLM 모델(수 GB)을 자동 다운로드하므로 네트워크가 필요하다.
+paddlepaddle>=3.2.1
+paddleocr[doc-parser]>=3.2
+numpy
+Pillow
+# 스캔 PDF 페이지 렌더링에 필요할 수 있음(환경에 따라 paddleocr가 요구)
+pymupdf

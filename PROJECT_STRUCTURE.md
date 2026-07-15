@@ -112,11 +112,13 @@ extract-java/
 │   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL, 이후 버전 누적)
 │
 ├── src/test/java/...            # JUnit 5 — detect / mapper / 각 extractor / scan / db
-└── src/test/resources/fixtures/ # 실제 고시문 픽스처 (형식·스캔 여부별, Python 버전과 공유)
-
-# 저장소 밖(별도 관리): PaddleOCR-VL CLI 스크립트 (유일한 Python 잔존부)
-#   paddleocr_vl_cli.py          # 기존 scan/paddleocr/reader.py 재사용 + argparse 진입점 (§7 계약)
-#   requirements.txt             # paddleocr[doc-parser], paddlepaddle>=3.2.1, pymupdf
+├── src/test/resources/fixtures/ # 실제 고시문 픽스처 (형식·스캔 여부별, Python 버전과 공유)
+│
+└── ocr-cli/                     # ★★ 유일한 Python 잔존부: PaddleOCR-VL CLI (§7 계약)
+    ├── paddleocr_vl_cli.py      #   원본 scan/paddleocr/reader.py 로직 발췌한 독립 실행본
+    │                            #   (common/hwp/hwpx 불필요, paddleocr만 있으면 동작)
+    ├── requirements.txt         #   paddleocr[doc-parser], paddlepaddle>=3.2.1, pymupdf
+    └── README.md                #   설치·호출 규약·연동 안내
 ```
 
 ## 3. 스캔 판별 (detect) 계약
@@ -304,8 +306,8 @@ Python 의존성을 최소화한다.
 준비 (스캔본을 처리할 때만 필요):
 
 ```bash
-pip install "paddleocr[doc-parser]" "paddlepaddle>=3.2.1" pymupdf
-python3 paddleocr_vl_cli.py --source-file x.pdf --file-type pdf --output out.json x.pdf
+cd ocr-cli && pip install -r requirements.txt
+python3 ocr-cli/paddleocr_vl_cli.py --source-file x.pdf --file-type pdf --output out.json x.pdf
 # 첫 실행 시 VLM 모델 수 GB 다운로드
 ```
 
@@ -380,7 +382,7 @@ java -jar extract.jar <서브커맨드> [옵션]
 | 마이그레이션 | `org.flywaydb:flyway-core` | `resources/db/migration/V*.sql` 버전 관리 |
 | 테스트 | JUnit 5, Testcontainers(PostgreSQL) | 픽스처 회귀 + 실제 PG 컨테이너로 적재 검증 |
 
-### Python (PaddleOCR-VL CLI 스크립트, 저장소 밖)
+### Python (PaddleOCR-VL CLI 스크립트, `ocr-cli/`)
 
 | 구성 요소 | 의존성 | 비고 |
 |---|---|---|

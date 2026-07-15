@@ -51,3 +51,9 @@ input/
 *.sqlite
 *.raw.json
 *.schema.json
+
+# Python (ocr-cli) 산출물
+__pycache__/
+*.pyc
+.venv/
+venv/
