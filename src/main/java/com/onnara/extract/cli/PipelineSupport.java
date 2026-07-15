@@ -6,8 +6,7 @@ import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.detect.DetectorRegistry;
 import com.onnara.extract.engine.Extractor;
 import com.onnara.extract.engine.ExtractorRegistry;
-import com.onnara.extract.ocr.TesseractOcr;
-import com.onnara.extract.scan.ScanOcrClient;
+import com.onnara.extract.scan.ScanOcrRunner;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -28,6 +27,7 @@ import java.util.stream.Stream;
  */
 final class PipelineSupport {
 
+    /** 인스턴스화 방지 — pipeline/extract가 공유하는 정적 헬퍼 모음. */
     private PipelineSupport() {
     }
 
@@ -64,14 +64,13 @@ final class PipelineSupport {
      *                  {@code RawImage.path}는 outputDir 기준 상대경로로 기록된다(§4 예시와 동일한 형태).
      */
     static ExtractResult extractOne(Path file, Extractor forcedExtractor, Path outputDir,
-                                    boolean saveImages, boolean ocr, TesseractOcr tesseractOcr,
-                                    ScanOcrClient scanClient) throws IOException {
+                                    boolean saveImages, ScanOcrRunner scanRunner) throws IOException {
         String ext = extensionOf(file);
         String sourceFile = file.getFileName().toString();
         Path imagesDir = outputDir.resolve("images");
 
         if (forcedExtractor == null && DetectorRegistry.isScanned(file)) {
-            return extractScanned(file, ext, sourceFile, outputDir, imagesDir, saveImages, scanClient);
+            return extractScanned(file, ext, sourceFile, outputDir, imagesDir, saveImages, scanRunner);
         }
 
         Extractor extractor = forcedExtractor != null ? forcedExtractor : ExtractorRegistry.forExtension(ext);
@@ -79,31 +78,28 @@ final class PipelineSupport {
         if (saveImages && !raw.getImages().isEmpty()) {
             List<Path> saved = extractor.saveImages(file, imagesDir);
             bindImagePaths(raw, saved, outputDir);
-            if (ocr && tesseractOcr != null) {
-                applyOcr(raw, saved, tesseractOcr);
-            }
         }
         return new ExtractResult(raw, extractor.engineName());
     }
 
     /**
      * 스캔본 경로: PDF는 원본 파일을, HWP/HWPX/HML은 Java가 추출한 임베디드 이미지들을
-     * OCR 서비스로 전송한다(§1, §7). 서비스 응답의 images 메타는 우리가 로컬에 저장한
-     * 파일 목록으로 재구성한다 — 응답이 요청 이미지와 다른 목록/순서를 돌려줄 수 있어서다.
+     * PaddleOCR-VL 서브프로세스로 넘긴다(§1, §7). 결과의 images 메타는 우리가 로컬에 저장한
+     * 파일 목록으로 재구성한다 — 결과가 입력 이미지와 다른 목록/순서를 돌려줄 수 있어서다.
      */
     private static ExtractResult extractScanned(Path file, String ext, String sourceFile,
                                                 Path outputDir, Path imagesDir, boolean saveImages,
-                                                ScanOcrClient scanClient) throws IOException {
+                                                ScanOcrRunner scanRunner) throws IOException {
         if ("pdf".equals(ext)) {
-            RawDocument raw = scanClient.parsePdf(file, sourceFile);
-            return new ExtractResult(raw, "ocr-service");
+            RawDocument raw = scanRunner.parsePdf(file, sourceFile);
+            return new ExtractResult(raw, "paddleocr-vl");
         }
 
         Extractor nativeExtractor = ExtractorRegistry.forExtension(ext);
         Path targetDir = saveImages ? imagesDir : Files.createTempDirectory("extract-scan-");
         List<Path> saved = nativeExtractor.saveImages(file, targetDir);
 
-        RawDocument raw = scanClient.parseImages(saved, sourceFile, ext);
+        RawDocument raw = scanRunner.parseImages(saved, sourceFile, ext);
         raw.setImages(new ArrayList<>());
         for (Path p : saved) {
             RawImage image = new RawImage(p.getFileName().toString(), Files.size(p));
@@ -112,7 +108,7 @@ final class PipelineSupport {
             }
             raw.getImages().add(image);
         }
-        return new ExtractResult(raw, "ocr-service");
+        return new ExtractResult(raw, "paddleocr-vl");
     }
 
     /** saveImages 반환 순서 == raw.images 순서 계약을 이용해 상대 경로를 채운다. */
@@ -124,16 +120,7 @@ final class PipelineSupport {
         }
     }
 
-    private static void applyOcr(RawDocument raw, List<Path> saved, TesseractOcr ocr) {
-        List<RawImage> images = raw.getImages();
-        for (int i = 0; i < images.size() && i < saved.size(); i++) {
-            String text = ocr.recognize(saved.get(i));
-            if (text != null) {
-                images.get(i).setOcrText(text);
-            }
-        }
-    }
-
+    /** 객체를 들여쓰기 JSON으로 저장한다(상위 폴더는 자동 생성). */
     static void writeJson(Object obj, Path dest) throws IOException {
         if (dest.getParent() != null) {
             Files.createDirectories(dest.getParent());
@@ -141,12 +128,14 @@ final class PipelineSupport {
         Json.PRETTY.writeValue(dest.toFile(), obj);
     }
 
+    /** 소문자 확장자(점 제외). 확장자가 없으면 빈 문자열. */
     static String extensionOf(Path file) {
         String name = file.getFileName().toString();
         int dot = name.lastIndexOf('.');
         return dot < 0 ? "" : name.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
+    /** 확장자를 제외한 파일명(출력 파일명 어간으로 사용). */
     static String stem(Path file) {
         String name = file.getFileName().toString();
         int dot = name.lastIndexOf('.');

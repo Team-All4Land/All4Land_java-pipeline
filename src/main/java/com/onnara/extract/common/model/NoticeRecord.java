@@ -62,10 +62,12 @@ public record NoticeRecord(
             return this;
         }
 
+        /** 현재 세팅된 필드 값을 반환한다(없으면 null). */
         public String get(String field) {
             return fields.get(field);
         }
 
+        /** 해당 필드에 값이 세팅됐는지 여부. */
         public boolean has(String field) {
             return fields.containsKey(field);
         }
@@ -78,10 +80,12 @@ public record NoticeRecord(
             return this;
         }
 
+        /** 표준 필드·extras 모두 비었는지 — 빈 목록표 행을 걸러낼 때 쓴다. */
         public boolean isEmpty() {
             return fields.isEmpty() && extras.isEmpty();
         }
 
+        /** 누적된 필드·extras로 불변 {@link NoticeRecord}를 생성한다(extras 없으면 null). */
         public NoticeRecord build() {
             return new NoticeRecord(
                     fields.get("agency"),

@@ -5,8 +5,8 @@
 파이프라인의 **Java 구현** 구조.
 
 파이프라인 흐름·계약(raw JSON, 표준 스키마, DB 2테이블)은 Python 버전과 동일하다.
-단, **PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 Python API 서비스
-(`ocr-service/`)로 분리**하고, Java 파이프라인이 HTTP로 호출한다.
+단, **PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 Python CLI 스크립트로
+분리**하고, Java 파이프라인이 **서브프로세스로 실행**한다.
 
 ## 1. 전체 흐름
 
@@ -18,11 +18,11 @@ Java CLI: extract.jar pipeline (배치 진입점, picocli)
         │
         │  [1차 분기] 스캔본 판별 — DetectorRegistry (프로세스 내 호출)
         │
-        ├── 스캔본 (확장자 무관) ──► ScanOcrClient ──HTTP──► ocr-service (Python)
-        │       · PDF        : 원본 PDF를 서비스로 전송 → 페이지 렌더링 → VLM
+        ├── 스캔본 (확장자 무관) ──► ScanOcrRunner ──서브프로세스──► PaddleOCR-VL CLI (Python)
+        │       · PDF        : 원본 PDF 경로를 인자로 전달 → 페이지 렌더링 → VLM
         │       · HWP/HWPX/HML : Java가 임베디드 이미지(BinData)를 추출해
-        │                        이미지들만 서비스로 전송 → VLM
-        │       ◄── 응답: raw JSON (§4 계약 그대로) + 마크다운
+        │                        이미지 경로들만 인자로 전달 → VLM
+        │       ◄── 결과: --output 경로의 raw JSON (§4 계약 그대로)
         │
         └── 네이티브 ── [2차 분기] 확장자별 Extractor
                 ├─ .hwp   →  HwplibExtractor  (hwplib)
@@ -59,7 +59,7 @@ extract-java/
 │   │   ├── Main.java            #   서브커맨드 등록·공통 옵션
 │   │   ├── PipelineCommand.java #   pipeline: 판별→추출→매핑→적재 일괄 (기존 pipeline.mjs 대체)
 │   │   ├── DetectCommand.java   #   detect: 스캔 여부 일괄 분류 (--json)
-│   │   ├── ExtractCommand.java  #   extract: 형식/엔진 지정 추출 (+--raw, --no-images, --ocr)
+│   │   ├── ExtractCommand.java  #   extract: 형식/엔진 지정 추출 (+--raw, --no-images)
 │   │   ├── MapCommand.java      #   map: raw JSON → 스키마 JSON (매핑 전용)
 │   │   └── LoadCommand.java     #   load: 스키마 JSON → PostgreSQL (적재 전용)
 │   │
@@ -98,13 +98,9 @@ extract-java/
 │   │       ├── PdfBoxExtractor.java   # Apache PDFBox — 텍스트/이미지, 도장 제외 휴리스틱
 │   │       └── TableDetector.java     # 선분 클러스터링 표 탐지 (pdfplumber 로직 포팅)
 │   │
-│   ├── ocr/                     # (선택) 네이티브 문서 내 임베디드 이미지 OCR
-│   │   └── TesseractOcr.java    #   Tess4J — 전처리(그레이스케일/업스케일/대비) 후 인식
-│   │                            #   Java에서 직접 구동 가능하므로 서비스 분리 불필요
-│   │
-│   ├── scan/                    # ★ 스캔본 처리 — Python OCR 서비스 클라이언트
-│   │   ├── ScanOcrClient.java   #   java.net.http.HttpClient — /v1/parse 호출 (§7)
-│   │   └── ScanOcrConfig.java   #   서비스 URL·타임아웃·재시도 설정
+│   ├── scan/                    # ★ 스캔본 처리 — PaddleOCR-VL CLI 서브프로세스 실행기
+│   │   ├── ScanOcrRunner.java   #   ProcessBuilder — CLI 계약(§7)대로 실행, --output JSON 파싱
+│   │   └── ScanOcrConfig.java   #   실행 커맨드·스크립트 경로·타임아웃 설정
 │   │
 │   └── db/                      # ★ 최종 적재 계층
 │       ├── DataSourceFactory.java #  HikariCP 커넥션 풀 생성 (application.properties 기반)
@@ -112,17 +108,15 @@ extract-java/
 │       └── DbLoader.java        #   SchemaResult → documents/ref_files 적재 (PostgreSQL JDBC)
 │
 ├── src/main/resources/
-│   ├── application.properties   # db.url=jdbc:postgresql://... , 풀 설정, ocr.service.url 등
+│   ├── application.properties   # db.url=jdbc:postgresql://... , 풀 설정, ocr.cli.* 등 (설정 단일 출처)
 │   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL, 이후 버전 누적)
 │
-├── src/test/java/...            # JUnit 5 — detect / mapper / 각 extractor / db
-├── src/test/resources/fixtures/ # 실제 고시문 픽스처 (형식·스캔 여부별, Python 버전과 공유)
-│
-└── ocr-service/                 # ★★ Python: PaddleOCR-VL API 서버 (유일한 Python 잔존부)
-    ├── app.py                   #   FastAPI — GET /health, POST /v1/parse
-    ├── engine.py                #   기존 scan/paddleocr/reader.py 재사용 (VLM 추론, seal 제외)
-    ├── requirements.txt         #   fastapi, uvicorn, paddleocr[doc-parser], paddlepaddle>=3.2.1
-    └── README.md                #   설치·구동·GPU 안내
+├── src/test/java/...            # JUnit 5 — detect / mapper / 각 extractor / scan / db
+└── src/test/resources/fixtures/ # 실제 고시문 픽스처 (형식·스캔 여부별, Python 버전과 공유)
+
+# 저장소 밖(별도 관리): PaddleOCR-VL CLI 스크립트 (유일한 Python 잔존부)
+#   paddleocr_vl_cli.py          # 기존 scan/paddleocr/reader.py 재사용 + argparse 진입점 (§7 계약)
+#   requirements.txt             # paddleocr[doc-parser], paddlepaddle>=3.2.1, pymupdf
 ```
 
 ## 3. 스캔 판별 (detect) 계약
@@ -145,11 +139,12 @@ Python 버전과 달리 별도 프로세스 호출이 아니라 **같은 JVM 안
 | HWPX | ZIP 내 본문 XML의 텍스트 존재 여부 | java.util.zip + StAX |
 | HML | XML 본문 텍스트 대비 base64 BinData 비중 | StAX |
 
-스캔본으로 판별되면 확장자와 무관하게 `ScanOcrClient`를 통해 Python OCR 서비스로 보낸다.
+스캔본으로 판별되면 확장자와 무관하게 `ScanOcrRunner`가 PaddleOCR-VL CLI를
+서브프로세스로 실행해 처리한다.
 
 ## 4. 공통 계약: raw JSON 형식 (Python 버전과 동일)
 
-모든 추출 경로(네이티브 Extractor, OCR 서비스 응답)는 아래 형식을 출력해야 한다.
+모든 추출 경로(네이티브 Extractor, OCR CLI 결과)는 아래 형식을 출력해야 한다.
 Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 정의처다.
 
 ```json
@@ -173,8 +168,8 @@ Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 �
 - `content`는 문서 등장 순서 유지 (문단·표 혼재).
 - 표는 `grid` 필수, `cells`(병합 셀 span)는 선택 — HmlExtractor·OwpmlExtractor가 채운다.
 - 이미지 `path`(저장 경로)는 DB 적재(`ref_files`)에 필요하므로 필수.
-  `ocr_text`는 `--ocr` 활성화 시 `TesseractOcr`(Tess4J)가 채우는 선택 필드.
-- 도장(관인) 제외: 텍스트 PDF는 소형+붉은색 우세 휴리스틱, 스캔본은 서비스 측 seal 레이블.
+  `ocr_text`는 선택 필드 — 현재 Java 파이프라인은 채우지 않지만 계약 호환을 위해 유지.
+- 도장(관인) 제외: 텍스트 PDF는 소형+붉은색 우세 휴리스틱, 스캔본은 CLI 측 seal 레이블.
 - **JSON 필드명은 snake_case 유지** (Python 산출물과 바이트 수준 호환 —
   `@JsonProperty` 또는 SNAKE_CASE 네이밍 전략 적용).
 
@@ -205,7 +200,7 @@ CREATE TABLE IF NOT EXISTS documents (
     source_file        TEXT NOT NULL,        -- 원본 파일명
     file_type          TEXT NOT NULL,        -- hwp / hwpx / hml / pdf
     is_scanned         BOOLEAN NOT NULL DEFAULT FALSE,
-    engine             TEXT,                 -- hwplib / owpml / hml-stax / pdfbox / paddleocr-service
+    engine             TEXT,                 -- hwplib / owpml / hml-stax / pdfbox / paddleocr-vl
     agency             TEXT,
     notice_no          TEXT,
     notice_date        DATE,                 -- ISO 날짜 (native DATE 타입)
@@ -267,49 +262,51 @@ CREATE INDEX IF NOT EXISTS idx_ref_files_doc ON ref_files(document_seq);
 - 배치 적재는 **트랜잭션 + `addBatch`/`executeBatch`**로 수행, 파일 단위 실패는
   세이브포인트 롤백 후 다음 파일로 계속 진행 (배치 격리).
 
-## 7. OCR 서비스 API 계약 (ocr-service ↔ ScanOcrClient)
+## 7. OCR CLI 계약 (PaddleOCR-VL CLI ↔ ScanOcrRunner)
 
-Java가 직접 구동할 수 없는 PaddleOCR-VL만 Python FastAPI 서비스로 분리한다.
-기존 `scan/paddleocr/reader.py`를 `engine.py`로 재사용하므로 추론 로직 재작성은 없다.
+Java가 직접 구동할 수 없는 PaddleOCR-VL만 Python CLI 스크립트로 분리한다.
+기존 `scan/paddleocr/reader.py`에 argparse 진입점만 씌우면 되므로 추론 로직
+재작성은 없다. 상주 서버 없이 **파일 처리 시마다 서브프로세스로 실행**한다.
 
 ```
-GET  /health
-  → 200 {"status": "ok", "model_loaded": true}
-    (PipelineCommand가 스캔본이 1건 이상일 때 시작 전에 확인.
-     스캔본이 없으면 서비스 없이도 배치 전체가 동작한다)
+<ocr.cli.command> <ocr.cli.script> \
+    --source-file <원본파일명> \
+    --file-type <pdf|hwp|hwpx|hml> \
+    --output <raw.json 출력 경로> \
+    <입력 파일...>
 
-POST /v1/parse   (multipart/form-data)
-  요청 — 둘 중 하나:
-    file      : 스캔 PDF 원본 (서비스가 PyMuPDF로 페이지 렌더링)
-    images[]  : 스캔 HWP/HWPX/HML에서 Java Extractor가 추출한 임베디드 이미지들
-  공통 메타:
-    source_file, file_type
-  응답:
-    200 → §4의 raw JSON 계약 그대로 (is_scanned=true) + "markdown" 필드 추가
-          (도장은 seal 레이블로 제외된 상태)
-    422/500 → {"error": "..."}
+입력 파일 — 둘 중 하나:
+  · 스캔 PDF 원본 1개 (스크립트가 PyMuPDF로 페이지 렌더링)
+  · 스캔 HWP/HWPX/HML에서 Java Extractor가 추출한 임베디드 이미지 경로 N개
+
+종료 코드 0 → --output 경로에 §4 raw JSON 계약 그대로 생성
+              (도장은 seal 레이블로 제외된 상태. is_scanned는 Java가 true로
+               강제하고, markdown 등 계약 외 필드는 무시)
+종료 코드 ≠0 → stdout/stderr 로그 꼬리를 오류 메시지로 노출, 해당 파일만 [실패]
 ```
 
 역할 분담: **임베디드 이미지 추출은 Java가 담당**한다 (HWP/HWPX/HML 파서가 Java에
-있으므로). 서비스는 "이미지/PDF → 구조화 텍스트" 추론만 맡는 얇은 계층으로 유지해
+있으므로). 스크립트는 "이미지/PDF → 구조화 텍스트" 추론만 맡는 얇은 계층으로 유지해
 Python 의존성을 최소화한다.
 
-`ScanOcrClient` 동작 규약:
+`ScanOcrRunner` 동작 규약:
 
-- `java.net.http.HttpClient` 사용, 연결·응답 타임아웃과 재시도 횟수는
-  `application.properties`(`ocr.service.url`, `ocr.service.timeout-sec`,
-  `ocr.service.retries`)로 설정, CLI `--ocr-url`로 재정의 가능.
-- 서비스 미기동·타임아웃 시 해당 파일만 `[실패]` 로그 후 다음 파일로 계속
-  (배치 격리 원칙 유지).
-- VLM 추론은 오래 걸릴 수 있으므로 응답 타임아웃은 파일당 수 분 단위로 넉넉히.
+- `ProcessBuilder` 사용. stdout/stderr는 임시 로그 파일로 리다이렉트하고(파이프
+  블로킹 방지), 실패 시 로그 꼬리만 오류 메시지에 싣는다.
+- 실행 커맨드·스크립트 경로·타임아웃은 `application.properties`(`ocr.cli.command`,
+  `ocr.cli.script`, `ocr.cli.timeout-sec`)에서만 읽는다.
+- 스크립트 부재·비정상 종료·타임아웃 시 해당 파일만 `[실패]` 로그 후 다음 파일로
+  계속 (배치 격리 원칙 유지). 타임아웃 시 프로세스를 강제 종료한다.
+- VLM 추론은 오래 걸릴 수 있으므로 타임아웃은 파일당 수 분 단위로 넉넉히.
+  프로세스 실행마다 모델을 다시 로드하는 비용이 있으므로, 스캔본이 많아지면
+  스크립트 측에서 모델 캐시 등으로 완화한다.
 
-구동:
+준비 (스캔본을 처리할 때만 필요):
 
 ```bash
-# Python OCR 서비스 (스캔본을 처리할 때만 필요)
-cd ocr-service
-pip install -r requirements.txt
-uvicorn app:app --host 127.0.0.1 --port 8000   # 첫 실행 시 VLM 모델 수 GB 다운로드
+pip install "paddleocr[doc-parser]" "paddlepaddle>=3.2.1" pymupdf
+python3 paddleocr_vl_cli.py --source-file x.pdf --file-type pdf --output out.json x.pdf
+# 첫 실행 시 VLM 모델 수 GB 다운로드
 ```
 
 ## 8. CLI 규약 및 진입점 (picocli)
@@ -320,16 +317,16 @@ java -jar extract.jar <서브커맨드> [옵션]
 
 | 명령 | 역할 |
 |---|---|
-| `pipeline -i input/ -o out/ [--db-url ...] [--ocr-url ...]` | 배치: 판별→추출→매핑→적재 일괄 (기존 pipeline.mjs 대체) |
+| `pipeline -i input/ -o out/ [--no-db]` | 배치: 판별→추출→매핑→적재 일괄 (기존 pipeline.mjs 대체) |
 | `detect 파일... [--json]` | 스캔 여부 분류 결과 출력 |
-| `extract 파일... -o out/ [--raw] [--no-images] [--ocr] [--engine hwplib]` | 추출+매핑 (엔진 강제 지정 가능) |
+| `extract 파일... -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (엔진 강제 지정 가능) |
 | `map raw.json -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
-| `load out/*.schema.json [--db-url ...]` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
+| `load out/*.schema.json` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
 
 - 공통 옵션 의미는 Python 버전과 동일 (`--raw`: 원시 결과 포함,
-  `--no-images`: 이미지 저장 생략, `--ocr`: 임베디드 이미지 Tess4J OCR).
-- **DB 접속 정보는 기본적으로 `application.properties`**(`db.url`, `db.user`,
-  `db.password`, 풀 크기)에서 읽고, CLI `--db-url` 등으로 재정의할 수 있다.
+  `--no-images`: 이미지 저장 생략).
+- **DB 접속·OCR 실행 정보는 `application.properties`에서만 읽는다**(`db.*`,
+  `ocr.cli.*`) — 로컬 실행 전제라 CLI 재정의 옵션은 두지 않는다.
   비밀번호는 파일에 평문으로 두지 말고 환경변수(`PGPASSWORD` 등)나 시크릿
   주입을 권장한다.
 - 파일마다 `out/<이름>.schema.json` (+`--raw` 시 `<이름>.raw.json`) 생성.
@@ -339,9 +336,9 @@ java -jar extract.jar <서브커맨드> [옵션]
 
 ```
 1) input/ 재귀 스캔 → .hwp/.hwpx/.hml/.pdf 파일 목록 수집
-2) 스캔본이 있으면 GET /health로 OCR 서비스 확인 (없으면 스캔 파일만 [실패] 처리)
+2) 스캔본이 있으면 OCR 스크립트(ocr.cli.script) 존재 확인 (없으면 스캔 파일만 [실패] 처리)
 3) 파일별: DetectorRegistry 판별
-     스캔본  → (HWP/HWPX/HML이면 임베디드 이미지 추출 후) ScanOcrClient → raw JSON
+     스캔본  → (HWP/HWPX/HML이면 임베디드 이미지 추출 후) ScanOcrRunner 서브프로세스 → raw JSON
      네이티브 → ExtractorRegistry에서 확장자 매칭 Extractor → raw JSON
 4) Mapper.mapToSchema → out/<이름>.schema.json 저장
 5) DbLoader로 documents/ref_files 적재
@@ -378,17 +375,15 @@ java -jar extract.jar <서브커맨드> [옵션]
 | HWPX | `kr.dogfoot:hwpxlib` | 인라인 태그 셀 잘림 픽스처 검증 필수, 문제 시 자체 StAX 파싱으로 대체 |
 | HML | JDK 내장 (StAX, `java.util.Base64`) | 외부 의존성 없음 |
 | PDF | `org.apache.pdfbox:pdfbox` | 표 탐지(선분 클러스터링)는 자체 포팅 |
-| 임베디드 OCR (선택) | `net.sourceforge.tess4j:tess4j` | Tesseract 네이티브 + 한국어 데이터 별도 설치 |
 | DB 드라이버 | `org.postgresql:postgresql` | 순수 JDBC (ORM 불필요) |
 | 커넥션 풀 | `com.zaxxer:HikariCP` | 배치 적재 성능·안정성 |
 | 마이그레이션 | `org.flywaydb:flyway-core` | `resources/db/migration/V*.sql` 버전 관리 |
 | 테스트 | JUnit 5, Testcontainers(PostgreSQL) | 픽스처 회귀 + 실제 PG 컨테이너로 적재 검증 |
 
-### Python (ocr-service/requirements.txt)
+### Python (PaddleOCR-VL CLI 스크립트, 저장소 밖)
 
 | 구성 요소 | 의존성 | 비고 |
 |---|---|---|
-| API 서버 | `fastapi`, `uvicorn`, `python-multipart` | 얇은 HTTP 계층 |
 | OCR 엔진 | `paddleocr[doc-parser]`, `paddlepaddle>=3.2.1` | VLM 모델 수 GB 자동 다운로드, GPU 권장 |
 | PDF 렌더링 | `pymupdf` | 스캔 PDF 페이지 → 이미지 |
 
@@ -403,7 +398,7 @@ java -jar extract.jar <서브커맨드> [옵션]
 | `hwpx/owpml` (자체 HwpxParser) | `OwpmlExtractor` (hwpxlib, 필요 시 자체 StAX) |
 | `hml/stdlib` | `HmlExtractor` (StAX) |
 | `pdf/pdfplumber` (+PyMuPDF) | `PdfBoxExtractor` + `TableDetector` (클러스터링 포팅) |
-| `scan/paddleocr` (직접 임포트) | `ocr-service/` (FastAPI) + `ScanOcrClient` (HTTP) |
-| `ocr/embedded.py` (pytesseract) | `TesseractOcr` (Tess4J — Java 내 직접 구동) |
+| `scan/paddleocr` (직접 임포트) | PaddleOCR-VL CLI 스크립트 + `ScanOcrRunner` (서브프로세스) |
+| `ocr/embedded.py` (pytesseract) | 제거 — 임베디드 이미지 OCR은 사용하지 않음 |
 | `db/` (sqlite3) | `DbSchema` + `DbLoader` (PostgreSQL JDBC + HikariCP + Flyway) |
 | raw JSON / 스키마 JSON / DB DDL | **완전 동일 (교차 검증 가능)** |

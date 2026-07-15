@@ -20,6 +20,7 @@ import picocli.CommandLine.Command;
         })
 public class Main implements Runnable {
 
+    /** 프로세스 진입점 — 서브커맨드를 파싱·실행하고 종료 코드로 프로세스를 종료한다. */
     public static void main(String[] args) {
         CommandLine cli = new CommandLine(new Main());
         cli.setExecutionExceptionHandler((ex, commandLine, parseResult) -> {
@@ -29,6 +30,7 @@ public class Main implements Runnable {
         System.exit(cli.execute(args));
     }
 
+    /** 서브커맨드 없이 호출됐을 때 사용법을 출력한다. */
     @Override
     public void run() {
         new CommandLine(this).usage(System.out);

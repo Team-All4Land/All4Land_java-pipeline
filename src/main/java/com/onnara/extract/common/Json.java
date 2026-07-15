@@ -13,11 +13,14 @@ import com.fasterxml.jackson.databind.ObjectWriter;
  */
 public final class Json {
 
+    /** 읽기·쓰기 공용 매퍼. 알 수 없는 필드는 무시하도록 설정된다. */
     public static final ObjectMapper MAPPER = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
+    /** 사람이 읽는 산출물(raw.json / schema.json) 저장용 들여쓰기 라이터. */
     public static final ObjectWriter PRETTY = MAPPER.writerWithDefaultPrettyPrinter();
 
+    /** 인스턴스화 방지 — 정적 상수만 제공하는 유틸리티 클래스. */
     private Json() {
     }
 }

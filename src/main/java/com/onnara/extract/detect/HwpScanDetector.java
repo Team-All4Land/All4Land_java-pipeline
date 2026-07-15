@@ -17,8 +17,13 @@ import java.nio.file.Path;
  */
 public class HwpScanDetector implements ScanDetector {
 
+    /** 이 글자 수 이상 본문 텍스트가 나오면 네이티브 문서로 확정(조기 반환)한다. */
     private static final int MIN_TEXT_CHARS = 50;
 
+    /**
+     * 본문 문단 텍스트를 누적하다 임계치를 넘으면 네이티브(false)로 조기 판정하고,
+     * 텍스트가 임계치 미만이면서 임베디드 BinData 이미지가 있으면 스캔본(true)으로 본다.
+     */
     @Override
     public boolean isScanned(Path file) {
         try {

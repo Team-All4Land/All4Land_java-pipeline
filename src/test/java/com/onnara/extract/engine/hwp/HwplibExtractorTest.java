@@ -15,10 +15,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** {@link HwplibExtractor} HWP 추출의 samples/ 기반 회귀 테스트. */
 class HwplibExtractorTest {
 
     private final HwplibExtractor extractor = new HwplibExtractor();
 
+    /** 문단·표가 등장 순서로 추출되고 표 span이 유효한지 검증한다. */
     @Test
     void extractsParagraphsAndTablesInOrder() throws Exception {
         Path file = TestFixtures.sample("공유수면 점용사용 허가 고시문.hwp");
@@ -43,6 +45,7 @@ class HwplibExtractorTest {
                 });
     }
 
+    /** saveImages 결과가 extractRaw의 이미지 순서·이름·크기와 일치하고 매직바이트 확장자를 쓰는지 검증한다. */
     @Test
     void saveImagesMatchesExtractRawOrderAndNames(@TempDir Path tempDir) throws Exception {
         Path file = TestFixtures.sample("공유수면 점용사용 승인사항 고시.hwp");

@@ -5,9 +5,9 @@
 적재**하는 배치 파이프라인입니다.
 
 핵심 원칙: **판별(detect) → 추출(engine) → 매핑(common) → 적재(db)** 4계층 분리.
-PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 스캔본 처리만 별도의 Python
-API 서비스(`ocr-service/`, 이 저장소 범위 밖)로 분리하고, Java 파이프라인이
-HTTP로 호출합니다.
+PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 스캔본 처리만 Python CLI
+스크립트(이 저장소 범위 밖)에 맡기고, Java 파이프라인이 **서브프로세스로
+실행**합니다.
 
 ## 전체 흐름
 
@@ -19,7 +19,7 @@ CLI: extract.jar pipeline (picocli)
         │
         │  [1차 분기] 스캔본 판별 — DetectorRegistry
         │
-        ├── 스캔본 ──► ScanOcrClient ──HTTP──► ocr-service (별도 Python, 범위 밖)
+        ├── 스캔본 ──► ScanOcrRunner ──서브프로세스──► PaddleOCR-VL CLI (별도 Python, 범위 밖)
         │
         └── 네이티브 ── [2차 분기] 확장자별 Extractor
                 ├─ .hwp   →  HwplibExtractor  (hwplib)
@@ -59,12 +59,11 @@ src/main/java/com/onnara/extract/
 ├── detect/       1차 분기: 스캔본 판별 (ScanDetector 구현체 4종)
 ├── engine/       2차 분기: 확장자별 네이티브 추출기 (Extractor 구현체 4종)
 ├── common/       형식 공통 계층 — raw JSON 모델, 매퍼, 동의어 사전, 날짜/주소 휴리스틱
-├── ocr/          임베디드 이미지 OCR (Tess4J, --ocr 옵션)
-├── scan/         스캔본 처리 — Python OCR 서비스 HTTP 클라이언트
+├── scan/         스캔본 처리 — PaddleOCR-VL CLI 서브프로세스 실행기
 └── db/           PostgreSQL 적재 (HikariCP + Flyway)
 
 src/main/resources/
-├── application.properties   DB·OCR 서비스 접속 설정
+├── application.properties   DB 접속·OCR CLI 실행 설정 (설정의 단일 출처)
 └── db/migration/            Flyway 마이그레이션 (V1__init.sql)
 
 src/test/java/...   JUnit 5 — detect/engine/common/scan 단위 테스트 + samples/ 기반 회귀 테스트
@@ -76,9 +75,8 @@ samples/             실제 고시문 픽스처 (형식·스캔 여부별)
 - JDK 17 이상
 - Maven 3.6 이상
 - (DB 적재 시) PostgreSQL 접근 가능한 인스턴스
-- (`--ocr` 사용 시) 네이티브 Tesseract + 한국어 데이터(`kor.traineddata`) 설치,
-  `TESSDATA_PREFIX` 환경변수. 미설치 환경에서는 `--ocr`를 켜도 배치가 실패하지
-  않고 경고만 남깁니다.
+- (스캔본 처리 시) Python 3 + PaddleOCR-VL CLI 스크립트(아래 계약 참고).
+  없으면 스캔본 파일만 `[실패]` 처리되고 네이티브 파일은 정상 처리됩니다.
 - 한글 파일명 경로를 다루므로 로캘이 UTF-8이어야 합니다(`LANG=C.UTF-8` 등).
   `mvn test`는 surefire 설정에 이미 반영되어 있어 별도 조치가 필요 없습니다.
 
@@ -98,14 +96,15 @@ java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
 
 | 명령 | 역할 |
 |---|---|
-| `pipeline -i input/ -o out/ [--db-url ...] [--ocr-url ...] [--no-db]` | 배치: 판별→추출→매핑→적재 일괄 |
+| `pipeline -i input/ -o out/ [--no-db]` | 배치: 판별→추출→매핑→적재 일괄 |
 | `detect 파일...\|폴더 [--json]` | 스캔 여부 분류 결과 출력 |
-| `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--ocr] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
+| `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
 | `map raw.json... -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
-| `load schema.json... [--db-url ...]` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
+| `load schema.json...` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
 
-공통 옵션: `--raw`(원시 결과도 저장), `--no-images`(이미지 저장 생략),
-`--ocr`(임베디드 이미지 Tesseract OCR). 파일 단위 실패는 `[실패] <파일>: <사유>`
+공통 옵션: `--raw`(원시 결과도 저장), `--no-images`(이미지 저장 생략).
+DB 접속·OCR 실행 정보는 CLI 옵션이 아니라 `application.properties`에서
+읽습니다(로컬 실행 전제). 파일 단위 실패는 `[실패] <파일>: <사유>`
 로그만 남기고 배치는 계속 진행합니다(배치 격리).
 
 ### 예시
@@ -117,12 +116,15 @@ java -jar target/extract-pipeline-1.0.0.jar pipeline -i samples -o out/ --no-db
 # 스캔 여부만 확인
 java -jar target/extract-pipeline-1.0.0.jar detect samples --json
 
-# PostgreSQL까지 적재
-java -jar target/extract-pipeline-1.0.0.jar pipeline -i input/ -o out/ \
-    --db-url jdbc:postgresql://localhost:5432/extract --db-user extract
+# PostgreSQL까지 적재 (접속 정보는 application.properties에서)
+java -jar target/extract-pipeline-1.0.0.jar pipeline -i input/ -o out/
 ```
 
 ## 설정 (`application.properties`)
+
+DB 접속과 OCR 실행 정보는 모두 이 파일에서 읽습니다. CLI 재정의 옵션은
+없습니다(로컬 실행 전제 — 빌드에 포함되는 `src/main/resources/` 파일을
+수정한 뒤 다시 패키징하세요).
 
 ```properties
 db.url=jdbc:postgresql://localhost:5432/extract
@@ -130,36 +132,40 @@ db.user=extract
 db.password=
 db.pool.max-size=5
 
-ocr.service.url=http://127.0.0.1:8000
-ocr.service.timeout-sec=300
-ocr.service.retries=2
+ocr.cli.command=python3
+ocr.cli.script=ocr-cli/paddleocr_vl_cli.py
+ocr.cli.timeout-sec=300
 ```
 
 - DB 비밀번호는 파일에 평문으로 두지 말고 환경변수 `PGPASSWORD` 또는
-  `DB_PASSWORD`로 주입하세요. CLI `--db-password` > 환경변수 > 파일 순으로
-  우선합니다.
-- 모든 값은 CLI 옵션(`--db-url`, `--ocr-url` 등)으로 재정의할 수 있습니다.
+  `DB_PASSWORD`로 주입하세요(환경변수 > 파일 순으로 우선).
+- `ocr.cli.command`는 가상환경을 쓰면 해당 venv의 `python` 절대경로로
+  지정하세요.
 
-## 스캔본 OCR 서비스 (ocr-service, 범위 밖)
+## 스캔본 OCR — PaddleOCR-VL CLI (범위 밖)
 
-PaddleOCR-VL을 구동하는 Python FastAPI 서비스는 이 저장소에 포함되지 않습니다.
-`scan/ScanOcrClient`가 기대하는 계약은 다음과 같습니다.
+PaddleOCR-VL을 구동하는 Python 스크립트는 이 저장소에 포함되지 않습니다.
+`scan/ScanOcrRunner`가 아래 계약으로 **서브프로세스를 실행**합니다.
 
 ```
-GET  /health
-  → 200 {"status": "ok", "model_loaded": true}
+<ocr.cli.command> <ocr.cli.script> \
+    --source-file <원본파일명> \
+    --file-type <pdf|hwp|hwpx|hml> \
+    --output <raw.json 출력 경로> \
+    <입력 파일...>
 
-POST /v1/parse   (multipart/form-data)
-  요청 — 둘 중 하나:
-    file      : 스캔 PDF 원본
-    images[]  : 스캔 HWP/HWPX/HML에서 Java가 추출한 임베디드 이미지들
-  공통 메타: source_file, file_type
-  응답: 200 → raw JSON 계약(§ 위 다이어그램) + is_scanned=true (+markdown 필드는 무시)
-        422/500 → {"error": "..."}
+입력 파일 — 둘 중 하나:
+  · 스캔 PDF 원본 1개 (스크립트가 페이지 렌더링 후 VLM 추론)
+  · 스캔 HWP/HWPX/HML에서 Java가 추출한 임베디드 이미지 경로 N개
+
+종료 코드 0 → --output 경로에 raw JSON 계약(위 다이어그램) 파일 생성.
+              is_scanned는 Java가 true로 강제하고, markdown 등 계약 외
+              필드는 무시합니다. stdout/stderr는 로그로만 취급합니다.
+종료 코드 ≠0 또는 제한 시간 초과 → 해당 파일만 [실패] 처리.
 ```
 
-서비스가 없거나 응답하지 않으면 스캔본 파일만 `[실패]` 처리되고, 네이티브
-파일들은 정상적으로 배치가 진행됩니다.
+스크립트가 없으면(경로 확인: `ocr.cli.script`) 스캔본 파일만 `[실패]`
+처리되고, 네이티브 파일들은 정상적으로 배치가 진행됩니다.
 
 ## 데이터베이스 스키마 (PostgreSQL)
 
@@ -186,8 +192,8 @@ mvn test -Dgroups=db -DexcludedGroups= \
     -Ddb.test.user=extract -Ddb.test.password=extract
 ```
 
-`ScanOcrClient`는 JDK 내장 `HttpServer`로 목 서버를 띄워 검증하므로 외부
-서비스 없이도 실행됩니다.
+`ScanOcrRunner`는 스텁 셸 스크립트를 서브프로세스로 실행해 검증하므로
+PaddleOCR-VL 설치 없이도 실행됩니다(Windows에서는 해당 테스트 생략).
 
 ## 새 형식(확장자)·엔진 통합 절차
 

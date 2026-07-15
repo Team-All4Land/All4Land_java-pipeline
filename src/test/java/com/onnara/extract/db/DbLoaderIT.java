@@ -32,6 +32,7 @@ class DbLoaderIT {
 
     private HikariDataSource dataSource;
 
+    /** 테스트 DB 커넥션 풀을 열고 스키마를 마이그레이션한다(각 테스트 전). */
     @BeforeEach
     void setUp() {
         String url = System.getProperty("db.test.url", "jdbc:postgresql://localhost:5432/extract");
@@ -48,6 +49,7 @@ class DbLoaderIT {
         DbSchema.migrate(dataSource);
     }
 
+    /** 테스트가 넣은 it-* 행을 지우고 풀을 닫는다(각 테스트 후). */
     @AfterEach
     void tearDown() throws SQLException {
         try (var conn = dataSource.getConnection();
@@ -57,6 +59,7 @@ class DbLoaderIT {
         dataSource.close();
     }
 
+    /** documents·ref_files가 삽입되고 날짜·extras·조인이 기대대로 저장되는지 검증한다. */
     @Test
     void insertsDocumentsAndRefFiles() throws SQLException {
         SchemaResult schema = sample("it-doc1.hml");
@@ -93,6 +96,7 @@ class DbLoaderIT {
         }
     }
 
+    /** 같은 source_file 재적재 시 행이 중복되지 않고(멱등) ref_files도 CASCADE로 정리되는지 검증한다. */
     @Test
     void reloadingSameSourceFileIsIdempotent() throws SQLException {
         SchemaResult schema = sample("it-doc2.hml");
@@ -125,6 +129,7 @@ class DbLoaderIT {
         }
     }
 
+    /** 레코드 1건 + 이미지 1건을 담은 적재용 스키마 픽스처를 만든다. */
     private static SchemaResult sample(String sourceFile) {
         Map<String, String> extras = new LinkedHashMap<>();
         extras.put("특이사항", "없음");

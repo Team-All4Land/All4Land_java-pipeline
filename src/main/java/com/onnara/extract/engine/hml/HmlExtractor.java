@@ -39,22 +39,26 @@ import java.util.Set;
  */
 public class HmlExtractor implements Extractor {
 
+    /** {@code hml} 확장자만 지원한다. */
     @Override
     public boolean supports(String ext) {
         return "hml".equals(ext);
     }
 
+    /** 엔진 식별자 "hml-dom". */
     @Override
     public String engineName() {
         return "hml-dom";
     }
 
+    /** 파일을 파싱해 raw 문서만 반환한다(이미지는 메타로만 포함). */
     @Override
     public RawDocument extractRaw(Path file) throws IOException {
         ParseResult result = parse(file);
         return result.raw;
     }
 
+    /** base64 BINDATA에서 복원한 이미지들을 outDir에 쓰고 저장 경로 목록을 반환한다. */
     @Override
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
         ParseResult result = parse(file);
@@ -135,6 +139,7 @@ public class HmlExtractor implements Extractor {
         return new ParseResult(raw, images);
     }
 
+    /** HML을 DOM으로 읽는다. XXE 방어(DTD·외부 엔티티 차단)를 적용하며 실패 시 IOException. */
     private static Document readXml(Path file) throws IOException {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -150,6 +155,7 @@ public class HmlExtractor implements Extractor {
         }
     }
 
+    /** PICTURE의 IMAGE BinItem이 가리키는 base64 원본을 찾아 이미지 목록에 추가한다. */
     private static void addImage(List<ImageEntry> images, Element pic,
                                  Map<String, byte[]> binDataMap, String stem) {
         List<Element> imageEls = descendantElements(pic, "IMAGE");
@@ -166,6 +172,10 @@ public class HmlExtractor implements Extractor {
 
     // ── 표 파싱 ─────────────────────────────────────────────────
 
+    /**
+     * TABLE 요소를 raw 표 모델로 변환한다. CELL의 ColAddr/RowAddr/ColSpan/RowSpan과
+     * PARALIST 문단 텍스트를 읽어 cells를 채우고, 병합 범위를 grid에 복제한다.
+     */
     private static RawTable parseTable(Element tbl) {
         int rowCount = parseIntAttr(tbl, "RowCount", 0);
         int colCount = parseIntAttr(tbl, "ColCount", 0);
@@ -221,6 +231,7 @@ public class HmlExtractor implements Extractor {
         return sb.toString();
     }
 
+    /** CHAR 텍스트만 재귀 수집하고, 중첩 TABLE/PICTURE 하위는 건너뛴다(중복 방지). */
     private static void walkText(Node node, StringBuilder sb) {
         NodeList children = node.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
@@ -239,6 +250,7 @@ public class HmlExtractor implements Extractor {
         }
     }
 
+    /** parent의 직계 자식 중 태그명이 일치하는 요소만 반환한다(중첩 제외). */
     private static List<Element> directChildElements(Element parent, String tag) {
         List<Element> result = new ArrayList<>();
         NodeList children = parent.getChildNodes();
@@ -251,6 +263,7 @@ public class HmlExtractor implements Extractor {
         return result;
     }
 
+    /** root 하위(자손 포함) 전체에서 태그명이 일치하는 요소를 반환한다. */
     private static List<Element> descendantElements(Element root, String tag) {
         List<Element> result = new ArrayList<>();
         NodeList all = root.getElementsByTagName(tag);
@@ -260,6 +273,7 @@ public class HmlExtractor implements Extractor {
         return result;
     }
 
+    /** 정수 속성을 읽는다. 속성이 없거나 숫자가 아니면 defaultValue. */
     private static int parseIntAttr(Element elem, String attr, int defaultValue) {
         String v = elem.getAttribute(attr);
         if (v == null || v.isEmpty()) {
@@ -272,15 +286,18 @@ public class HmlExtractor implements Extractor {
         }
     }
 
+    /** 확장자를 제외한 파일명(이미지 파일명 접두사로 사용). */
     private static String stemOf(Path file) {
         String name = file.getFileName().toString();
         int dot = name.lastIndexOf('.');
         return dot < 0 ? name : name.substring(0, dot);
     }
 
+    /** 수집된 이미지 1건: 저장 파일명과 원본 바이트. */
     private record ImageEntry(String name, byte[] data) {
     }
 
+    /** 단일 파싱 패스 결과: raw 문서 + 순서가 고정된 이미지 목록. */
     private record ParseResult(RawDocument raw, List<ImageEntry> images) {
     }
 }

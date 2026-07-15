@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS documents (
     source_file        TEXT NOT NULL,        -- 원본 파일명
     file_type          TEXT NOT NULL,        -- hwp / hwpx / hml / pdf
     is_scanned         BOOLEAN NOT NULL DEFAULT FALSE,
-    engine             TEXT,                 -- hwplib / owpml / hml-dom / pdfbox / paddleocr-service
+    engine             TEXT,                 -- hwplib / owpml / hml-dom / pdfbox / paddleocr-vl
     agency             TEXT,
     notice_no          TEXT,
     notice_date        DATE,                 -- ISO 날짜 (native DATE 타입)

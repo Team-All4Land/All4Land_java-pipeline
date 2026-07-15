@@ -11,8 +11,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** {@link Heuristics} 캡션·제목·기관/번호·고시자 판별 단위 테스트. */
 class HeuristicsTest {
 
+    /** 표·그림 캡션 패턴을 맞게 True/False로 구분하는지 검증한다. */
     @Test
     void detectsCaptions() {
         assertTrue(Heuristics.looksLikeCaption("<표 1> 허가 내역"));
@@ -21,6 +23,7 @@ class HeuristicsTest {
         assertFalse(Heuristics.looksLikeCaption(null));
     }
 
+    /** 고시문 서식 표(1열, 1행에 고시번호)에서 2행 제목을 뽑는지 검증한다. */
     @Test
     void guessesTitleFromNoticeFormTable() {
         RawTable table = Tables.gridToTable(List.of(
@@ -30,6 +33,7 @@ class HeuristicsTest {
                 Heuristics.guessTitleFromTables(List.of(table)));
     }
 
+    /** 고시문 서식이 아닌 표·빈 목록·null에서는 제목 추정이 null인지 검증한다. */
     @Test
     void titleGuessRejectsNonNoticeTable() {
         RawTable table = Tables.gridToTable(List.of(
@@ -40,6 +44,7 @@ class HeuristicsTest {
         assertNull(Heuristics.guessTitleFromTables(null));
     }
 
+    /** "OO청 고시 제N호"에서 기관과 고시번호가 분리되는지 검증한다. */
     @Test
     void splitsAgencyAndNoticeNo() {
         Optional<String[]> hit = Heuristics.agencyAndNoticeNo("군산지방해양수산청 고시 제2026-47호");
@@ -49,6 +54,7 @@ class HeuristicsTest {
         assertTrue(Heuristics.agencyAndNoticeNo("일반 문장").isEmpty());
     }
 
+    /** 직함으로 끝나는 단독 문단을 고시자로 판별하는지 검증한다. */
     @Test
     void detectsSigner() {
         assertTrue(Heuristics.looksLikeSigner("군산지방해양수산청장"));

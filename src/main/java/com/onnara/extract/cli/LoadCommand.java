@@ -17,22 +17,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 
-/** {@code load}: 스키마 JSON → PostgreSQL 적재 전용 — 재적재·스키마 변경 시 단독 실행 (§8). */
+/**
+ * {@code load}: 스키마 JSON → PostgreSQL 적재 전용 — 재적재·스키마 변경 시 단독 실행 (§8).
+ *
+ * <p>DB 접속 정보는 application.properties에서만 읽는다(로컬 실행 전제).
+ */
 @Command(name = "load", description = "스키마 JSON → PostgreSQL 적재 전용")
 public class LoadCommand implements Callable<Integer> {
 
+    /** 적재할 스키마 JSON 파일 목록. */
     @Parameters(paramLabel = "SCHEMA_JSON", description = "스키마 JSON 파일 목록")
     List<Path> schemaFiles;
 
-    @Option(names = "--db-url", description = "PostgreSQL JDBC URL 재정의")
-    String dbUrl;
-
-    @Option(names = "--db-user", description = "DB 사용자 재정의")
-    String dbUser;
-
-    @Option(names = "--db-password", description = "DB 비밀번호 재정의")
-    String dbPassword;
-
+    /**
+     * 스키마 JSON들을 읽어 PostgreSQL에 적재한다(스키마 마이그레이션 후 멱등 적재).
+     * 읽기·적재 실패는 파일 단위로 격리하며, 하나라도 실패하면 종료 코드 1.
+     */
     @Override
     public Integer call() throws Exception {
         AppProperties props = AppProperties.load();
@@ -47,7 +47,7 @@ public class LoadCommand implements Callable<Integer> {
             }
         }
 
-        try (HikariDataSource dataSource = DataSourceFactory.create(props, dbUrl, dbUser, dbPassword)) {
+        try (HikariDataSource dataSource = DataSourceFactory.create(props)) {
             DbSchema.migrate(dataSource);
             try (DbLoader loader = new DbLoader(dataSource)) {
                 LoadStats stats = loader.loadAll(schemas);

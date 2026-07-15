@@ -18,8 +18,13 @@ import java.nio.file.Path;
  */
 public class HmlScanDetector implements ScanDetector {
 
+    /** 본문 텍스트가 이 글자 수 미만이면서 BINDATA가 있으면 스캔본으로 본다. */
     private static final int MIN_TEXT_CHARS = 50;
 
+    /**
+     * StAX로 본문 {@code <CHAR>} 텍스트 길이와 {@code <BINDATA>} base64 길이를
+     * 집계하고, 텍스트가 임계치 미만이면서 BINDATA가 있으면 스캔본(true)으로 판정한다.
+     */
     @Override
     public boolean isScanned(Path file) {
         try (InputStream in = Files.newInputStream(file)) {

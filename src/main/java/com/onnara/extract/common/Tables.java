@@ -14,6 +14,7 @@ import java.util.List;
  */
 public final class Tables {
 
+    /** 인스턴스화 방지 — 정적 표 변환 함수만 제공하는 유틸리티 클래스. */
     private Tables() {
     }
 

@@ -19,7 +19,6 @@
         <postgresql.version>42.7.7</postgresql.version>
         <hikaricp.version>6.3.2</hikaricp.version>
         <flyway.version>11.10.0</flyway.version>
-        <tess4j.version>5.13.0</tess4j.version>
         <!-- 기본: db 태그 테스트 제외. 실제 PG로 돌릴 때 -Dgroups=db -DexcludedGroups= 로 재정의 -->
         <groups></groups>
         <excludedGroups>db</excludedGroups>
@@ -85,14 +84,6 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
             <version>${flyway.version}</version>
-        </dependency>
-
-        <!-- 임베디드 이미지 OCR(ocr 옵션). 네이티브 Tesseract 미설치 시에도
-             TesseractOcr가 lazy-init으로 격리하므로 파이프라인은 정상 동작 -->
-        <dependency>
-            <groupId>net.sourceforge.tess4j</groupId>
-            <artifactId>tess4j</artifactId>
-            <version>${tess4j.version}</version>
         </dependency>
 
         <dependency>

@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** {@link Mapper} raw→표준 스키마 매핑과 snake_case JSON 호환의 단위 테스트. */
 class MapperTest {
 
     /** 샘플 #8(군산 변경허가 고시)의 문단 구조를 미러링한 픽스처. */
@@ -42,6 +43,7 @@ class MapperTest {
         return raw;
     }
 
+    /** 문단 라벨:값이 15개 표준 필드로 매핑되고 미매핑 라벨·이미지가 보존되는지 검증한다. */
     @Test
     void mapsSample8Fields() {
         SchemaResult result = Mapper.mapToSchema(sample8Like(), "hml-dom");
@@ -74,6 +76,7 @@ class MapperTest {
         assertEquals("images/고시문_img0.png", result.getImages().get(0).getPath());
     }
 
+    /** ISO로 분리 못 하는 공사기간 원문이 extras에 보존되는지 검증한다. */
     @Test
     void unparseablePeriodGoesToExtras() {
         RawDocument raw = new RawDocument("x.hml", "hml", false);
@@ -87,6 +90,7 @@ class MapperTest {
         assertEquals("’25.", record.extras().get(Synonyms.WORK_PERIOD));
     }
 
+    /** 빈 문서도 레코드 1건(모든 필드 null)을 내보내는지 검증한다. */
     @Test
     void emptyDocumentStillEmitsOneRecord() {
         RawDocument raw = new RawDocument("empty.hwp", "hwp", false);
@@ -111,6 +115,7 @@ class MapperTest {
         assertNull(record.agency(), "빈 값 칸 건너뛰어 옆 필드 라벨을 삼키면 안 됨");
     }
 
+    /** 스키마 JSON이 snake_case 키를 쓰고 camelCase가 새어 나오지 않는지 검증한다. */
     @Test
     void schemaJsonUsesSnakeCaseKeys() throws Exception {
         String json = Json.MAPPER.writeValueAsString(Mapper.mapToSchema(sample8Like(), "hml-dom"));
@@ -124,6 +129,7 @@ class MapperTest {
         assertTrue(!json.contains("\"sourceFile\""));
     }
 
+    /** raw 문서가 snake_case JSON으로 직렬화·역직렬화 왕복되는지 검증한다. */
     @Test
     void rawJsonRoundTripsSnakeCase() throws Exception {
         RawDocument raw = sample8Like();

@@ -8,10 +8,14 @@ package com.onnara.extract.common;
  */
 public final class ImageFormats {
 
+    /** 인스턴스화 방지 — 정적 판별 함수만 제공하는 유틸리티 클래스. */
     private ImageFormats() {
     }
 
-    /** 확장자(점 제외)를 반환한다: jpg / png / bmp / gif / bin(미상). */
+    /**
+     * 이미지 바이트 앞부분의 매직바이트를 검사해 확장자(점 제외)를 반환한다.
+     * JPEG/PNG/BMP/GIF를 인식하고, 어느 것도 아니면 {@code "bin"}.
+     */
     public static String extensionFor(byte[] d) {
         if (d == null) {
             return "bin";

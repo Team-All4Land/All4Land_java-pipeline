@@ -17,12 +17,18 @@ import java.util.concurrent.Callable;
 @Command(name = "detect", description = "스캔 여부 일괄 분류")
 public class DetectCommand implements Callable<Integer> {
 
+    /** 검사할 파일 또는 폴더(폴더는 지원 확장자만 재귀 수집). */
     @Parameters(paramLabel = "FILE", description = "검사할 파일 또는 폴더")
     List<Path> targets;
 
+    /** true면 결과를 사람용 텍스트 대신 JSON 배열로 출력. */
     @Option(names = "--json", description = "JSON 배열로 출력")
     boolean json;
 
+    /**
+     * 각 파일의 스캔 여부를 판별해 출력한다(텍스트 또는 --json 배열).
+     * 판별 실패 파일은 [실패] 로그로 격리하며, 하나라도 실패하면 종료 코드 1.
+     */
     @Override
     public Integer call() throws Exception {
         List<Path> files = PipelineSupport.collectInputs(targets);
