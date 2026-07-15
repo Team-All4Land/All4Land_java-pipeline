@@ -6,8 +6,7 @@
 
 핵심 원칙: **판별(detect) → 추출(engine) → 매핑(common) → 적재(db)** 4계층 분리.
 PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 스캔본 처리만 Python CLI
-스크립트(이 저장소 범위 밖)에 맡기고, Java 파이프라인이 **서브프로세스로
-실행**합니다.
+스크립트(`ocr-cli/`)에 맡기고, Java 파이프라인이 **서브프로세스로 실행**합니다.
 
 ## 전체 흐름
 
@@ -19,7 +18,7 @@ CLI: extract.jar pipeline (picocli)
         │
         │  [1차 분기] 스캔본 판별 — DetectorRegistry
         │
-        ├── 스캔본 ──► ScanOcrRunner ──서브프로세스──► PaddleOCR-VL CLI (별도 Python, 범위 밖)
+        ├── 스캔본 ──► ScanOcrRunner ──서브프로세스──► PaddleOCR-VL CLI (ocr-cli/, Python)
         │
         └── 네이티브 ── [2차 분기] 확장자별 Extractor
                 ├─ .hwp   →  HwplibExtractor  (hwplib)
@@ -68,6 +67,7 @@ src/main/resources/
 
 src/test/java/...   JUnit 5 — detect/engine/common/scan 단위 테스트 + samples/ 기반 회귀 테스트
 samples/             실제 고시문 픽스처 (형식·스캔 여부별)
+ocr-cli/             스캔본 OCR용 PaddleOCR-VL Python CLI (ScanOcrRunner가 서브프로세스로 호출)
 ```
 
 ## 요구 사항
@@ -75,7 +75,7 @@ samples/             실제 고시문 픽스처 (형식·스캔 여부별)
 - JDK 17 이상
 - Maven 3.6 이상
 - (DB 적재 시) PostgreSQL 접근 가능한 인스턴스
-- (스캔본 처리 시) Python 3 + PaddleOCR-VL CLI 스크립트(아래 계약 참고).
+- (스캔본 처리 시) Python 3 + `ocr-cli/`의 PaddleOCR-VL 스크립트(설치는 `ocr-cli/requirements.txt`).
   없으면 스캔본 파일만 `[실패]` 처리되고 네이티브 파일은 정상 처리됩니다.
 - 한글 파일명 경로를 다루므로 로캘이 UTF-8이어야 합니다(`LANG=C.UTF-8` 등).
   `mvn test`는 surefire 설정에 이미 반영되어 있어 별도 조치가 필요 없습니다.
@@ -142,10 +142,11 @@ ocr.cli.timeout-sec=300
 - `ocr.cli.command`는 가상환경을 쓰면 해당 venv의 `python` 절대경로로
   지정하세요.
 
-## 스캔본 OCR — PaddleOCR-VL CLI (범위 밖)
+## 스캔본 OCR — PaddleOCR-VL CLI (`ocr-cli/`)
 
-PaddleOCR-VL을 구동하는 Python 스크립트는 이 저장소에 포함되지 않습니다.
-`scan/ScanOcrRunner`가 아래 계약으로 **서브프로세스를 실행**합니다.
+PaddleOCR-VL을 구동하는 Python 스크립트(`ocr-cli/paddleocr_vl_cli.py`)가 저장소에
+포함돼 있습니다. `scan/ScanOcrRunner`가 아래 계약으로 **서브프로세스를 실행**합니다.
+설치·상세는 [`ocr-cli/README.md`](ocr-cli/README.md) 참고.
 
 ```
 <ocr.cli.command> <ocr.cli.script> \
@@ -159,13 +160,13 @@ PaddleOCR-VL을 구동하는 Python 스크립트는 이 저장소에 포함되�
   · 스캔 HWP/HWPX/HML에서 Java가 추출한 임베디드 이미지 경로 N개
 
 종료 코드 0 → --output 경로에 raw JSON 계약(위 다이어그램) 파일 생성.
-              is_scanned는 Java가 true로 강제하고, markdown 등 계약 외
-              필드는 무시합니다. stdout/stderr는 로그로만 취급합니다.
+              is_scanned는 Java가 true로 강제하고, 계약 외 필드는 무시합니다.
+              stdout/stderr는 로그로만 취급합니다.
 종료 코드 ≠0 또는 제한 시간 초과 → 해당 파일만 [실패] 처리.
 ```
 
-스크립트가 없으면(경로 확인: `ocr.cli.script`) 스캔본 파일만 `[실패]`
-처리되고, 네이티브 파일들은 정상적으로 배치가 진행됩니다.
+`paddleocr` 미설치 등으로 스크립트를 실행할 수 없으면(경로 확인: `ocr.cli.script`)
+스캔본 파일만 `[실패]` 처리되고, 네이티브 파일들은 정상적으로 배치가 진행됩니다.
 
 ## 데이터베이스 스키마 (PostgreSQL)
 
