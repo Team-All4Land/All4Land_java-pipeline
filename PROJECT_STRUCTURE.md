@@ -103,13 +103,14 @@ extract-java/
 │   │   └── ScanOcrConfig.java   #   실행 커맨드·스크립트 경로·타임아웃 설정
 │   │
 │   └── db/                      # ★ 최종 적재 계층
-│       ├── DataSourceFactory.java #  HikariCP 커넥션 풀 생성 (application.properties 기반)
+│       ├── DataSourceFactory.java #  HikariCP 커넥션 풀 생성 (환경변수/.env/application.properties)
 │       ├── DbSchema.java        #   DDL(§6) 실행 (Flyway 사용 시 마이그레이션은 resources/db/migration/)
 │       └── DbLoader.java        #   SchemaResult → documents/ref_files 적재 (PostgreSQL JDBC)
 │
+├── .env.example                # 리눅스 서버 배포용 환경변수 예시 (.env로 복사; 우선순위 OS 환경변수 > .env > properties)
 ├── src/main/resources/
-│   ├── application.properties   # db.url=jdbc:postgresql://... , 풀 설정, ocr.cli.* 등 (설정 단일 출처)
-│   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL, 이후 버전 누적)
+│   ├── application.properties   # db.url=jdbc:postgresql://... , 풀 설정, ocr.cli.* 등 (기본값)
+│   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL, V2 = ref_files 절대경로, 이후 누적)
 │
 ├── src/test/java/...            # JUnit 5 — detect / mapper / 각 extractor / scan / db
 ├── src/test/resources/fixtures/ # 실제 고시문 픽스처 (형식·스캔 여부별, Python 버전과 공유)
@@ -161,7 +162,7 @@ Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 �
      "cells": [{"row": 0, "col": 0, "row_span": 1, "col_span": 1, "text": "행"}]}
   ],
   "images": [
-    {"name": "고시문_img0.png", "path": "images/고시문_img0.png",
+    {"name": "고시문_img0.png", "path": "/srv/extract/out/images/고시문_img0.png",
      "size": 1234, "ocr_text": null}
   ]
 }
@@ -169,7 +170,7 @@ Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 �
 
 - `content`는 문서 등장 순서 유지 (문단·표 혼재).
 - 표는 `grid` 필수, `cells`(병합 셀 span)는 선택 — HmlExtractor·OwpmlExtractor가 채운다.
-- 이미지 `path`(저장 경로)는 DB 적재(`ref_files`)에 필요하므로 필수.
+- 이미지 `path`(저장된 이미지의 절대경로)는 DB 적재(`ref_files.file_path`)에 필요하므로 필수.
   `ocr_text`는 선택 필드 — 현재 Java 파이프라인은 채우지 않지만 계약 호환을 위해 유지.
 - 도장(관인) 제외: 텍스트 PDF는 소형+붉은색 우세 휴리스틱, 스캔본은 CLI 측 seal 레이블.
 - **JSON 필드명은 snake_case 유지** (Python 산출물과 바이트 수준 호환 —
@@ -231,7 +232,7 @@ CREATE TABLE IF NOT EXISTS ref_files (
     seq           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     document_seq  BIGINT NOT NULL REFERENCES documents(seq) ON DELETE CASCADE,  -- 참조 시퀀스
     image_name    TEXT NOT NULL,   -- 이미지명
-    file_path     TEXT NOT NULL    -- 저장 경로 (images/ 폴더 내)
+    file_path     TEXT NOT NULL    -- 저장 이미지의 절대경로 (V2 마이그레이션에서 상대→절대로 의미 변경)
 );
 CREATE INDEX IF NOT EXISTS idx_ref_files_doc ON ref_files(document_seq);
 ```
@@ -295,8 +296,9 @@ Python 의존성을 최소화한다.
 
 - `ProcessBuilder` 사용. stdout/stderr는 임시 로그 파일로 리다이렉트하고(파이프
   블로킹 방지), 실패 시 로그 꼬리만 오류 메시지에 싣는다.
-- 실행 커맨드·스크립트 경로·타임아웃은 `application.properties`(`ocr.cli.command`,
-  `ocr.cli.script`, `ocr.cli.timeout-sec`)에서만 읽는다.
+- 실행 커맨드·스크립트 경로·타임아웃은 `ocr.cli.command`/`ocr.cli.script`/
+  `ocr.cli.timeout-sec`(또는 `.env`의 `OCR_CLI_COMMAND`/`OCR_CLI_SCRIPT`/
+  `OCR_CLI_TIMEOUT_SEC`)에서 읽는다.
 - 스크립트 부재·비정상 종료·타임아웃 시 해당 파일만 `[실패]` 로그 후 다음 파일로
   계속 (배치 격리 원칙 유지). 타임아웃 시 프로세스를 강제 종료한다.
 - VLM 추론은 오래 걸릴 수 있으므로 타임아웃은 파일당 수 분 단위로 넉넉히.
@@ -327,10 +329,11 @@ java -jar extract.jar <서브커맨드> [옵션]
 
 - 공통 옵션 의미는 Python 버전과 동일 (`--raw`: 원시 결과 포함,
   `--no-images`: 이미지 저장 생략).
-- **DB 접속·OCR 실행 정보는 `application.properties`에서만 읽는다**(`db.*`,
-  `ocr.cli.*`) — 로컬 실행 전제라 CLI 재정의 옵션은 두지 않는다.
-  비밀번호는 파일에 평문으로 두지 말고 환경변수(`PGPASSWORD` 등)나 시크릿
-  주입을 권장한다.
+- **DB 접속·OCR 실행 정보는 OS 환경변수 > `.env` > `application.properties`
+  순으로 읽는다**(`db.*`, `ocr.cli.*`) — CLI 재정의 옵션은 두지 않는다.
+  리눅스 서버 배포 시에는 `.env.example`을 `.env`로 복사해 관리한다.
+  비밀번호는 파일에 평문으로 두지 말고 `.env`나 환경변수(`PGPASSWORD` 등)로
+  주입한다.
 - 파일마다 `out/<이름>.schema.json` (+`--raw` 시 `<이름>.raw.json`) 생성.
 - 파일 단위 실패는 로그만 남기고 다음 파일로 계속 진행 (배치 격리).
 
