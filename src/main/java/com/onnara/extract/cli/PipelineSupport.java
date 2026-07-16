@@ -23,7 +23,7 @@ import java.util.stream.Stream;
  *
  * <p>이미지 경로 계약: {@code Extractor.saveImages}가 반환하는 목록은
  * {@code extractRaw}의 {@code images}와 순서·이름이 동일해야 하며,
- * {@link #bindImagePaths}는 그 계약을 전제로 인덱스 매칭한다.
+ * {@link #bindImagePaths}는 그 계약을 전제로 인덱스 매칭해 절대경로를 채운다.
  */
 final class PipelineSupport {
 
@@ -61,7 +61,7 @@ final class PipelineSupport {
      * 항상 해당 엔진으로 네이티브 추출한다({@code extract --engine} 옵션).
      *
      * @param outputDir 스키마/원시 JSON이 저장될 기준 폴더 — 이미지는 {@code outputDir/images}에 저장되고
-     *                  {@code RawImage.path}는 outputDir 기준 상대경로로 기록된다(§4 예시와 동일한 형태).
+     *                  {@code RawImage.path}는 저장된 이미지의 절대경로로 기록된다(ref_files.file_path 적재용).
      */
     static ExtractResult extractOne(Path file, Extractor forcedExtractor, Path outputDir,
                                     boolean saveImages, ScanOcrRunner scanRunner) throws IOException {
@@ -70,14 +70,14 @@ final class PipelineSupport {
         Path imagesDir = outputDir.resolve("images");
 
         if (forcedExtractor == null && DetectorRegistry.isScanned(file)) {
-            return extractScanned(file, ext, sourceFile, outputDir, imagesDir, saveImages, scanRunner);
+            return extractScanned(file, ext, sourceFile, imagesDir, saveImages, scanRunner);
         }
 
         Extractor extractor = forcedExtractor != null ? forcedExtractor : ExtractorRegistry.forExtension(ext);
         RawDocument raw = extractor.extractRaw(file);
         if (saveImages && !raw.getImages().isEmpty()) {
             List<Path> saved = extractor.saveImages(file, imagesDir);
-            bindImagePaths(raw, saved, outputDir);
+            bindImagePaths(raw, saved);
         }
         return new ExtractResult(raw, extractor.engineName());
     }
@@ -88,7 +88,7 @@ final class PipelineSupport {
      * 파일 목록으로 재구성한다 — 결과가 입력 이미지와 다른 목록/순서를 돌려줄 수 있어서다.
      */
     private static ExtractResult extractScanned(Path file, String ext, String sourceFile,
-                                                Path outputDir, Path imagesDir, boolean saveImages,
+                                                Path imagesDir, boolean saveImages,
                                                 ScanOcrRunner scanRunner) throws IOException {
         if ("pdf".equals(ext)) {
             RawDocument raw = scanRunner.parsePdf(file, sourceFile);
@@ -104,20 +104,24 @@ final class PipelineSupport {
         for (Path p : saved) {
             RawImage image = new RawImage(p.getFileName().toString(), Files.size(p));
             if (saveImages) {
-                image.setPath(outputDir.relativize(p).toString().replace('\\', '/'));
+                image.setPath(absolutePath(p));
             }
             raw.getImages().add(image);
         }
         return new ExtractResult(raw, "paddleocr-vl");
     }
 
-    /** saveImages 반환 순서 == raw.images 순서 계약을 이용해 상대 경로를 채운다. */
-    static void bindImagePaths(RawDocument raw, List<Path> saved, Path outBase) {
+    /** saveImages 반환 순서 == raw.images 순서 계약을 이용해 절대 경로를 채운다. */
+    static void bindImagePaths(RawDocument raw, List<Path> saved) {
         List<RawImage> images = raw.getImages();
         for (int i = 0; i < images.size() && i < saved.size(); i++) {
-            Path rel = outBase.relativize(saved.get(i));
-            images.get(i).setPath(rel.toString().replace('\\', '/'));
+            images.get(i).setPath(absolutePath(saved.get(i)));
         }
+    }
+
+    /** 저장된 이미지 파일의 절대 경로 문자열(ref_files.file_path 적재용, 구분자는 '/'). */
+    private static String absolutePath(Path path) {
+        return path.toAbsolutePath().normalize().toString().replace('\\', '/');
     }
 
     /** 객체를 들여쓰기 JSON으로 저장한다(상위 폴더는 자동 생성). */

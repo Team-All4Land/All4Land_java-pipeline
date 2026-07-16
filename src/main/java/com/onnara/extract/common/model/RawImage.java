@@ -9,7 +9,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  * {"name", "path", "size", "ocr_text"}.
  *
  * <ul>
- *   <li>{@code path}: 저장 경로 — DB 적재(ref_files)에 필요. saveImages 실행 시 채워진다.</li>
+ *   <li>{@code path}: 저장 절대경로 — DB 적재(ref_files)에 필요. saveImages 실행 시 채워진다.</li>
  *   <li>{@code ocr_text}: 선택 필드 — 현재 Java 파이프라인은 채우지 않지만
  *       raw JSON 계약(Python 산출물 호환) 유지를 위해 남겨둔다.</li>
  * </ul>
@@ -20,7 +20,7 @@ public class RawImage {
 
     /** 저장 파일명(매직바이트로 판별한 확장자 포함). */
     private String name;
-    /** outputDir 기준 상대 저장 경로. saveImages 시 채워진다. */
+    /** 저장된 이미지의 절대 경로. saveImages 시 채워진다. */
     private String path;
     /** 이미지 바이트 크기. */
     private long size;
@@ -48,13 +48,13 @@ public class RawImage {
         this.name = name;
     }
 
-    /** 상대 저장 경로를 반환한다. */
+    /** 절대 저장 경로를 반환한다. */
     @JsonProperty("path")
     public String getPath() {
         return path;
     }
 
-    /** 상대 저장 경로를 설정한다. */
+    /** 절대 저장 경로를 설정한다. */
     public void setPath(String path) {
         this.path = path;
     }

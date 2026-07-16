@@ -142,7 +142,7 @@ class DbLoaderIT {
         SchemaResult schema = new SchemaResult(sourceFile, "hml", false, "hml-dom");
         schema.getRecords().add(record);
         RawImage image = new RawImage(sourceFile + "_img0.png", 100);
-        image.setPath("images/" + sourceFile + "_img0.png");
+        image.setPath("/srv/extract/out/images/" + sourceFile + "_img0.png");
         schema.getImages().add(image);
         return schema;
     }

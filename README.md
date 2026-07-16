@@ -103,9 +103,11 @@ java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
 | `load schema.json...` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
 
 공통 옵션: `--raw`(원시 결과도 저장), `--no-images`(이미지 저장 생략).
-DB 접속·OCR 실행 정보는 CLI 옵션이 아니라 `application.properties`에서
-읽습니다(로컬 실행 전제). 파일 단위 실패는 `[실패] <파일>: <사유>`
-로그만 남기고 배치는 계속 진행합니다(배치 격리).
+DB 접속·OCR 실행 정보는 CLI 옵션이 아니라 `application.properties` 및
+`.env`에서 읽습니다(우선순위: OS 환경변수 > `.env` > `application.properties`).
+파일 단위 실패는 `[실패] <파일>: <사유>` 로그만 남기고 배치는 계속
+진행합니다(배치 격리). `ref_files.file_path`에는 저장된 이미지의 **절대경로**가
+기록됩니다(리눅스 서버에서 파일을 절대경로로 참조).
 
 ### 예시
 
@@ -120,13 +122,15 @@ java -jar target/extract-pipeline-1.0.0.jar detect samples --json
 java -jar target/extract-pipeline-1.0.0.jar pipeline -i input/ -o out/
 ```
 
-## 설정 (`application.properties`)
+## 설정 (`application.properties` + `.env`)
 
-DB 접속과 OCR 실행 정보는 모두 이 파일에서 읽습니다. CLI 재정의 옵션은
-없습니다(로컬 실행 전제 — 빌드에 포함되는 `src/main/resources/` 파일을
-수정한 뒤 다시 패키징하세요).
+DB 접속과 OCR 실행 정보는 아래 세 곳에서 읽으며, 우선순위는
+**OS 환경변수 > `.env` > `application.properties`**입니다. 기본값은
+`application.properties`에 두고, 서버마다 다른 값(접속 정보·비밀번호 등)은
+`.env`로 덮어씁니다.
 
 ```properties
+# application.properties (빌드에 포함되는 기본값)
 db.url=jdbc:postgresql://localhost:5432/extract
 db.user=extract
 db.password=
@@ -137,9 +141,30 @@ ocr.cli.script=ocr-cli/paddleocr_vl_cli.py
 ocr.cli.timeout-sec=300
 ```
 
-- DB 비밀번호는 파일에 평문으로 두지 말고 환경변수 `PGPASSWORD` 또는
-  `DB_PASSWORD`로 주입하세요(환경변수 > 파일 순으로 우선).
-- `ocr.cli.command`는 가상환경을 쓰면 해당 venv의 `python` 절대경로로
+### 리눅스 서버 배포 — `.env`로 환경변수 관리
+
+리눅스 서버에서는 접속 정보를 빌드 산출물이 아닌 `.env` 파일로 관리합니다.
+`.env.example`을 복사해 값을 채우세요(`.env`는 커밋 대상이 아닙니다).
+
+```bash
+cp .env.example .env   # 이후 값 편집
+```
+
+```dotenv
+# .env — 실행 디렉터리에서 자동 로드(다른 위치면 APP_ENV_FILE로 경로 지정)
+DB_URL=jdbc:postgresql://localhost:5432/extract
+DB_USER=extract
+DB_PASSWORD=            # 또는 OS 환경변수 PGPASSWORD / DB_PASSWORD
+DB_POOL_MAX_SIZE=5
+
+OCR_CLI_COMMAND=python3            # venv 사용 시 해당 python 절대경로
+OCR_CLI_SCRIPT=ocr-cli/paddleocr_vl_cli.py
+OCR_CLI_TIMEOUT_SEC=300
+```
+
+- DB 비밀번호는 파일(`application.properties`)에 평문으로 두지 말고
+  `.env` 또는 OS 환경변수 `PGPASSWORD`/`DB_PASSWORD`로 주입하세요.
+- `OCR_CLI_COMMAND`는 가상환경을 쓰면 해당 venv의 `python` 절대경로로
   지정하세요.
 
 ## 스캔본 OCR — PaddleOCR-VL CLI (`ocr-cli/`)
