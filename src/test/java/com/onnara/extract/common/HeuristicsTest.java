@@ -54,11 +54,45 @@ class HeuristicsTest {
         assertTrue(Heuristics.agencyAndNoticeNo("일반 문장").isEmpty());
     }
 
+    /** 대시 양옆 공백("제 2018 – 82 호")도 매칭되고 번호 표기가 정규화되는지 검증한다(승인사항 고시 회귀). */
+    @Test
+    void splitsNoticeNoWithSpacedDash() {
+        Optional<String[]> hit = Heuristics.agencyAndNoticeNo("부산광역시 강서구 고시 제 2018 – 82 호");
+        assertTrue(hit.isPresent());
+        assertEquals("부산광역시 강서구", hit.get()[0]);
+        assertEquals("고시 제2018–82호", hit.get()[1]);
+    }
+
+    /** 기관 없는 자간 벌림 "공 고 제 56 호"(연도 대시 없음)도 번호로 인식되는지 검증한다(방치선박 공고 회귀). */
+    @Test
+    void splitsNoticeNoWithoutAgencyAndDash() {
+        Optional<String[]> hit = Heuristics.agencyAndNoticeNo("공 고   제  56 호");
+        assertTrue(hit.isPresent());
+        assertNull(hit.get()[0]);
+        assertEquals("공고 제56호", hit.get()[1]);
+    }
+
+    /** 자간 벌림 텍스트는 복원하고 일반 문장은 건드리지 않는지 검증한다. */
+    @Test
+    void collapsesLetterSpacedTextOnly() {
+        assertEquals("방치선박 제거공고", Heuristics.collapseSpacedText("방 치 선 박  제 거 공 고"));
+        assertEquals("공유수면 점용·사용 허가 고시",
+                Heuristics.collapseSpacedText("공유수면 점용·사용 허가 고시"));
+    }
+
     /** 직함으로 끝나는 단독 문단을 고시자로 판별하는지 검증한다. */
     @Test
     void detectsSigner() {
         assertTrue(Heuristics.looksLikeSigner("군산지방해양수산청장"));
         assertTrue(Heuristics.looksLikeSigner("인천광역시장"));
         assertFalse(Heuristics.looksLikeSigner("공유수면 점용·사용 변경허가 고시"));
+    }
+
+    /** 직함 뒤에 도장 자리 특수문자가 붙어도 고시자로 판별·정리되는지 검증한다(방치선박 공고 회귀). */
+    @Test
+    void detectsSignerWithTrailingStampGlyph() {
+        String line = "새만금개발청장  󰃡";
+        assertTrue(Heuristics.looksLikeSigner(line));
+        assertEquals("새만금개발청장", Heuristics.cleanSigner(line));
     }
 }

@@ -30,6 +30,16 @@ public final class Mapper {
     /** extras에 보존할 라벨의 최대 정규화 길이 — 문장 오탐 방지. */
     private static final int MAX_EXTRA_LABEL_LEN = 20;
 
+    // "제2026-26호(2026. 6. 11.)"처럼 번호 뒤에 괄호로 병기된 일자
+    private static final Pattern TRAILING_PAREN = Pattern.compile(
+            "[(（]([^()（）]*)[)）]\\s*$");
+
+    /** 헤더형 목록표 판정: 헤더 행에서 canonical 매핑돼야 하는 최소 비율. */
+    private static final double HEADER_MAPPED_RATIO = 0.6;
+
+    /** 다단(병합) 헤더로 인정할 최대 헤더 행 수. */
+    private static final int MAX_HEADER_ROWS = 2;
+
     /** 인스턴스화 방지 — 정적 매핑 함수만 제공하는 유틸리티 클래스. */
     private Mapper() {
     }
@@ -62,17 +72,20 @@ public final class Mapper {
 
         // 문서 전체가 1열 표(테두리 박스) 안에 있는 서식도 있으므로
         // 메타 추출은 문단 + 표 셀 줄을 합친 목록에서 수행한다.
+        // 병합 셀은 같은 내용이 옆 칸으로 반복되므로 연속 중복 줄은 걸러낸다.
         List<String> metaLines = new ArrayList<>(paragraphs);
         for (RawTable table : tables) {
             if (table.getGrid() == null) {
                 continue;
             }
             for (List<String> row : table.getGrid()) {
-                for (String cell : row) {
-                    if (cell != null && !cell.isBlank()) {
+                for (String cell : dedupeConsecutive(trimRow(row))) {
+                    if (!cell.isEmpty()) {
                         for (String line : cell.split("\n")) {
-                            if (!line.isBlank()) {
-                                metaLines.add(line.trim());
+                            String trimmed = line.trim();
+                            if (!trimmed.isEmpty() && (metaLines.isEmpty()
+                                    || !metaLines.get(metaLines.size() - 1).equals(trimmed))) {
+                                metaLines.add(trimmed);
                             }
                         }
                     }
@@ -147,7 +160,7 @@ public final class Mapper {
                 base.set("notice_date", text);
             }
             if (!base.has("signer") && Heuristics.looksLikeSigner(text)) {
-                base.set("signer", text.trim());
+                base.set("signer", Heuristics.cleanSigner(text));
             }
         }
 
@@ -157,7 +170,7 @@ public final class Mapper {
             if (!LABEL_VALUE.matcher(next).matches()
                     && Dates.toIso(next).isEmpty()
                     && !Heuristics.looksLikeSigner(next)) {
-                title = next;
+                title = Heuristics.collapseSpacedText(next);
             }
         }
         base.set("title", title);
@@ -200,7 +213,7 @@ public final class Mapper {
 
     /**
      * 라벨을 canonical 필드로 매핑해 값을 세팅한다. 매핑되지 않으면 정규화 라벨을
-     * extras에 보존한다(단, 문장 오탐 방지를 위해 {@value #MAX_EXTRA_LABEL_LEN}자 이하만).
+     * extras에 보존한다({@link #putExtra} 오탐 가드 적용).
      */
     private static void applyLabel(NoticeRecord.Builder builder, String label, String value) {
         if (value == null || value.isBlank()) {
@@ -210,38 +223,88 @@ public final class Mapper {
         if (canonical.isPresent()) {
             builder.set(canonical.get(), value);
         } else {
-            String normalized = Synonyms.normalizeLabel(label);
-            if (!normalized.isEmpty() && normalized.length() <= MAX_EXTRA_LABEL_LEN) {
-                builder.extra(normalized, value);
-            }
+            putExtra(builder, label, value);
         }
+    }
+
+    /**
+     * 미매핑 라벨:값을 extras에 보존한다. 문장·좌표 등 라벨이 아닌 텍스트의 오탐을
+     * 막기 위해 정규화 라벨이 {@value #MAX_EXTRA_LABEL_LEN}자 이하이고, 숫자가
+     * 없으며, 괄호 짝이 맞는 경우만 저장한다(예: "…비응항(좌표", "(담당자" 제외).
+     *
+     * @return 저장했으면 true — 라벨/값 쌍 소비 여부 판단에 쓰인다
+     */
+    private static boolean putExtra(NoticeRecord.Builder builder, String label, String value) {
+        String normalized = Synonyms.normalizeLabel(label);
+        if (normalized.isEmpty() || normalized.length() > MAX_EXTRA_LABEL_LEN) {
+            return false;
+        }
+        if (normalized.chars().anyMatch(Character::isDigit)) {
+            return false;
+        }
+        long open = normalized.chars().filter(ch -> ch == '(').count();
+        long close = normalized.chars().filter(ch -> ch == ')').count();
+        if (open != close) {
+            return false;
+        }
+        if (value.chars().noneMatch(Character::isLetterOrDigit)) {
+            return false;
+        }
+        builder.extra(normalized, value);
+        return true;
     }
 
     // ── ③ 표 처리 ────────────────────────────────────────────────
 
     /**
-     * 헤더형 목록표: 첫 행 셀의 60% 이상이 canonical 필드로 매핑되면
-     * 이후 각 행을 독립 레코드로 변환한다(다건 고시 목록). 아니면 빈 목록.
+     * 헤더형 목록표: 상단 1~{@value #MAX_HEADER_ROWS}행이 헤더(셀의
+     * {@value #HEADER_MAPPED_RATIO} 이상이 canonical 필드로 매핑)면 이후 각 행을
+     * 독립 레코드로 변환한다(다건 고시 목록). 아니면 빈 목록.
+     *
+     * <p>"피승인자" 상위 셀 아래 "주소/성명" 하위 셀이 오는 2단 병합 헤더는
+     * 열마다 아래쪽 헤더 행의 라벨을 우선해 매핑한다. 병합 셀 반복은
+     * {@link #dedupeConsecutive}로 걸러 매핑 비율을 계산한다.
      */
     private static List<NoticeRecord.Builder> tryHeaderTable(List<List<String>> grid) {
         if (grid.size() < 2 || grid.get(0).size() < 2) {
             return List.of();
         }
-        List<String> header = grid.get(0);
-        List<Optional<String>> columns = new ArrayList<>(header.size());
-        int mapped = 0;
-        for (String cell : header) {
-            Optional<String> canonical = Synonyms.canonicalFor(cell);
-            columns.add(canonical);
-            if (canonical.isPresent()) {
-                mapped++;
-            }
+        int headerRows = 0;
+        while (headerRows < Math.min(MAX_HEADER_ROWS, grid.size() - 1)
+                && looksLikeHeaderRow(grid.get(headerRows))) {
+            headerRows++;
         }
-        if (mapped < Math.ceil(header.size() * 0.6)) {
+        if (headerRows == 0) {
             return List.of();
         }
+
+        // 열별 매핑: 아래쪽 헤더 행(더 구체적인 하위 라벨)부터 canonical을 찾는다.
+        int nCols = grid.get(0).size();
+        List<Optional<String>> columns = new ArrayList<>(nCols);
+        List<String> extraLabels = new ArrayList<>(nCols);
+        for (int c = 0; c < nCols; c++) {
+            Optional<String> canonical = Optional.empty();
+            String label = "";
+            for (int r = headerRows - 1; r >= 0 && canonical.isEmpty(); r--) {
+                List<String> row = grid.get(r);
+                String cell = c < row.size() ? row.get(c) : "";
+                if (cell.isEmpty()) {
+                    continue;
+                }
+                if (label.isEmpty()) {
+                    label = cell;
+                }
+                canonical = Synonyms.canonicalFor(cell);
+                if (canonical.isPresent()) {
+                    label = cell;
+                }
+            }
+            columns.add(canonical);
+            extraLabels.add(label);
+        }
+
         List<NoticeRecord.Builder> rows = new ArrayList<>();
-        for (int r = 1; r < grid.size(); r++) {
+        for (int r = headerRows; r < grid.size(); r++) {
             List<String> row = grid.get(r);
             NoticeRecord.Builder builder = new NoticeRecord.Builder();
             for (int c = 0; c < row.size() && c < columns.size(); c++) {
@@ -252,7 +315,7 @@ public final class Mapper {
                 if (columns.get(c).isPresent()) {
                     builder.set(columns.get(c).get(), value);
                 } else {
-                    builder.extra(Synonyms.normalizeLabel(header.get(c)), value);
+                    putExtra(builder, extraLabels.get(c), value);
                 }
             }
             if (!builder.isEmpty()) {
@@ -262,15 +325,51 @@ public final class Mapper {
         return rows;
     }
 
+    /** 행이 헤더로 보이는지: 병합 반복 제거 후 남은 라벨 셀 2개 이상 + 매핑 비율 충족. */
+    private static boolean looksLikeHeaderRow(List<String> row) {
+        List<String> cells = dedupeConsecutive(row);
+        cells.removeIf(String::isEmpty);
+        if (cells.size() < 2) {
+            return false;
+        }
+        int mapped = 0;
+        for (String cell : cells) {
+            if (Synonyms.canonicalFor(cell).isPresent()) {
+                mapped++;
+            }
+        }
+        return mapped >= Math.ceil(cells.size() * HEADER_MAPPED_RATIO);
+    }
+
     /** 격자의 각 셀에서 null→"" 치환과 앞뒤 공백 제거만 수행한다(칸 배치는 보존). */
     private static List<List<String>> trimGrid(List<List<String>> rows) {
         List<List<String>> out = new ArrayList<>(rows.size());
         for (List<String> row : rows) {
-            List<String> trimmed = new ArrayList<>(row.size());
-            for (String cell : row) {
-                trimmed.add(cell == null ? "" : cell.trim());
+            out.add(trimRow(row));
+        }
+        return out;
+    }
+
+    /** 행의 각 셀에서 null→"" 치환과 앞뒤 공백 제거를 수행한다. */
+    private static List<String> trimRow(List<String> row) {
+        List<String> trimmed = new ArrayList<>(row.size());
+        for (String cell : row) {
+            trimmed.add(cell == null ? "" : cell.trim());
+        }
+        return trimmed;
+    }
+
+    /**
+     * 연속 중복 셀을 하나로 줄인다 — 병합 셀(col_span)이 같은 내용을 옆 칸으로
+     * 반복 복제한 격자를 라벨/값 쌍으로 읽기 위한 전처리. 빈 칸은 값 자리
+     * 구분자 역할을 하므로 그대로 남긴다(연속 빈 칸만 하나로).
+     */
+    private static List<String> dedupeConsecutive(List<String> row) {
+        List<String> out = new ArrayList<>(row.size());
+        for (String cell : row) {
+            if (out.isEmpty() || !out.get(out.size() - 1).equals(cell)) {
+                out.add(cell);
             }
-            out.add(trimmed);
         }
         return out;
     }
@@ -278,24 +377,39 @@ public final class Mapper {
     /**
      * 라벨/값[/라벨/값] 셀 쌍 스캔 (2열·4열 서식).
      *
-     * <p>값은 라벨의 바로 다음 칸(j+1)만 본다 — 여러 칸을 건너뛰며 "다음 비어있지
-     * 않은 칸"을 찾으면, 병합 셀로 인해 값 칸이 비어있는 서식에서 옆 필드의 라벨을
-     * 값으로 잘못 채간다(예: "관리청"의 값 칸이 빈 채로 "관리번호" 라벨을 삼킴).
+     * <p>병합 셀 반복을 {@link #dedupeConsecutive}로 줄인 뒤, 값은 라벨의 바로
+     * 다음 칸(j+1)만 본다 — 여러 칸을 건너뛰며 "다음 비어있지 않은 칸"을 찾으면,
+     * 병합 셀로 인해 값 칸이 비어있는 서식에서 옆 필드의 라벨을 값으로 잘못
+     * 채간다(예: "관리청"의 값 칸이 빈 채로 "관리번호" 라벨을 삼킴).
+     *
+     * <p>사전에 없는 라벨도 값과 함께 extras에 보존한다 — 동의어 사전 보강의
+     * 근거 데이터이므로 버리지 않는다(§9).
      */
     private static void applyLabelPairCells(NoticeRecord.Builder builder, List<List<String>> grid) {
-        for (List<String> row : grid) {
+        for (List<String> rawRow : grid) {
+            List<String> row = dedupeConsecutive(rawRow);
+            boolean[] usedAsValue = new boolean[row.size()];
             for (int j = 0; j + 1 < row.size(); j++) {
+                // 직전 쌍의 값으로 쓰인 칸은 라벨이 될 수 없다
+                // (예: "선명 | 불명 | 선박번호 | 불명"에서 첫 '불명'이 라벨로 오탐되는 것 방지)
+                if (usedAsValue[j]) {
+                    continue;
+                }
                 String labelCell = row.get(j);
                 if (labelCell.isEmpty() || labelCell.contains("\n")) {
                     continue;
                 }
-                Optional<String> canonical = Synonyms.canonicalFor(labelCell);
-                if (canonical.isEmpty()) {
+                String value = row.get(j + 1);
+                if (value.isEmpty() || Synonyms.canonicalFor(value).isPresent()) {
                     continue;
                 }
-                String value = row.get(j + 1);
-                if (!value.isEmpty() && Synonyms.canonicalFor(value).isEmpty()) {
+                Optional<String> canonical = Synonyms.canonicalFor(labelCell);
+                if (canonical.isPresent()) {
                     builder.set(canonical.get(), value);
+                    usedAsValue[j + 1] = true;
+                } else if (labelCell.indexOf(':') < 0 && labelCell.indexOf('：') < 0
+                        && putExtra(builder, labelCell, value)) {
+                    usedAsValue[j + 1] = true;
                 }
             }
         }
@@ -321,6 +435,7 @@ public final class Mapper {
      * 신고자 주소가 비면 성명 블록에서 주소를 보충.
      */
     private static void normalize(NoticeRecord.Builder builder, List<String> paragraphs) {
+        splitApprovalNoDate(builder);
         normalizeDate(builder, "notice_date");
         normalizeDate(builder, "approval_date");
 
@@ -343,6 +458,28 @@ public final class Mapper {
                 Address.extract(name).ifPresent(v -> builder.set("applicant_address", v));
             }
         }
+    }
+
+    /**
+     * "승인번호(연월일)" 열/라벨 서식은 값에 번호와 일자가 같이 온다
+     * (예: "제2026-26호(2026. 6. 11.)"). 끝의 괄호가 날짜로 파싱되면
+     * approval_no에서 떼어 approval_date로 옮긴다.
+     */
+    private static void splitApprovalNoDate(NoticeRecord.Builder builder) {
+        String approvalNo = builder.get("approval_no");
+        if (approvalNo == null) {
+            return;
+        }
+        Matcher m = TRAILING_PAREN.matcher(approvalNo);
+        if (!m.find() || Dates.toIso(m.group(1)).isEmpty()) {
+            return;
+        }
+        String number = approvalNo.substring(0, m.start()).trim();
+        if (number.isEmpty()) {
+            return;
+        }
+        builder.set("approval_date", m.group(1).trim());
+        builder.overwrite("approval_no", number);
     }
 
     /** 날짜 필드를 ISO로 변환한다. 변환 불가면 필드를 비우고 원문을 extras로 보존한다. */

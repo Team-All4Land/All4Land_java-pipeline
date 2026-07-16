@@ -42,30 +42,34 @@ public final class Synonyms {
         Map<String, List<String>> d = new LinkedHashMap<>();
         d.put("agency", List.of("기관", "고시기관", "관리청", "처분청"));
         d.put("notice_no", List.of("고시번호", "공고번호"));
-        d.put("notice_date", List.of("고시일", "고시일자", "고시연월일", "공고일"));
+        d.put("notice_date", List.of("고시일", "고시일자", "고시연월일", "공고일", "공고일자", "공고연월일"));
         d.put("title", List.of("제목", "고시명", "공고명"));
         d.put("signer", List.of("고시자", "공고자"));
         d.put("approval_no", List.of("승인번호", "허가번호", "신고번호", "수리번호", "허가증번호"));
         d.put("approval_date", List.of(
-                "승인일", "승인일자", "허가일", "허가일자", "허가연월일",
+                "승인일", "승인일자", "승인연월일", "허가일", "허가일자", "허가연월일",
                 "신고일", "수리일", "점용·사용허가일", "준공검사일"));
         d.put("location", List.of(
                 "위치", "소재지", "장소", "점용·사용장소", "점용·사용의장소",
-                "사업위치", "공사위치", "점용장소", "사용장소"));
+                "사업위치", "공사위치", "점용장소", "사용장소", "점용·사용위치",
+                "점용지번", "발견장소"));
         d.put("area", List.of(
                 "면적", "점용·사용면적", "점용·사용의면적", "점용면적",
                 "사용면적", "허가면적", "준공면적"));
         d.put("work_description", List.of(
                 "공사내용", "사업내용", "공사명칭", "공사명", "사업명", "공사의종류",
-                "목적", "점용·사용목적", "사용목적", "공사의목적및개요", "사업개요", "준공시설"));
+                "목적", "점용·사용목적", "점용·사용의목적", "점용목적", "사용목적",
+                "공사의목적및개요", "사업개요", "준공시설"));
         d.put(WORK_PERIOD, List.of(
-                "공사기간", "점용·사용기간", "점용·사용의기간", "점용기간",
+                "기간", "공사기간", "점용·사용기간", "점용·사용의기간", "점용기간",
                 "사용기간", "허가기간", "공사시행기간", "사업기간"));
         d.put("applicant_name", List.of(
                 "성명", "상호", "명칭", "대표자", "신고자", "신고인", "점용·사용자",
-                "허가를받은자", "점용·사용허가를받은자", "피허가자", "공사시행자",
+                "허가를받은자", "점용·사용허가를받은자", "피허가자", "피허가자성명",
+                "피승인자", "피승인자성명", "대상자", "공사시행자",
                 "공사시행자의성명", "사업시행자"));
-        d.put("applicant_address", List.of("주소", "신고자주소", "사업자주소"));
+        d.put("applicant_address", List.of(
+                "주소", "신고자주소", "사업자주소", "피허가자주소", "피승인자주소"));
         d.put("remarks", List.of("비고", "기타", "참고사항"));
         return Map.copyOf(d);
     }
@@ -93,7 +97,8 @@ public final class Synonyms {
         String s = Normalizer.normalize(raw, Normalizer.Form.NFC).trim();
         s = LEADING_NUMBERING.matcher(s).replaceFirst("");
         s = s.replaceAll("[\\s\\u00A0\\u3000]+", "");
-        s = s.replace('ㆍ', '·').replace('⋅', '·').replace('∙', '·').replace('•', '·');
+        s = s.replace('ㆍ', '·').replace('⋅', '·').replace('∙', '·').replace('•', '·')
+                .replace('․', '·').replace('‧', '·').replace('・', '·').replace('･', '·');
         s = s.replaceAll("[:：]+$", "");
         return s.toLowerCase(Locale.ROOT);
     }
