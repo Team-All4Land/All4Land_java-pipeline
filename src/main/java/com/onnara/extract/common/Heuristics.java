@@ -20,13 +20,17 @@ public final class Heuristics {
             Pattern.compile("^\\s*[<\\[]?\\s*(그림|Figure|Fig\\.?|사진)\\s*[\\d一-龥]*\\s*[>\\]]?"),
     };
 
-    // 관공서 "고시문" 서식 패턴: "OO청 고시 제2026-88호" 형태
-    private static final Pattern NOTICE_NUMBER_PATTERN =
-            Pattern.compile("(고시|공고)\\s*제\\s*[\\d一-龥]+[-–][\\d一-龥]+\\s*호");
+    // 관공서 "고시문" 서식 패턴: "OO청 고시 제2026-88호" 형태.
+    // 자간 벌림("공 고   제  56 호"), 대시 양옆 공백("제 2018 – 82 호"),
+    // 연도 없는 일련번호("제 56 호")도 수용한다.
+    private static final String NOTICE_NUMBER_CORE =
+            "(?:고\\s*시|공\\s*고)\\s*제\\s*[\\d一-龥]+(?:\\s*[-–—]\\s*[\\d一-龥]+)?\\s*호";
 
-    // "군산지방해양수산청 고시 제2026-47호" → 기관 + 번호 분리
+    private static final Pattern NOTICE_NUMBER_PATTERN = Pattern.compile(NOTICE_NUMBER_CORE);
+
+    // "군산지방해양수산청 고시 제2026-47호" → 기관 + 번호 분리 (기관 없는 "공고 제56호"도 허용)
     private static final Pattern AGENCY_AND_NO_PATTERN = Pattern.compile(
-            "^\\s*(\\S.*?)\\s*((?:고시|공고)\\s*제\\s*[\\d一-龥]+[-–][\\d一-龥]+\\s*호)\\s*$");
+            "^\\s*(\\S.*?)??\\s*(" + NOTICE_NUMBER_CORE + ")\\s*$");
 
     // 고시자: 직함으로 끝나는 단독 문단
     private static final Pattern SIGNER_PATTERN = Pattern.compile(
@@ -103,7 +107,7 @@ public final class Heuristics {
 
     /**
      * "군산지방해양수산청 고시 제2026-47호" 형태에서 {기관, 고시번호}를 분리.
-     * 형태가 아니면 empty.
+     * 기관 없는 "공고 제56호"류는 기관을 null로 돌려준다. 형태가 아니면 empty.
      */
     public static Optional<String[]> agencyAndNoticeNo(String text) {
         if (text == null) {
@@ -113,7 +117,42 @@ public final class Heuristics {
         if (!m.matches()) {
             return Optional.empty();
         }
-        return Optional.of(new String[]{m.group(1).trim(), m.group(2).replaceAll("\\s+", " ").trim()});
+        String agency = m.group(1) == null || m.group(1).isBlank() ? null : m.group(1).trim();
+        return Optional.of(new String[]{agency, normalizeNoticeNo(m.group(2))});
+    }
+
+    /** 고시번호 표기 정규화: 내부 공백 제거 후 "고시/공고 제…호" 한 칸 띄어쓰기로 통일. */
+    private static String normalizeNoticeNo(String noticeNo) {
+        String compact = noticeNo.replaceAll("\\s+", "");
+        return compact.replaceFirst("^(고시|공고)제", "$1 제");
+    }
+
+    /**
+     * 자간 벌림 서식("방 치 선 박  제 거 공 고")을 일반 표기("방치선박 제거공고")로 되돌린다.
+     * 공백으로 나뉜 토큰이 전부 한 글자일 때만 동작한다 — 일반 문장은 그대로 반환.
+     * 단어 경계는 2칸 이상의 공백으로 판단한다.
+     */
+    public static String collapseSpacedText(String text) {
+        if (text == null) {
+            return null;
+        }
+        String trimmed = text.trim();
+        if (trimmed.isEmpty() || !trimmed.contains(" ")) {
+            return trimmed;
+        }
+        for (String token : trimmed.split("\\s+")) {
+            if (token.codePointCount(0, token.length()) > 1) {
+                return trimmed;
+            }
+        }
+        StringBuilder out = new StringBuilder();
+        for (String word : trimmed.split("\\s{2,}")) {
+            if (out.length() > 0) {
+                out.append(' ');
+            }
+            out.append(word.replaceAll("\\s+", ""));
+        }
+        return out.toString();
     }
 
     /** 고시자로 보이는 단독 문단인지 (직함 종결: 청장/시장/군수/…). */
@@ -121,6 +160,11 @@ public final class Heuristics {
         if (text == null) {
             return false;
         }
-        return SIGNER_PATTERN.matcher(text.trim()).matches();
+        return SIGNER_PATTERN.matcher(cleanSigner(text)).matches();
+    }
+
+    /** 고시자 문단 정리: 직함 뒤에 붙는 도장 자리 특수문자 등 비한글 꼬리를 제거한다. */
+    public static String cleanSigner(String text) {
+        return text == null ? "" : text.trim().replaceAll("[^가-힣·\\s]+\\s*$", "").trim();
     }
 }

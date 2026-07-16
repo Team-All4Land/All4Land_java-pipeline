@@ -210,27 +210,64 @@ def _clean_formatting(text: str) -> str:
 # 표(HTML/마크다운) → grid
 # ---------------------------------------------------------------------------
 class _TableHTMLParser(HTMLParser):
-    """<table>의 행/셀을 2차원 문자열 grid로 추출한다(rowspan/colspan은 단순 무시)."""
+    """<table>의 행/셀을 2차원 문자열 grid로 추출한다.
+
+    rowspan/colspan은 병합 셀 텍스트를 걸친 모든 칸에 복제해 전개한다 —
+    네이티브 추출기(HmlExtractor 등)의 grid 계약과 동일한 모양을 만들어야
+    Mapper의 라벨/값·헤더 열 정렬이 어긋나지 않는다(무시하면 병합 헤더가
+    있는 표에서 아래 행들의 열 위치가 밀린다).
+    """
 
     def __init__(self):
         super().__init__()
         self.rows: list[list[str]] = []
         self._row: list[str] | None = None
         self._cell: list[str] | None = None
+        self._span = (1, 1)          # 현재 셀의 (rowspan, colspan)
+        self._row_index = -1
+        self._col = 0
+        self._carried: dict[tuple[int, int], str] = {}  # (행, 열) → rowspan 이월 텍스트
+
+    @staticmethod
+    def _span_of(attrs: dict, name: str) -> int:
+        try:
+            value = int(str(attrs.get(name, "") or "").strip() or 1)
+        except ValueError:
+            value = 1
+        return max(1, value)
+
+    def _fill_carried(self):
+        """현재 열 위치로 이월(rowspan)된 셀 텍스트를 이어서 채운다."""
+        while self._row is not None and (self._row_index, self._col) in self._carried:
+            self._row.append(self._carried.pop((self._row_index, self._col)))
+            self._col += 1
 
     def handle_starttag(self, tag, attrs):
-        """tr/td/th 시작 시 행·셀 버퍼를 연다."""
+        """tr/td/th 시작 시 행·셀 버퍼를 열고 span 속성을 기억한다."""
         if tag == "tr":
+            self._row_index += 1
             self._row = []
+            self._col = 0
+            self._fill_carried()
         elif tag in ("td", "th"):
+            a = dict(attrs)
+            self._span = (self._span_of(a, "rowspan"), self._span_of(a, "colspan"))
             self._cell = []
 
     def handle_endtag(self, tag):
-        """td/th 종료 시 셀을 행에, tr 종료 시 행을 표에 확정한다."""
+        """td/th 종료 시 span을 전개해 행에, tr 종료 시 행을 표에 확정한다."""
         if tag in ("td", "th") and self._cell is not None and self._row is not None:
-            self._row.append("".join(self._cell).strip())
+            text = "".join(self._cell).strip()
+            rowspan, colspan = self._span
+            for offset in range(1, rowspan):
+                for c in range(colspan):
+                    self._carried[(self._row_index + offset, self._col + c)] = text
+            self._row.extend([text] * colspan)
+            self._col += colspan
+            self._fill_carried()
             self._cell = None
         elif tag == "tr" and self._row is not None:
+            self._fill_carried()
             self.rows.append(self._row)
             self._row = None
 
