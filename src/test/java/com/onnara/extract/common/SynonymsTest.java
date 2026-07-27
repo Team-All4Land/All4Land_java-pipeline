@@ -29,6 +29,11 @@ class SynonymsTest {
         // U+2024(ONE DOT LEADER) — 실제 HML 샘플(태항조선)의 "점용․사용 장소" 표기
         assertEquals("점용·사용장소", Synonyms.normalizeLabel("점용․사용 장소"));
         assertEquals("점용·사용면적", Synonyms.normalizeLabel("점용‧사용 면적"));
+        // OCR이 가운뎃점을 마침표/쉼표로 읽는 경우도 통일된다
+        assertEquals("점용·사용장소", Synonyms.normalizeLabel("점용.사용 장소"));
+        assertEquals("점용·사용목적", Synonyms.normalizeLabel("점용,사용 목적"));
+        // 한글 사이가 아닌 마침표(날짜·번호)는 건드리지 않는다
+        assertEquals("2026.6.11", Synonyms.normalizeLabel("2026. 6. 11"));
     }
 
     /** 괄호 병기 라벨이 두 부분으로 분리되는지 검증한다. */

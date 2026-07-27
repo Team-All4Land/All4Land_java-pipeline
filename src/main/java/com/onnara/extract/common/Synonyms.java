@@ -201,8 +201,8 @@ public final class Synonyms {
 
     /**
      * 라벨 정규화: NFC → 선행 번호 제거 → 공백 제거(전각 포함) →
-     * 가운뎃점 통일(ㆍ⋅→·) → 후행 콜론 제거 → 토큰 사이 조사 '의' 제거는
-     * 사전 쪽에서 의/무 형태를 모두 등재하는 것으로 대신한다.
+     * 가운뎃점 통일(ㆍ⋅→·, 한글 사이 마침표·쉼표 포함) → 후행 콜론 제거 →
+     * 토큰 사이 조사 '의' 제거는 사전 쪽에서 의/무 형태를 모두 등재하는 것으로 대신한다.
      */
     public static String normalizeLabel(String raw) {
         if (raw == null) {
@@ -213,6 +213,9 @@ public final class Synonyms {
         s = s.replaceAll("[\\s\\u00A0\\u3000]+", "");
         s = s.replace('ㆍ', '·').replace('⋅', '·').replace('∙', '·').replace('•', '·')
                 .replace('․', '·').replace('‧', '·').replace('・', '·').replace('･', '·');
+        // OCR이 가운뎃점을 마침표/쉼표로 읽는 경우("점용.사용 장소")를 통일한다.
+        // 한글 음절 사이만 바꿔 날짜("2026. 6.")나 번호 표기는 건드리지 않는다.
+        s = s.replaceAll("(?<=[가-힣])[.,．，、](?=[가-힣])", "·");
         s = s.replaceAll("[:：]+$", "");
         return s.toLowerCase(Locale.ROOT);
     }

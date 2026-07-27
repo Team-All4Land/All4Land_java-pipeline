@@ -41,13 +41,22 @@ public class HmlScanDetector implements ScanDetector {
             try {
                 while (reader.hasNext()) {
                     int event = reader.next();
+                    // 대상 태그일 때만 플래그를 바꾼다 — CHAR 안의 중첩 요소가
+                    // 플래그를 끊어 본문이 과소집계되면 스캔본으로 오판된다
                     if (event == XMLStreamConstants.START_ELEMENT) {
                         String tag = reader.getLocalName();
-                        inChar = "CHAR".equals(tag);
-                        inBinData = "BINDATA".equals(tag);
+                        if ("CHAR".equals(tag)) {
+                            inChar = true;
+                        } else if ("BINDATA".equals(tag)) {
+                            inBinData = true;
+                        }
                     } else if (event == XMLStreamConstants.END_ELEMENT) {
-                        inChar = false;
-                        inBinData = false;
+                        String tag = reader.getLocalName();
+                        if ("CHAR".equals(tag)) {
+                            inChar = false;
+                        } else if ("BINDATA".equals(tag)) {
+                            inBinData = false;
+                        }
                     } else if (event == XMLStreamConstants.CHARACTERS) {
                         if (inChar) {
                             textLen += reader.getText().trim().length();

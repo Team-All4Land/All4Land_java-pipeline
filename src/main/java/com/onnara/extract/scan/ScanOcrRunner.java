@@ -78,12 +78,12 @@ public final class ScanOcrRunner {
                     .start();
             try {
                 if (!process.waitFor(config.timeout().toMillis(), TimeUnit.MILLISECONDS)) {
-                    process.destroyForcibly();
+                    killTree(process);
                     throw new ScanOcrException("OCR 프로세스가 제한 시간(" + config.timeout().toSeconds()
                             + "초)을 초과했습니다: " + sourceFile);
                 }
             } catch (InterruptedException e) {
-                process.destroyForcibly();
+                killTree(process);
                 Thread.currentThread().interrupt();
                 throw new IOException("OCR 프로세스 대기 중단됨", e);
             }
@@ -103,6 +103,18 @@ public final class ScanOcrRunner {
             deleteQuietly(log);
             deleteQuietly(workDir);
         }
+    }
+
+    /**
+     * 서브프로세스를 자손까지 통째로 강제 종료한다.
+     *
+     * <p>{@code destroyForcibly()}는 직계 프로세스 하나만 죽인다 — PaddleOCR가 띄운
+     * 추론 워커가 고아로 남아 VLM 모델 메모리(수 GB)를 물고 살아남는 것을 막으려면
+     * 부모를 죽이기 전에 자손 목록을 잡아 함께 정리해야 한다.
+     */
+    private static void killTree(Process process) {
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
     }
 
     /** 로그 파일 꼬리 — 실패 원인 표시용. Paddle 로그가 길어 전체는 싣지 않는다. */

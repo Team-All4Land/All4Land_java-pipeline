@@ -64,10 +64,16 @@ public class HwpxScanDetector implements ScanDetector {
             try {
                 while (reader.hasNext()) {
                     int event = reader.next();
+                    // "t" 태그일 때만 플래그를 바꾼다 — t 안의 중첩 요소가 플래그를
+                    // 끊어 본문이 과소집계되면 스캔본으로 오판된다
                     if (event == XMLStreamConstants.START_ELEMENT) {
-                        inText = "t".equals(reader.getLocalName());
+                        if ("t".equals(reader.getLocalName())) {
+                            inText = true;
+                        }
                     } else if (event == XMLStreamConstants.END_ELEMENT) {
-                        inText = false;
+                        if ("t".equals(reader.getLocalName())) {
+                            inText = false;
+                        }
                     } else if (event == XMLStreamConstants.CHARACTERS && inText) {
                         len += reader.getText().trim().length();
                     }
