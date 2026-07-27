@@ -5,7 +5,6 @@ import com.onnara.extract.common.Mapper;
 import com.onnara.extract.common.model.SchemaResult;
 import com.onnara.extract.engine.Extractor;
 import com.onnara.extract.engine.ExtractorRegistry;
-import com.onnara.extract.scan.ImageOcrEnricher;
 import com.onnara.extract.scan.ScanOcrConfig;
 import com.onnara.extract.scan.ScanOcrRunner;
 import picocli.CommandLine.Command;
@@ -54,11 +53,7 @@ public class ExtractCommand implements Callable<Integer> {
         List<Path> files = PipelineSupport.collectInputs(targets);
         AppProperties props = AppProperties.load();
         ScanOcrConfig ocrConfig = ScanOcrConfig.fromProperties(props);
-        if (noImageOcr) {
-            ocrConfig = ocrConfig.withoutImageOcr();
-        }
-        ScanOcrRunner scanRunner = new ScanOcrRunner(ocrConfig);
-        ImageOcrEnricher imageOcr = new ImageOcrEnricher(scanRunner, ocrConfig);
+        ScanOcrRunner scanRunner = new ScanOcrRunner(noImageOcr ? ocrConfig.withoutImageOcr() : ocrConfig);
         Extractor forcedExtractor = engine != null ? ExtractorRegistry.forEngineName(engine) : null;
 
         int ok = 0;
@@ -66,8 +61,7 @@ public class ExtractCommand implements Callable<Integer> {
         for (Path file : files) {
             try {
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
-                        file, forcedExtractor, outputDir, !noImages, scanRunner,
-                        imageOcr.isUsable() ? imageOcr : null);
+                        file, forcedExtractor, outputDir, !noImages, scanRunner);
                 SchemaResult schema = Mapper.mapToSchema(result.raw(), result.engine());
 
                 String stem = PipelineSupport.stem(file);

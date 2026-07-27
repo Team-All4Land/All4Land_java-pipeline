@@ -41,7 +41,7 @@ public final class DbLoader implements AutoCloseable {
 
     /** ref_files 1행 삽입(이미지 1건당 1회, 배치 실행). */
     private static final String INSERT_REF_FILE = """
-            INSERT INTO ref_files (document_seq, image_name, file_path, ocr_text) VALUES (?, ?, ?, ?)
+            INSERT INTO ref_files (document_seq, image_name, file_path) VALUES (?, ?, ?)
             """;
 
     /** 배치 전체에서 공유하는 커넥션(수동 커밋). */
@@ -113,7 +113,6 @@ public final class DbLoader implements AutoCloseable {
                 insertRef.setLong(1, representativeSeq);
                 insertRef.setString(2, image.getName());
                 insertRef.setString(3, image.getPath());
-                insertRef.setString(4, image.getOcrText());
                 insertRef.addBatch();
                 hasBatch = true;
             }

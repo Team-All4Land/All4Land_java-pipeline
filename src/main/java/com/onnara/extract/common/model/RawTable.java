@@ -11,7 +11,7 @@ import java.util.List;
  *
  * <p>매퍼는 grid(행×열 2차원 배열)만 사용한다. cells는 병합 셀 span 보존용 선택 필드.
  */
-@JsonPropertyOrder({"type", "n_rows", "n_cols", "cells", "grid", "source_image"})
+@JsonPropertyOrder({"type", "n_rows", "n_cols", "cells", "grid"})
 public class RawTable extends RawContent {
 
     /** 행 수. */

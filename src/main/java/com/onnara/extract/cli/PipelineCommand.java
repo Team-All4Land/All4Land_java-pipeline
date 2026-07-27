@@ -11,7 +11,6 @@ import com.onnara.extract.db.DbLoader;
 import com.onnara.extract.db.DbSchema;
 import com.onnara.extract.db.LoadStats;
 import com.onnara.extract.detect.DetectorRegistry;
-import com.onnara.extract.scan.ImageOcrEnricher;
 import com.onnara.extract.scan.ScanOcrConfig;
 import com.onnara.extract.scan.ScanOcrRunner;
 import com.zaxxer.hikari.HikariDataSource;
@@ -84,7 +83,10 @@ public class PipelineCommand implements Callable<Integer> {
         }
         ScanOcrRunner scanRunner = new ScanOcrRunner(ocrConfig);
         boolean ocrReady = checkOcrRunnerIfNeeded(files, scanRunner, ocrConfig);
-        ImageOcrEnricher imageOcr = imageOcrIfUsable(scanRunner, ocrConfig);
+        if (ocrConfig.imageOcrEnabled() && !scanRunner.isAvailable()) {
+            System.out.println("[경고] OCR 실행 스크립트를 찾을 수 없어(" + ocrConfig.script()
+                    + ") 문서에 삽입된 사진·위치도의 내용은 추출되지 않습니다.");
+        }
 
         List<SchemaResult> schemas = new ArrayList<>();
         int ok = 0;
@@ -95,7 +97,7 @@ public class PipelineCommand implements Callable<Integer> {
                     throw new IOException("OCR 실행 스크립트가 없어 스캔본을 처리할 수 없습니다");
                 }
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
-                        file, null, output, !noImages, scanRunner, imageOcr);
+                        file, null, output, !noImages, scanRunner);
                 // 표 해석은 한 번만 하고 중간 산출물 저장과 매핑이 함께 쓴다
                 List<InterpretedTable> interpreted = TableInterpreter.interpret(
                         TableInterpreter.tablesOf(result.raw()));
@@ -126,25 +128,6 @@ public class PipelineCommand implements Callable<Integer> {
 
         System.out.printf("총 %d개 중 %d개 완료, %d개 실패%n", files.size(), ok, failed);
         return failed == 0 ? 0 : 1;
-    }
-
-    /**
-     * 이미지 OCR을 쓸 수 있으면 실행기를, 아니면 null을 돌려준다(배치 전체에 한 번만 판단·경고).
-     *
-     * <p>이미지 OCR은 네이티브 결과에 얹는 보강이라 스크립트가 없어도 배치를 세우지 않는다.
-     * 다만 사진이 대부분인 문서는 본문 대부분이 빠진 채로 적재되므로 그 사실은 알린다.
-     */
-    private ImageOcrEnricher imageOcrIfUsable(ScanOcrRunner scanRunner, ScanOcrConfig ocrConfig) {
-        if (!ocrConfig.imageOcrEnabled()) {
-            return null;
-        }
-        ImageOcrEnricher enricher = new ImageOcrEnricher(scanRunner, ocrConfig);
-        if (!enricher.isUsable()) {
-            System.out.println("[경고] OCR 실행 스크립트를 찾을 수 없어(" + ocrConfig.script()
-                    + ") 문서에 삽입된 사진·위치도의 내용은 추출되지 않습니다.");
-            return null;
-        }
-        return enricher;
     }
 
     /** 스캔본이 1건 이상일 때만 OCR 스크립트 존재를 확인한다(§8) — 스캔본이 없으면 스크립트 없이도 배치가 동작한다. */
