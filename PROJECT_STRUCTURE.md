@@ -29,6 +29,10 @@ Java CLI: extract.jar pipeline (배치 진입점, picocli)
                 ├─ .hwpx  →  OwpmlExtractor   (hwpxlib / 자체 OWPML 파싱)
                 ├─ .hml   →  HmlExtractor     (StAX, 외부 의존성 없음)
                 └─ .pdf   →  PdfBoxExtractor  (Apache PDFBox + 선분 클러스터링 표 탐지)
+                │
+                └── + 임베디드 이미지가 있으면 ──► 같은 ScanOcrRunner 경로로 OCR (§7.1)
+                        도장·로고 크기(ocr.images.min-dimension) 미만은 제외하고,
+                        읽어 낸 문단·표를 본문 뒤에 이어 붙인다
         │
         ▼
 raw JSON (공통 계약 §4 — Python 버전과 동일, Jackson DTO)
@@ -116,9 +120,9 @@ extract-java/
 │   │       ├── PdfBoxExtractor.java   # Apache PDFBox — 텍스트/이미지, 도장 제외 휴리스틱
 │   │       └── TableDetector.java     # 선분 클러스터링 표 탐지 (pdfplumber 로직 포팅)
 │   │
-│   ├── scan/                    # ★ 스캔본 처리 — PaddleOCR-VL CLI 서브프로세스 실행기
+│   ├── scan/                    # ★ OCR 처리 — PaddleOCR-VL CLI 서브프로세스 실행기
 │   │   ├── ScanOcrRunner.java   #   ProcessBuilder — CLI 계약(§7)대로 실행, --output JSON 파싱
-│   │   └── ScanOcrConfig.java   #   실행 커맨드·스크립트 경로·타임아웃 설정
+│   │   └── ScanOcrConfig.java   #   실행 커맨드·스크립트 경로·타임아웃 + 이미지 OCR 설정
 │   │
 │   └── db/                      # ★ 최종 적재 계층
 │       ├── DataSourceFactory.java #  HikariCP 커넥션 풀 생성 (환경변수/.env/application.properties)
@@ -160,9 +164,28 @@ Python 버전과 달리 별도 프로세스 호출이 아니라 **같은 JVM 안
 | 형식 | 스캔본 판별 기준 | 사용 라이브러리 |
 |---|---|---|
 | PDF | 텍스트 레이어 유무 | PDFBox |
-| HWP | 네이티브 본문 텍스트량 대비 임베디드 이미지 비중 | hwplib |
-| HWPX | ZIP 내 본문 XML의 텍스트 존재 여부 | java.util.zip + StAX |
-| HML | XML 본문 텍스트 대비 base64 BinData 비중 | StAX |
+| PDF | 텍스트 레이어가 있는 페이지 비율 (< 50%) | PDFBox |
+| HWP | 본문 텍스트 유무 (문단·표 셀·중첩 표·글상자·캡션 집계) | hwplib |
+| HWPX | 본문 텍스트 유무 (`<hp:t>`, 머리말·꼬리말 제외) | java.util.zip + StAX |
+| HML | 본문 텍스트 유무 (`<CHAR>`, 머리말·꼬리말 제외) | StAX |
+
+HWP/HWPX/HML의 판정 규칙은 한 줄이다:
+
+```
+스캔본 = 네이티브 본문 텍스트가 한 글자도 없다 AND 임베디드 이미지가 1개 이상
+```
+
+**이미지의 개수·크기·면적은 판정 근거가 아니다.** 사진이 지면 대부분을 차지한다는 것만으로는
+스캔본이 아니다 — 붙임 현장사진·위치도처럼 본문이 사진으로 채워진 네이티브 문서가 흔하다.
+이미지 유무는 "OCR로 얻을 게 있는가"를 확인하는 전제 조건일 뿐이다.
+
+지면 점유율도 신호가 되지 않는다. 본문 전체가 이미지 한 장인 문서와 붙임 사진이 여러 장
+들어간 문서를 실측하면 둘 다 **본문 폭의 96~100%, 인쇄 영역의 약 40%**로 구분되지 않는다.
+기하 조건을 추가하면 판별력은 안 늘고 오판 경로만 는다.
+
+임계치가 한 글자라 판별의 부담은 전부 **"본문 텍스트를 빠짐없이, 그리고 본문만 세는가"**로
+옮겨간다. 컨테이너 하나를 빠뜨리면 사진 문서가 스캔본으로(hwplib의 표 셀 문단이 실제로 그랬다),
+머리말·꼬리말을 본문으로 세면 진짜 스캔본이 네이티브로 뒤집힌다.
 
 스캔본으로 판별되면 확장자와 무관하게 `ScanOcrRunner`가 PaddleOCR-VL CLI를
 서브프로세스로 실행해 처리한다.
@@ -383,6 +406,26 @@ Python 의존성을 최소화한다.
   프로세스 실행마다 모델을 다시 로드하는 비용이 있으므로, 스캔본이 많아지면
   스크립트 측에서 모델 캐시 등으로 완화한다.
 
+### 7.1 네이티브 문서에 삽입된 이미지 OCR
+
+스캔본이 아니어도 본문이 사진 안에 들어 있는 고시가 많다(붙임 현장사진, 위치도, 표 캡처).
+`PipelineSupport`가 네이티브 경로에서도 같은 CLI 계약으로 그 이미지들을 읽어, 나온 문단·표를
+**본문 뒤에 이어 붙인다**(이미지가 몇 번째 문단에 붙어 있었는지는 hwplib 등에서 복원할 수
+없다 — 위치를 지어내지 않는다).
+
+이 통로가 없으면 판별 정확도와 추출량이 서로 깎아먹는다. 사진 문서를 스캔본으로 오판하면
+문단·표를 잃고, 판별을 고쳐 네이티브로 보내면 이번엔 사진 속 본문을 잃는다. 실제로 판별을
+고친 커밋에서 후자가 발생했다.
+
+- **후보 선별**: 긴 변이 `ocr.images.min-dimension`(기본 400px) 미만이면 건너뛴다.
+  도장·관인·로고·서명은 읽어도 본문 정보가 없다. 스캔 판정본만 OCR을 타던 때와 달리 이제
+  이미지가 있는 모든 네이티브 문서가 대상이라, 이 필터가 없으면 도장 하나 때문에 VLM이 도는
+  문서가 배치 전체로 번진다. 크기를 못 재는 이미지는 후보에 남긴다(판단 불가를 '작다'로
+  취급하면 읽을 수 있었을 본문을 조용히 버린다).
+- **실패 등급**: 네이티브 문서의 이미지 OCR 실패는 `[경고]` 후 계속한다 — 문단·표는 이미
+  뽑혀 있다. 스캔본은 이미지가 유일한 본문 출처라 기존대로 `[실패]`로 격리한다.
+- **끄기**: `ocr.images.enabled=false`(또는 `OCR_IMAGES_ENABLED`), CLI `--no-image-ocr`.
+
 준비 (스캔본을 처리할 때만 필요):
 
 ```bash
@@ -399,9 +442,9 @@ java -jar extract.jar <서브커맨드> [옵션]
 
 | 명령 | 역할 |
 |---|---|
-| `pipeline -i input/ -o out/ [--no-db] [--raw] [--tables]` | 배치: 판별→추출→표해석→매핑→적재 일괄 (기존 pipeline.mjs 대체) |
+| `pipeline -i input/ -o out/ [--no-db] [--raw] [--tables] [--no-image-ocr]` | 배치: 판별→추출→표해석→매핑→적재 일괄 (기존 pipeline.mjs 대체) |
 | `detect 파일... [--json]` | 스캔 여부 분류 결과 출력 |
-| `extract 파일... -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (엔진 강제 지정 가능) |
+| `extract 파일... -o out/ [--raw] [--no-images] [--no-image-ocr] [--engine hwplib]` | 추출+매핑 (엔진 강제 지정 가능) |
 | `tables raw.json -o out/ [--summary]` | 표 해석 전용 (raw JSON → 표 해석 JSON §5.1) |
 | `map raw.json -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
 | `load out/*.schema.json` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
@@ -409,6 +452,8 @@ java -jar extract.jar <서브커맨드> [옵션]
 
 - 공통 옵션 의미는 Python 버전과 동일 (`--raw`: 원시 결과 포함,
   `--tables`: 표 해석 중간 결과 포함, `--no-images`: 이미지 저장 생략).
+  `--no-image-ocr`는 네이티브 문서에 삽입된 사진·위치도의 OCR만 끈다(§7.1) — 추론 시간은
+  줄지만 사진 속 정보는 적재되지 않는다. 스캔본 처리에는 영향이 없다.
 - **DB 접속·OCR 실행 정보는 OS 환경변수 > `.env` > `application.properties`
   순으로 읽는다**(`db.*`, `ocr.cli.*`) — CLI 재정의 옵션은 두지 않는다.
   리눅스 서버 배포 시에는 `.env.example`을 `.env`로 복사해 관리한다.
@@ -425,6 +470,7 @@ java -jar extract.jar <서브커맨드> [옵션]
 3) 파일별: DetectorRegistry 판별
      스캔본  → (HWP/HWPX/HML이면 임베디드 이미지 추출 후) ScanOcrRunner 서브프로세스 → raw JSON
      네이티브 → ExtractorRegistry에서 확장자 매칭 Extractor → raw JSON
+                + 임베디드 이미지가 있으면 같은 경로로 OCR해 본문 뒤에 이어 붙임 (§7.1)
 4) TableInterpreter.interpret → (--tables 시) out/<이름>.tables.json 저장
 5) Mapper.mapToSchema(표 해석 결과 재사용) → out/<이름>.schema.json 저장
 6) DbLoader로 documents/ref_files 적재

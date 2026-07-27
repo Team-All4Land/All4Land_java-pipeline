@@ -25,6 +25,9 @@ CLI: extract.jar pipeline (picocli)
                 ├─ .hwpx  →  OwpmlExtractor   (hwpxlib)
                 ├─ .hml   →  HmlExtractor     (JDK DOM, 외부 의존성 없음)
                 └─ .pdf   →  PdfBoxExtractor  (Apache PDFBox + 선분 클러스터링 표 탐지)
+                │
+                └── + 임베디드 이미지가 있으면 같은 OCR 경로로 읽어 본문 뒤에 이어 붙임
+                        (붙임 현장사진·위치도. 도장·로고 크기는 제외)
         │
         ▼
 raw JSON (공통 계약 — snake_case, Jackson DTO)
@@ -51,8 +54,22 @@ PostgreSQL (documents / ref_files 2테이블) + images/ 폴더
 | `.hml` | `HmlScanDetector` | `HmlExtractor` (JDK DOM) | ColSpan/RowSpan 병합 구조 복원 |
 | `.pdf` | `PdfScanDetector` | `PdfBoxExtractor` | 선분 클러스터링 표 탐지, 도장 제외 휴리스틱 |
 
-스캔 판별 기준: 네이티브 본문 텍스트량이 거의 없으면서(형식별 임계치 미만)
-임베디드 이미지가 있으면 스캔본으로 판정합니다.
+스캔 판별 기준(HWP/HWPX/HML):
+
+```
+스캔본 = 네이티브 본문 텍스트가 한 글자도 없다 AND 임베디드 이미지가 1개 이상
+```
+
+**이미지의 개수·크기·면적은 판정 근거가 아닙니다.** 사진이 지면 대부분을 차지한다는 것만으로는
+스캔본이 아닙니다 — 붙임 현장사진·위치도처럼 본문이 사진으로 채워진 네이티브 문서가 흔합니다.
+지면 점유율도 신호가 되지 않습니다: 본문 전체가 이미지 한 장인 문서와 붙임 사진이 여러 장
+들어간 문서를 실측하면 둘 다 **본문 폭의 96~100%, 인쇄 영역의 약 40%**로 구분되지 않습니다.
+
+임계치가 한 글자라 판별의 부담은 전부 "본문 텍스트를 빠짐없이, 그리고 본문만 세는가"에
+있습니다. 표 셀·중첩 표·글상자·캡션까지 세되, 머리말·꼬리말·각주는 세지 않습니다
+(진짜 스캔본에도 머리글·쪽번호는 남아 있어, 세면 반대 방향 오판이 납니다).
+
+PDF는 성격이 달라 페이지별 텍스트 레이어 유무로 판정합니다(텍스트 페이지 비율 50% 미만).
 
 ## 디렉터리 구조
 
@@ -102,14 +119,15 @@ java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
 |---|---|
 | `pipeline -i input/ -o out/ [--no-db] [--raw] [--tables]` | 배치: 판별→추출→표해석→매핑→적재 일괄 |
 | `detect 파일...\|폴더 [--json]` | 스캔 여부 분류 결과 출력 |
-| `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
+| `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--no-image-ocr] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
 | `tables raw.json... -o out/ [--summary]` | 표 해석 전용 (raw JSON → 표 해석 JSON) |
 | `map raw.json... -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
 | `load schema.json...` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
 | `dict [-o docs/SYNONYMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 |
 
 공통 옵션: `--raw`(원시 결과도 저장), `--tables`(표 해석 중간 결과도 저장),
-`--no-images`(이미지 저장 생략).
+`--no-images`(이미지 저장 생략), `--no-image-ocr`(네이티브 문서에 삽입된 사진·위치도의
+OCR 생략 — 추론 시간은 줄지만 사진 속 정보는 적재되지 않습니다).
 DB 접속·OCR 실행 정보는 CLI 옵션이 아니라 `application.properties` 및
 `.env`에서 읽습니다(우선순위: OS 환경변수 > `.env` > `application.properties`).
 파일 단위 실패는 `[실패] <파일>: <사유>` 로그만 남기고 배치는 계속
@@ -179,6 +197,8 @@ db.pool.max-size=5
 ocr.cli.command=python3
 ocr.cli.script=ocr-cli/paddleocr_vl_cli.py
 ocr.cli.timeout-sec=300
+ocr.images.enabled=true
+ocr.images.min-dimension=400
 ```
 
 ### 리눅스 서버 배포 — `.env`로 환경변수 관리
@@ -200,6 +220,8 @@ DB_POOL_MAX_SIZE=5
 OCR_CLI_COMMAND=python3            # venv 사용 시 해당 python 절대경로
 OCR_CLI_SCRIPT=ocr-cli/paddleocr_vl_cli.py
 OCR_CLI_TIMEOUT_SEC=300
+OCR_IMAGES_ENABLED=true            # 네이티브 문서에 삽입된 사진·위치도도 OCR할지
+OCR_IMAGES_MIN_DIMENSION=400       # 긴 변이 이보다 짧으면 읽지 않음 (도장·로고·서명 제외)
 ```
 
 - DB 비밀번호는 파일(`application.properties`)에 평문으로 두지 말고
@@ -230,8 +252,18 @@ PaddleOCR-VL을 구동하는 Python 스크립트(`ocr-cli/paddleocr_vl_cli.py`)�
 종료 코드 ≠0 또는 제한 시간 초과 → 해당 파일만 [실패] 처리.
 ```
 
+### 네이티브 문서에 삽입된 사진·위치도
+
+붙임 현장사진, 위치도, 표 캡처처럼 본문이 이미지 안에만 있는 고시가 많습니다. 스캔본이
+아니어도 같은 CLI 계약으로 그 이미지들을 읽어 **본문 뒤에 이어 붙입니다**(이미지가 몇 번째
+문단에 붙어 있었는지는 복원할 수 없어 위치를 지어내지 않습니다).
+
+긴 변이 `ocr.images.min-dimension`(기본 400px)보다 짧은 이미지는 읽지 않습니다 —
+도장·관인·로고·서명은 읽어도 본문 정보가 없는데, 대량 배치에서는 그 추론 시간이 그대로
+배치 시간이 됩니다.
+
 `paddleocr` 미설치 등으로 스크립트를 실행할 수 없으면(경로 확인: `ocr.cli.script`)
-스캔본 파일만 `[실패]` 처리되고, 네이티브 파일들은 정상적으로 배치가 진행됩니다.
+스캔본 파일만 `[실패]` 처리되고, 네이티브 파일들은 사진 속 내용 없이 배치가 진행됩니다.
 
 ## 데이터베이스 스키마 (PostgreSQL)
 

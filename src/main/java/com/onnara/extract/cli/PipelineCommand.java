@@ -54,6 +54,11 @@ public class PipelineCommand implements Callable<Integer> {
     @Option(names = "--no-images", description = "이미지 저장 생략")
     boolean noImages;
 
+    /** true면 문서에 삽입된 이미지의 OCR을 생략한다(추론 시간 단축용). */
+    @Option(names = "--no-image-ocr",
+            description = "문서에 삽입된 사진·위치도의 OCR 생략 (스캔본 처리에는 영향 없음)")
+    boolean noImageOcr;
+
     /** true면 DB 적재 단계를 건너뛴다(DB 없는 스모크런용). */
     @Option(names = "--no-db", description = "DB 적재 생략 (DB 없는 스모크런용)")
     boolean noDb;
@@ -73,8 +78,15 @@ public class PipelineCommand implements Callable<Integer> {
         }
 
         ScanOcrConfig ocrConfig = ScanOcrConfig.fromProperties(props);
+        if (noImageOcr) {
+            ocrConfig = ocrConfig.withoutImageOcr();
+        }
         ScanOcrRunner scanRunner = new ScanOcrRunner(ocrConfig);
         boolean ocrReady = checkOcrRunnerIfNeeded(files, scanRunner, ocrConfig);
+        if (ocrConfig.imageOcrEnabled() && !scanRunner.isAvailable()) {
+            System.out.println("[경고] OCR 실행 스크립트를 찾을 수 없어(" + ocrConfig.script()
+                    + ") 문서에 삽입된 사진·위치도의 내용은 추출되지 않습니다.");
+        }
 
         List<SchemaResult> schemas = new ArrayList<>();
         int ok = 0;

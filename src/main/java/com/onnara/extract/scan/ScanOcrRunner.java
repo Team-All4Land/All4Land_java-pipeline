@@ -44,6 +44,11 @@ public final class ScanOcrRunner {
         return Files.isRegularFile(config.script());
     }
 
+    /** 실행 설정 — 호출부가 이미지 OCR 사용 여부·후보 최소 크기를 확인하는 데 쓴다. */
+    public ScanOcrConfig config() {
+        return config;
+    }
+
     /** 스캔 PDF 원본을 넘긴다(스크립트가 페이지 렌더링 후 VLM 추론). */
     public RawDocument parsePdf(Path pdf, String sourceFile) throws IOException {
         return run(sourceFile, "pdf", List.of(pdf));
