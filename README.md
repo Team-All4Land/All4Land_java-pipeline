@@ -5,8 +5,10 @@
 적재**하는 배치 파이프라인입니다.
 
 핵심 원칙: **판별(detect) → 추출(engine) → 매핑(common) → 적재(db)** 4계층 분리.
-PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 스캔본 처리만 Python CLI
+PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 OCR만 Python CLI
 스크립트(`ocr-cli/`)에 맡기고, Java 파이프라인이 **서브프로세스로 실행**합니다.
+OCR은 스캔본뿐 아니라 **네이티브 문서에 삽입된 사진·위치도**에도 쓰입니다 —
+붙임 현장사진처럼 본문이 이미지 안에만 있는 고시가 흔하기 때문입니다.
 
 ## 전체 흐름
 
@@ -18,13 +20,17 @@ CLI: extract.jar pipeline (picocli)
         │
         │  [1차 분기] 스캔본 판별 — DetectorRegistry
         │
-        ├── 스캔본 ──► ScanOcrRunner ──서브프로세스──► PaddleOCR-VL CLI (ocr-cli/, Python)
+        ├── 스캔 PDF ──► ScanOcrRunner ──서브프로세스──► PaddleOCR-VL CLI (ocr-cli/, Python)
         │
-        └── 네이티브 ── [2차 분기] 확장자별 Extractor
+        └── 그 밖의 모든 문서 ── [2차 분기] 확장자별 Extractor
                 ├─ .hwp   →  HwplibExtractor  (hwplib)
                 ├─ .hwpx  →  OwpmlExtractor   (hwpxlib)
                 ├─ .hml   →  HmlExtractor     (JDK DOM, 외부 의존성 없음)
                 └─ .pdf   →  PdfBoxExtractor  (Apache PDFBox + 선분 클러스터링 표 탐지)
+                │
+                └── + 임베디드 이미지 ──► ImageOcrEnricher ──► PaddleOCR-VL CLI
+                        사진·위치도에서 읽은 문단·표를 content에 잇고
+                        images[].ocr_text를 채운다 (도장·로고 크기는 제외)
         │
         ▼
 raw JSON (공통 계약 — snake_case, Jackson DTO)
@@ -54,6 +60,15 @@ PostgreSQL (documents / ref_files 2테이블) + images/ 폴더
 스캔 판별 기준: 네이티브 본문 텍스트량이 거의 없으면서(형식별 임계치 미만)
 임베디드 이미지가 있으면 스캔본으로 판정합니다.
 
+**판별 결과로 경로가 갈리는 것은 스캔 PDF뿐입니다**(페이지 렌더링이 필요해서).
+나머지 형식은 스캔본이든 아니든 네이티브 추출과 이미지 OCR을 함께 돌립니다.
+본문 전체를 이미지 한 장으로 붙인 문서와 붙임 사진이 여러 장 들어간 문서는
+지면상 거의 구분되지 않아(둘 다 본문 폭의 96~100%를 차지하는 이미지 + 적은 텍스트)
+판별이 어느 쪽으로든 틀릴 수 있습니다. 그래서 틀려도 잃는 게 없게 만들었습니다 —
+스캔으로 오판해도 문단·표가 남고, 네이티브로 판정해도 사진 속 본문이 들어옵니다.
+판별 결과는 `is_scanned` 메타와 OCR 실패의 심각도(스캔 판정본은 `[실패]`,
+네이티브 판정본은 `[경고]` 후 계속)만 정합니다.
+
 ## 디렉터리 구조
 
 ```
@@ -62,7 +77,7 @@ src/main/java/com/onnara/extract/
 ├── detect/       1차 분기: 스캔본 판별 (ScanDetector 구현체 4종)
 ├── engine/       2차 분기: 확장자별 네이티브 추출기 (Extractor 구현체 4종)
 ├── common/       형식 공통 계층 — raw JSON 모델, 매퍼, 동의어 사전, 날짜/주소 휴리스틱
-├── scan/         스캔본 처리 — PaddleOCR-VL CLI 서브프로세스 실행기
+├── scan/         OCR 처리 — PaddleOCR-VL CLI 서브프로세스 실행기 + 이미지 OCR 병합
 └── db/           PostgreSQL 적재 (HikariCP + Flyway)
 
 src/main/resources/
@@ -71,7 +86,7 @@ src/main/resources/
 
 src/test/java/...   JUnit 5 — detect/engine/common/scan 단위 테스트 + samples/ 기반 회귀 테스트
 samples/             실제 고시문 픽스처 (형식·스캔 여부별)
-ocr-cli/             스캔본 OCR용 PaddleOCR-VL Python CLI (ScanOcrRunner가 서브프로세스로 호출)
+ocr-cli/             OCR용 PaddleOCR-VL Python CLI (ScanOcrRunner가 서브프로세스로 호출)
 ```
 
 ## 요구 사항
@@ -79,8 +94,8 @@ ocr-cli/             스캔본 OCR용 PaddleOCR-VL Python CLI (ScanOcrRunner가 
 - JDK 17 이상
 - Maven 3.6 이상
 - (DB 적재 시) PostgreSQL 접근 가능한 인스턴스
-- (스캔본 처리 시) Python 3 + `ocr-cli/`의 PaddleOCR-VL 스크립트(설치는 `ocr-cli/requirements.txt`).
-  없으면 스캔본 파일만 `[실패]` 처리되고 네이티브 파일은 정상 처리됩니다.
+- (OCR 사용 시) Python 3 + `ocr-cli/`의 PaddleOCR-VL 스크립트(설치는 `ocr-cli/requirements.txt`).
+  없으면 스캔본 파일만 `[실패]` 처리되고, 네이티브 파일은 사진 속 내용 없이 정상 처리됩니다.
 - 한글 파일명 경로를 다루므로 로캘이 UTF-8이어야 합니다(`LANG=C.UTF-8` 등).
   `mvn test`는 surefire 설정에 이미 반영되어 있어 별도 조치가 필요 없습니다.
 
@@ -102,14 +117,15 @@ java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
 |---|---|
 | `pipeline -i input/ -o out/ [--no-db] [--raw] [--tables]` | 배치: 판별→추출→표해석→매핑→적재 일괄 |
 | `detect 파일...\|폴더 [--json]` | 스캔 여부 분류 결과 출력 |
-| `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
+| `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--no-image-ocr] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
 | `tables raw.json... -o out/ [--summary]` | 표 해석 전용 (raw JSON → 표 해석 JSON) |
 | `map raw.json... -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
 | `load schema.json...` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
 | `dict [-o docs/SYNONYMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 |
 
 공통 옵션: `--raw`(원시 결과도 저장), `--tables`(표 해석 중간 결과도 저장),
-`--no-images`(이미지 저장 생략).
+`--no-images`(이미지 저장 생략), `--no-image-ocr`(문서에 삽입된 사진·위치도의
+OCR 생략 — 추론 시간은 줄지만 사진 속 정보는 적재되지 않습니다).
 DB 접속·OCR 실행 정보는 CLI 옵션이 아니라 `application.properties` 및
 `.env`에서 읽습니다(우선순위: OS 환경변수 > `.env` > `application.properties`).
 파일 단위 실패는 `[실패] <파일>: <사유>` 로그만 남기고 배치는 계속
@@ -179,6 +195,8 @@ db.pool.max-size=5
 ocr.cli.command=python3
 ocr.cli.script=ocr-cli/paddleocr_vl_cli.py
 ocr.cli.timeout-sec=300
+ocr.images.enabled=true
+ocr.images.min-dimension=400
 ```
 
 ### 리눅스 서버 배포 — `.env`로 환경변수 관리
@@ -200,6 +218,8 @@ DB_POOL_MAX_SIZE=5
 OCR_CLI_COMMAND=python3            # venv 사용 시 해당 python 절대경로
 OCR_CLI_SCRIPT=ocr-cli/paddleocr_vl_cli.py
 OCR_CLI_TIMEOUT_SEC=300
+OCR_IMAGES_ENABLED=true            # 문서에 삽입된 사진·위치도도 OCR할지
+OCR_IMAGES_MIN_DIMENSION=400       # 긴 변이 이보다 짧으면 읽지 않음 (도장·로고·서명 제외)
 ```
 
 - DB 비밀번호는 파일(`application.properties`)에 평문으로 두지 말고
@@ -207,7 +227,7 @@ OCR_CLI_TIMEOUT_SEC=300
 - `OCR_CLI_COMMAND`는 가상환경을 쓰면 해당 venv의 `python` 절대경로로
   지정하세요.
 
-## 스캔본 OCR — PaddleOCR-VL CLI (`ocr-cli/`)
+## OCR — PaddleOCR-VL CLI (`ocr-cli/`)
 
 PaddleOCR-VL을 구동하는 Python 스크립트(`ocr-cli/paddleocr_vl_cli.py`)가 저장소에
 포함돼 있습니다. `scan/ScanOcrRunner`가 아래 계약으로 **서브프로세스를 실행**합니다.
@@ -217,21 +237,38 @@ PaddleOCR-VL을 구동하는 Python 스크립트(`ocr-cli/paddleocr_vl_cli.py`)�
 <ocr.cli.command> <ocr.cli.script> \
     --source-file <원본파일명> \
     --file-type <pdf|hwp|hwpx|hml> \
+    --input-kind <document|images> \
     --output <raw.json 출력 경로> \
     <입력 파일...>
 
-입력 파일 — 둘 중 하나:
-  · 스캔 PDF 원본 1개 (스크립트가 페이지 렌더링 후 VLM 추론)
-  · 스캔 HWP/HWPX/HML에서 Java가 추출한 임베디드 이미지 경로 N개
+--input-kind document : 문서 원본 1개 (스크립트가 페이지 렌더링 후 VLM 추론). 현재는 스캔 PDF.
+--input-kind images   : Java가 추출한 이미지 경로 N개. 스캔본의 페이지 이미지든,
+                        네이티브 문서에 삽입된 사진·위치도든 같은 경로로 읽습니다.
+                        이때만 content 항목에 source_image(출처 이미지 파일명)가 붙습니다.
 
 종료 코드 0 → --output 경로에 raw JSON 계약(위 다이어그램) 파일 생성.
-              is_scanned는 Java가 true로 강제하고, 계약 외 필드는 무시합니다.
+              is_scanned는 Java가 판별 결과로 다시 쓰고, 계약 외 필드는 무시합니다.
               stdout/stderr는 로그로만 취급합니다.
-종료 코드 ≠0 또는 제한 시간 초과 → 해당 파일만 [실패] 처리.
+종료 코드 ≠0 또는 제한 시간 초과 → 스캔 판정본은 [실패], 네이티브 판정본은 [경고] 후 계속.
 ```
 
+### 문서에 삽입된 사진·위치도 읽기
+
+붙임 현장사진, 위치도, 표 캡처처럼 본문이 이미지 안에만 있는 고시가 많습니다.
+`scan/ImageOcrEnricher`가 그 이미지들을 위 계약대로 읽어 raw JSON 두 곳에 합칩니다.
+
+- `content[]` — 읽어 낸 문단·표를 본문 뒤에 잇고 `source_image`로 출처를 표시합니다.
+  (hwplib 등은 이미지가 몇 번째 문단에 붙어 있었는지 복원할 수 없어 본문 사이에
+  끼워 넣을 수 없습니다. 위치를 지어내는 대신 뒤에 붙이고 출처만 정확히 남깁니다.)
+- `images[].ocr_text` — 이미지별 평문. `ref_files.ocr_text`로 적재됩니다.
+
+긴 변이 `ocr.images.min-dimension`(기본 400px)보다 짧은 이미지는 읽지 않습니다 —
+도장·관인·로고·서명은 읽어도 본문 정보가 없는데 대량 배치에서는 그 추론 시간이
+그대로 배치 시간이 됩니다. `documents.engine`에는 OCR이 본문에 기여했을 때
+`+paddleocr-vl`이 붙습니다(예: `hwplib+paddleocr-vl`).
+
 `paddleocr` 미설치 등으로 스크립트를 실행할 수 없으면(경로 확인: `ocr.cli.script`)
-스캔본 파일만 `[실패]` 처리되고, 네이티브 파일들은 정상적으로 배치가 진행됩니다.
+스캔본 파일만 `[실패]` 처리되고, 네이티브 파일들은 사진 속 내용 없이 배치가 진행됩니다.
 
 ## 데이터베이스 스키마 (PostgreSQL)
 
@@ -241,7 +278,7 @@ Flyway 마이그레이션(`src/main/resources/db/migration/V1__init.sql`)이 2�
 | 테이블 | 설명 |
 |---|---|
 | `documents` | 문서 1레코드 = 1행. 15개 표준 필드(`agency`, `notice_no`, `notice_date`, `title`, `approval_no`, `location`, `area`, `work_period_start/end` 등) + `engine`/`is_scanned` + 매핑 안 된 라벨을 보존하는 `extras JSONB` |
-| `ref_files` | 이미지 1개 = 1행. `documents.seq`를 참조하며 `ON DELETE CASCADE` |
+| `ref_files` | 이미지 1개 = 1행. 이미지명·저장 절대경로와 그 이미지에서 OCR로 읽은 `ocr_text`. `documents.seq`를 참조하며 `ON DELETE CASCADE` |
 
 적재 규칙: 같은 `source_file` 재적재 시 기존 행을 삭제 후 재삽입(멱등,
 CASCADE로 `ref_files` 자동 정리). 파일 단위로 세이브포인트를 잡아 한 파일의

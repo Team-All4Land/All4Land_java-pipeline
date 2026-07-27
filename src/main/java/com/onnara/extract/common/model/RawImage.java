@@ -10,8 +10,9 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  *
  * <ul>
  *   <li>{@code path}: 저장 절대경로 — DB 적재(ref_files)에 필요. saveImages 실행 시 채워진다.</li>
- *   <li>{@code ocr_text}: 선택 필드 — 현재 Java 파이프라인은 채우지 않지만
- *       raw JSON 계약(Python 산출물 호환) 유지를 위해 남겨둔다.</li>
+ *   <li>{@code ocr_text}: 이미지에서 읽어 낸 평문. 본문이 사진 안에 있는 문서(붙임 현장사진,
+ *       위치도)의 내용을 이미지별로 남긴다 — {@code ImageOcrEnricher}가 채우고
+ *       {@code ref_files.ocr_text}로 적재된다. 읽지 않았거나 글자가 없으면 null.</li>
  * </ul>
  */
 @JsonPropertyOrder({"name", "path", "size", "ocr_text"})
@@ -24,7 +25,7 @@ public class RawImage {
     private String path;
     /** 이미지 바이트 크기. */
     private long size;
-    /** OCR 텍스트(선택) — 계약 호환용, 현재 미사용. */
+    /** 이미지에서 OCR로 읽은 평문(선택) — 읽지 않았거나 글자가 없으면 null. */
     private String ocrText;
 
     /** Jackson 역직렬화용 기본 생성자. */
@@ -70,7 +71,7 @@ public class RawImage {
         this.size = size;
     }
 
-    /** OCR 텍스트를 반환한다(현재 항상 null). */
+    /** 이미지에서 읽은 OCR 평문을 반환한다(없으면 null). */
     @JsonProperty("ocr_text")
     public String getOcrText() {
         return ocrText;

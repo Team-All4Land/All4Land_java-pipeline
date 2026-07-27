@@ -17,10 +17,15 @@ import java.util.concurrent.TimeUnit;
  * <p>호출 규약:
  * <pre>
  * &lt;command&gt; &lt;script&gt; --source-file &lt;원본파일명&gt; --file-type &lt;pdf|hwp|hwpx|hml&gt;
+ *                    --input-kind &lt;document|images&gt;
  *                    --output &lt;raw.json 경로&gt; &lt;입력 파일...&gt;
  * </pre>
  * 종료 코드 0이면 {@code --output} 경로에 §4 raw JSON이 쓰여 있어야 하고,
  * stdout/stderr는 로그로만 취급한다(임시 파일로 리다이렉트, 실패 시 꼬리만 노출).
+ *
+ * <p>{@code --input-kind}가 {@code --file-type}과 따로 있는 이유: 네이티브 PDF에 삽입된
+ * 사진을 읽을 때는 형식이 pdf이면서 입력은 이미지 목록이다. 형식만으로 입력 해석을
+ * 추정하면 그 경우 PDF 렌더링 분기로 잘못 들어간다.
  *
  * <p>역할 분담은 HTTP 시절과 동일: 임베디드 이미지 추출은 Java Extractor가 담당하고,
  * 이 실행기는 "이미지/PDF → 구조화 텍스트" 추론만 맡긴다. 결과의 {@code markdown} 등
@@ -44,17 +49,26 @@ public final class ScanOcrRunner {
         return Files.isRegularFile(config.script());
     }
 
+    /** 실행 설정(이미지 OCR 사용 여부·최소 크기 포함). */
+    public ScanOcrConfig config() {
+        return config;
+    }
+
     /** 스캔 PDF 원본을 넘긴다(스크립트가 페이지 렌더링 후 VLM 추론). */
     public RawDocument parsePdf(Path pdf, String sourceFile) throws IOException {
-        return run(sourceFile, "pdf", List.of(pdf));
+        return run(sourceFile, "pdf", "document", List.of(pdf));
     }
 
-    /** 스캔 HWP/HWPX/HML에서 추출한 임베디드 이미지들을 넘긴다. */
+    /**
+     * 문서에서 뽑아 둔 이미지들을 넘긴다 — 스캔본의 페이지 이미지든,
+     * 네이티브 문서에 삽입된 사진·위치도든 같은 경로로 읽는다.
+     */
     public RawDocument parseImages(List<Path> images, String sourceFile, String fileType) throws IOException {
-        return run(sourceFile, fileType, images);
+        return run(sourceFile, fileType, "images", images);
     }
 
-    private RawDocument run(String sourceFile, String fileType, List<Path> inputs) throws IOException {
+    private RawDocument run(String sourceFile, String fileType, String inputKind, List<Path> inputs)
+            throws IOException {
         Path workDir = Files.createTempDirectory("extract-ocr-");
         Path outputJson = workDir.resolve("raw.json");
         Path log = workDir.resolve("ocr.log");
@@ -66,6 +80,8 @@ public final class ScanOcrRunner {
             command.add(sourceFile);
             command.add("--file-type");
             command.add(fileType);
+            command.add("--input-kind");
+            command.add(inputKind);
             command.add("--output");
             command.add(outputJson.toString());
             for (Path input : inputs) {

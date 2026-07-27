@@ -8,6 +8,7 @@ import kr.dogfoot.hwplib.object.bodytext.control.ControlType;
 import kr.dogfoot.hwplib.object.bodytext.control.table.Cell;
 import kr.dogfoot.hwplib.object.bodytext.control.table.Row;
 import kr.dogfoot.hwplib.object.bodytext.paragraph.Paragraph;
+import kr.dogfoot.hwplib.object.bodytext.paragraph.ParagraphList;
 import kr.dogfoot.hwplib.reader.HWPReader;
 
 import java.io.IOException;
@@ -57,6 +58,10 @@ public class HwpScanDetector implements ScanDetector {
      * 고시류 문서는 본문 대부분이 표 안에 있어, 표 셀을 세지 않으면 도장·로고
      * 이미지(BinData)만 가진 네이티브 문서가 스캔본으로 오판돼 OCR 경로로 새어 나간다
      * — HwplibExtractor가 표 셀을 읽는 것과 같은 경로로 세어야 한다.
+     *
+     * <p>셀 안의 문단을 다시 훑어 중첩 표까지 내려간다. 붙임 사진·위치도처럼
+     * 바깥 표 안에 설명 표를 한 겹 더 두는 서식이 흔한데, 한 겹만 세면 그 본문이
+     * 통째로 빠져 "텍스트 없음 + 사진 있음"으로 다시 스캔본 오판이 된다.
      */
     private static int accumulateText(Paragraph[] paragraphs, int textLen) throws Exception {
         for (Paragraph paragraph : paragraphs) {
@@ -76,10 +81,7 @@ public class HwpScanDetector implements ScanDetector {
                 }
                 for (Row row : ((ControlTable) control).getRowList()) {
                     for (Cell cell : row.getCellList()) {
-                        String cellText = cell.getParagraphList().getNormalString();
-                        if (cellText != null) {
-                            textLen += cellText.trim().length();
-                        }
+                        textLen = accumulateText(cellParagraphs(cell), textLen);
                         if (textLen >= MIN_TEXT_CHARS) {
                             return textLen;
                         }
@@ -88,5 +90,15 @@ public class HwpScanDetector implements ScanDetector {
             }
         }
         return textLen;
+    }
+
+    /** 표 셀의 문단 목록을 배열로 꺼낸다(중첩 표까지 같은 경로로 훑기 위해). */
+    private static Paragraph[] cellParagraphs(Cell cell) {
+        ParagraphList list = cell.getParagraphList();
+        Paragraph[] paragraphs = new Paragraph[list.getParagraphCount()];
+        for (int i = 0; i < paragraphs.length; i++) {
+            paragraphs[i] = list.getParagraph(i);
+        }
+        return paragraphs;
     }
 }

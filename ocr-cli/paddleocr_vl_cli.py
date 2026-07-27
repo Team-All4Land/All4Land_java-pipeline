@@ -6,21 +6,28 @@ Java 파이프라인이 서브프로세스로 아래처럼 호출한다::
     python3 paddleocr_vl_cli.py \
         --source-file <원본파일명> \
         --file-type <pdf|hwp|hwpx|hml> \
+        --input-kind <document|images> \
         --output <raw.json 출력 경로> \
         <입력 파일...>
 
 입력 파일 규약(역할 분담: 임베디드 이미지 추출은 Java가 담당):
-  * ``--file-type pdf`` : 스캔 PDF 원본 1개 (파이프라인이 페이지 렌더링)
-  * 그 외(hwp/hwpx/hml) : Java Extractor가 이미 뽑아 준 임베디드 스캔 이미지 경로 N개
+  * ``--input-kind document`` : 문서 원본 1개 (파이프라인이 페이지 렌더링). 현재는 스캔 PDF.
+  * ``--input-kind images``   : Java Extractor가 이미 뽑아 준 이미지 경로 N개.
+    스캔본의 페이지 이미지든, 네이티브 문서에 삽입된 사진·위치도든 동일하게 처리한다.
+
+``--input-kind``를 생략하면 ``--file-type``으로 추정한다(pdf면 document, 그 외 images).
 
 종료 코드 0 → ``--output`` 경로에 §4 raw JSON을 쓴다::
 
     {"source_file": "...", "file_type": "pdf", "is_scanned": true,
-     "content": [{"type": "paragraph", "text": "..."},
+     "content": [{"type": "paragraph", "text": "...", "source_image": "a_img0.png"},
                  {"type": "table", "n_rows": .., "n_cols": .., "cells": [...], "grid": [[...]]}],
      "images": [{"name": "...", "size": 1234}]}
 
   * 도장(seal)은 제외된 상태. 표 구조·문단은 그대로.
+  * ``source_image``: ``--input-kind images``일 때만 붙는 선택 필드로, 그 내용이 어느 입력
+    이미지에서 나왔는지를 가리킨다. 네이티브 문서의 사진 속 정보를 이미지별로
+    되짚어 raw JSON에 병합하려면 이 귀속이 필요하다.
   * stdout/stderr는 로그로만 취급된다(사람이 읽는 상태 메시지는 stderr).
 종료 코드 ≠0 → 처리 실패(로그를 stderr에 남긴다).
 
@@ -335,35 +342,49 @@ def blocks_to_raw(source_file: str, page_blocks: list[dict], images: list[dict])
     """구조화 블록을 §4 raw dict로 변환한다.
 
     text/제목 → paragraph, table → table(grid), image/chart/seal → 본문에서 제외.
+    페이지에 ``source_image``가 있으면 그 페이지에서 나온 항목마다 같은 값을 붙인다
+    (호출부가 이미지별로 내용을 되짚어 원본 raw JSON에 병합할 수 있도록).
     """
     content: list[dict] = []
     for page in page_blocks:
+        origin = page.get("source_image")
         for b in page.get("blocks", []):
             label = b.get("block_label")
             cont = (b.get("block_content") or "").strip()
             if not cont:
                 continue
+            item: dict | None = None
             if label == "table":
                 table = table_content_to_table_dict(cont)
                 if table and table["grid"]:
-                    content.append({"type": "table", **table})
+                    item = {"type": "table", **table}
             elif label in _IMAGE_LABELS or label == _SEAL_LABEL:
                 continue
             else:  # text, doc_title, paragraph_title, formula, header, footer ...
                 text = _plain_text(cont)
                 if text:
-                    content.append({"type": "paragraph", "text": text})
+                    item = {"type": "paragraph", "text": text}
+            if item is None:
+                continue
+            if origin:
+                item["source_image"] = origin
+            content.append(item)
     return {"source_file": source_file, "content": content, "images": images}
 
 
 # ---------------------------------------------------------------------------
 # 페이지 처리
 # ---------------------------------------------------------------------------
-def _process_page(res, stem: str, img_counter: list[int], page_no: int = 0):
+def _process_page(res, stem: str, img_counter: list[int], page_no: int = 0,
+                  fallback_input: str | None = None):
     """한 페이지 결과를 (블록정보, 이미지메타 목록)으로 변환한다(도장 제외).
 
-    반환: ({"page_index", "blocks"}, [{"name", "size"}, ...]).
+    반환: ({"page_index", "source_image", "blocks"}, [{"name", "size"}, ...]).
     파일명에는 숫자만 넣는다(Windows 호환).
+
+    ``source_image``는 이 페이지가 어느 입력 파일에서 나왔는지다. 결과에 실려 오는
+    ``input_path``를 우선 쓰고, 없으면 호출부가 넘긴 위치 기준 입력명으로 되돌린다
+    (``fallback_input``이 None이면 귀속을 붙이지 않는다 — 예: PDF 페이지 렌더링).
     """
     data = _as_dict(getattr(res, "json", None))
     md = _as_dict(getattr(res, "markdown", None))
@@ -376,6 +397,11 @@ def _process_page(res, stem: str, img_counter: list[int], page_no: int = 0):
     page_index = data.get("page_index")
     page_tag = page_index if isinstance(page_index, int) else page_no
     blocks = data.get("parsing_res_list") or []
+
+    source_image = None
+    if fallback_input is not None:
+        input_path = data.get("input_path")
+        source_image = _basename(input_path) if input_path else fallback_input
 
     # 도장(seal) 블록의 이미지 경로를 수집해 제외 대상으로 삼는다
     seal_bases: set[str] = set()
@@ -399,20 +425,21 @@ def _process_page(res, stem: str, img_counter: list[int], page_no: int = 0):
         name = f"{stem}_p{page_tag}_{img_counter[0]}.png"
         images_meta.append({"name": name, "size": len(_png_bytes(pil))})
 
-    return {"page_index": page_index, "blocks": kept_blocks}, images_meta
+    return {"page_index": page_index, "source_image": source_image, "blocks": kept_blocks}, images_meta
 
 
-def _run(inputs: list[str], file_type: str, source_file: str,
+def _run(inputs: list[str], file_type: str, input_kind: str, source_file: str,
          pipeline_version: str, device: str | None) -> dict:
     """입력을 VLM으로 추론해 §4 raw dict를 만든다.
 
-    pdf는 원본 PDF를, 그 외는 Java가 넘긴 이미지 경로들을 그대로 predict에 넣는다
-    (임베디드 이미지 추출은 Java 담당이므로 여기서 하지 않는다).
+    ``document``는 원본 문서 1개를(파이프라인이 페이지 렌더링), ``images``는 Java가 넘긴
+    이미지 경로들을 그대로 predict에 넣는다(임베디드 이미지 추출은 Java 담당).
+    ``images``일 때만 결과 항목에 어느 이미지에서 나왔는지(source_image)를 붙인다.
     """
     pipeline = _get_pipeline(pipeline_version, device)
     stem = Path(source_file).stem
 
-    if file_type == "pdf":
+    if input_kind == "document":
         output = pipeline.predict(str(inputs[0]))
     else:
         output = pipeline.predict([str(p) for p in inputs])
@@ -421,7 +448,10 @@ def _run(inputs: list[str], file_type: str, source_file: str,
     images_meta: list[dict] = []
     img_counter = [0]
     for page_no, res in enumerate(output):
-        block_info, page_imgs = _process_page(res, stem, img_counter, page_no)
+        fallback = None
+        if input_kind == "images":
+            fallback = _basename(inputs[page_no]) if page_no < len(inputs) else ""
+        block_info, page_imgs = _process_page(res, stem, img_counter, page_no, fallback)
         page_blocks.append(block_info)
         images_meta.extend(page_imgs)
 
@@ -440,13 +470,18 @@ def main(argv=None) -> int:
     )
     parser.add_argument("--source-file", required=True, help="원본 파일명(raw JSON의 source_file)")
     parser.add_argument("--file-type", required=True, choices=["pdf", "hwp", "hwpx", "hml"],
-                        help="원본 형식. pdf면 입력은 PDF 1개, 그 외는 임베디드 이미지 경로들")
+                        help="원본 형식(raw JSON의 file_type). 입력 해석은 --input-kind가 결정한다")
+    parser.add_argument("--input-kind", default=None, choices=["document", "images"],
+                        help="입력 해석 방식. document=문서 원본 1개(페이지 렌더링), "
+                             "images=이미지 경로 N개. 기본은 --file-type으로 추정(pdf→document)")
     parser.add_argument("--output", required=True, help="raw JSON을 쓸 경로")
     parser.add_argument("--device", default=None, help="추론 장치(gpu:0/cpu 등). 기본 자동 감지")
     parser.add_argument("--pipeline-version", default=_PIPELINE_VERSION,
                         help=f"PaddleOCR-VL 파이프라인 버전(기본 {_PIPELINE_VERSION})")
     parser.add_argument("inputs", nargs="+", help="입력 파일 경로들")
     args = parser.parse_args(argv)
+    # --input-kind 미지정 시 기존 계약대로 추정한다(pdf 원본 1개 vs 이미지 N개).
+    input_kind = args.input_kind or ("document" if args.file_type == "pdf" else "images")
 
     missing = [p for p in args.inputs if not Path(p).exists()]
     if missing:
@@ -454,7 +489,7 @@ def main(argv=None) -> int:
         return 1
 
     try:
-        raw = _run(args.inputs, args.file_type, args.source_file,
+        raw = _run(args.inputs, args.file_type, input_kind, args.source_file,
                    args.pipeline_version, args.device)
     except (RuntimeError, OSError) as exc:
         print(f"[실패] {args.source_file}: {exc}", file=sys.stderr)

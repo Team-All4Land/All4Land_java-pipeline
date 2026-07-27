@@ -6,6 +6,7 @@ import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.detect.DetectorRegistry;
 import com.onnara.extract.engine.Extractor;
 import com.onnara.extract.engine.ExtractorRegistry;
+import com.onnara.extract.scan.ImageOcrEnricher;
 import com.onnara.extract.scan.ScanOcrRunner;
 
 import java.io.IOException;
@@ -26,6 +27,9 @@ import java.util.stream.Stream;
  * {@link #bindImagePaths}는 그 계약을 전제로 인덱스 매칭해 절대경로를 채운다.
  */
 final class PipelineSupport {
+
+    /** OCR가 본문에 기여했을 때 엔진 식별자에 덧붙이는 꼬리표(§6 documents.engine). */
+    private static final String OCR_ENGINE_SUFFIX = "+paddleocr-vl";
 
     /** 인스턴스화 방지 — pipeline/extract가 공유하는 정적 헬퍼 모음. */
     private PipelineSupport() {
@@ -60,55 +64,97 @@ final class PipelineSupport {
      * 파일 하나를 추출한다. {@code forcedExtractor}가 있으면 스캔 판별을 건너뛰고
      * 항상 해당 엔진으로 네이티브 추출한다({@code extract --engine} 옵션).
      *
+     * <p>스캔 PDF만 원본을 통째로 OCR 서브프로세스에 넘긴다(페이지 렌더링이 필요).
+     * 그 밖의 문서는 스캔 판정과 무관하게 <b>네이티브 추출 + 임베디드 이미지 OCR</b>을
+     * 함께 돌린다 — 판별이 어느 쪽으로 틀려도 잃는 게 없도록.
+     *
+     * <ul>
+     *   <li>사진이 대부분인 네이티브 문서를 스캔본으로 오판해도 문단·표가 그대로 남는다.</li>
+     *   <li>네이티브로 판정해도 사진·위치도 속 정보가 OCR로 raw JSON에 들어온다.</li>
+     * </ul>
+     *
      * @param outputDir 스키마/원시 JSON이 저장될 기준 폴더 — 이미지는 {@code outputDir/images}에 저장되고
      *                  {@code RawImage.path}는 저장된 이미지의 절대경로로 기록된다(ref_files.file_path 적재용).
+     * @param imageOcr  임베디드 이미지 OCR 실행기. null이면(스크립트 없음/옵션으로 끔) 이미지 OCR을 건너뛴다
      */
     static ExtractResult extractOne(Path file, Extractor forcedExtractor, Path outputDir,
-                                    boolean saveImages, ScanOcrRunner scanRunner) throws IOException {
+                                    boolean saveImages, ScanOcrRunner scanRunner,
+                                    ImageOcrEnricher imageOcr) throws IOException {
         String ext = extensionOf(file);
         String sourceFile = file.getFileName().toString();
-        Path imagesDir = outputDir.resolve("images");
+        boolean scanned = forcedExtractor == null && DetectorRegistry.isScanned(file);
 
-        if (forcedExtractor == null && DetectorRegistry.isScanned(file)) {
-            return extractScanned(file, ext, sourceFile, imagesDir, saveImages, scanRunner);
-        }
-
-        Extractor extractor = forcedExtractor != null ? forcedExtractor : ExtractorRegistry.forExtension(ext);
-        RawDocument raw = extractor.extractRaw(file);
-        if (saveImages && !raw.getImages().isEmpty()) {
-            List<Path> saved = extractor.saveImages(file, imagesDir);
-            bindImagePaths(raw, saved);
-        }
-        return new ExtractResult(raw, extractor.engineName());
-    }
-
-    /**
-     * 스캔본 경로: PDF는 원본 파일을, HWP/HWPX/HML은 Java가 추출한 임베디드 이미지들을
-     * PaddleOCR-VL 서브프로세스로 넘긴다(§1, §7). 결과의 images 메타는 우리가 로컬에 저장한
-     * 파일 목록으로 재구성한다 — 결과가 입력 이미지와 다른 목록/순서를 돌려줄 수 있어서다.
-     */
-    private static ExtractResult extractScanned(Path file, String ext, String sourceFile,
-                                                Path imagesDir, boolean saveImages,
-                                                ScanOcrRunner scanRunner) throws IOException {
-        if ("pdf".equals(ext)) {
+        if (scanned && "pdf".equals(ext)) {
             RawDocument raw = scanRunner.parsePdf(file, sourceFile);
             return new ExtractResult(raw, "paddleocr-vl");
         }
 
-        Extractor nativeExtractor = ExtractorRegistry.forExtension(ext);
-        Path targetDir = saveImages ? imagesDir : Files.createTempDirectory("extract-scan-");
-        List<Path> saved = nativeExtractor.saveImages(file, targetDir);
+        Extractor extractor = forcedExtractor != null ? forcedExtractor : ExtractorRegistry.forExtension(ext);
+        RawDocument raw = extractor.extractRaw(file);
+        raw.setScanned(scanned);
+        return new ExtractResult(raw,
+                extractor.engineName() + ocrImages(file, raw, ext, extractor, outputDir, saveImages, scanned, imageOcr));
+    }
 
-        RawDocument raw = scanRunner.parseImages(saved, sourceFile, ext);
-        raw.setImages(new ArrayList<>());
-        for (Path p : saved) {
-            RawImage image = new RawImage(p.getFileName().toString(), Files.size(p));
-            if (saveImages) {
-                image.setPath(absolutePath(p));
-            }
-            raw.getImages().add(image);
+    /**
+     * 임베디드 이미지를 디스크에 쓰고 OCR해 raw에 병합한다. 엔진 식별자에 덧붙일 꼬리표를 반환한다
+     * (기여가 없으면 빈 문자열).
+     *
+     * <p>스캔 판정본은 이미지가 사실상 유일한 본문 출처라 OCR 실패를 그대로 올려 파일을
+     * [실패]로 격리하고, 네이티브 판정본은 이미 뽑아 둔 문단·표가 있으므로 실패해도
+     * 경고만 남기고 계속한다.
+     */
+    private static String ocrImages(Path file, RawDocument raw, String ext, Extractor extractor,
+                                    Path outputDir, boolean saveImages, boolean scanned,
+                                    ImageOcrEnricher imageOcr) throws IOException {
+        if (raw.getImages().isEmpty()) {
+            return "";
         }
-        return new ExtractResult(raw, "paddleocr-vl");
+        boolean wantOcr = imageOcr != null;
+        if (!saveImages && !wantOcr) {
+            return "";
+        }
+
+        // --no-images여도 OCR에는 실제 파일이 필요하므로 임시 폴더에 뽑고 나중에 지운다
+        Path tempDir = saveImages ? null : Files.createTempDirectory("extract-ocr-images-");
+        try {
+            List<Path> saved = extractor.saveImages(file, saveImages ? outputDir.resolve("images") : tempDir);
+            if (saveImages) {
+                bindImagePaths(raw, saved);
+            }
+            if (!wantOcr || saved.isEmpty()) {
+                return "";
+            }
+            try {
+                return imageOcr.enrich(raw, saved, ext) > 0 ? OCR_ENGINE_SUFFIX : "";
+            } catch (IOException | RuntimeException e) {
+                if (scanned) {
+                    throw e;
+                }
+                System.out.println("[경고] " + file + ": 이미지 OCR을 건너뜁니다 — " + e.getMessage());
+                return "";
+            }
+        } finally {
+            deleteTempDir(tempDir);
+        }
+    }
+
+    /** 임시 이미지 폴더를 통째로 지운다(정리 실패는 무시 — OS가 정리한다). */
+    private static void deleteTempDir(Path dir) {
+        if (dir == null) {
+            return;
+        }
+        try (Stream<Path> walk = Files.walk(dir)) {
+            walk.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                    // 개별 파일 정리 실패는 무시
+                }
+            });
+        } catch (IOException ignored) {
+            // 임시 폴더 정리 실패는 무시
+        }
     }
 
     /** saveImages 반환 순서 == raw.images 순서 계약을 이용해 절대 경로를 채운다. */
