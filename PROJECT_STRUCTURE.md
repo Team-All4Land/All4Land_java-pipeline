@@ -33,7 +33,11 @@ Java CLI: extract.jar pipeline (배치 진입점, picocli)
         ▼
 raw JSON (공통 계약 §4 — Python 버전과 동일, Jackson DTO)
         ▼
-Mapper.mapToSchema (라벨 정규화 + 동의어 사전 매핑 + 값 정규화)
+TableInterpreter.interpret (표 서식 판정 + 라벨:값 추출 + 사전 매핑 판정)
+        ▼
+표 해석 JSON §5.1 {"tables": [...]}   ← 중간 산출물 (`--tables` 지정 시 저장)
+        ▼
+Mapper.mapToSchema (문단 메타·라벨 + 표 해석 결과 적용 + 값 정규화)
         ▼
 표준 스키마 JSON {"source_file", "records": [...], "images": [...]}
         ▼
@@ -43,6 +47,10 @@ PostgreSQL (documents / ref_files 2테이블) + images/ 폴더
 ```
 
 핵심 원칙 유지: **판별(detect) → 추출(engine) → 매핑(common) → 적재(db) 4계층 분리**.
+
+표 해석을 매핑에서 떼어낸 이유: 표준 스키마는 "어느 필드가 무슨 값이 됐는가"만 남기고
+표 구조를 버린다. 값이 틀렸을 때 **표를 잘못 읽은 것인지 사전에 라벨이 없는 것인지**
+구분할 수 없어, 그 사이를 드러내는 단계를 두었다(§5.1).
 raw JSON 계약이 Python 버전과 동일하므로, 이행 기간 동안 **같은 픽스처를 두 파이프라인에
 넣어 결과를 교차 검증**할 수 있다.
 
@@ -77,11 +85,21 @@ extract-java/
 │   │   │   ├── RawParagraph.java, RawTable.java, RawCell.java, RawImage.java
 │   │   │   ├── NoticeRecord.java#     15개 표준 필드 + extras (java record)
 │   │   │   └── SchemaResult.java#     source_file / records / images
-│   │   ├── Synonyms.java        #   LABEL_SYNONYMS 동의어 사전 + normalizeLabel + 괄호 필드 분리
+│   │   ├── table/               #   표 해석 중간 단계 (§5.1)
+│   │   │   ├── TableInterpreter.java # raw 표 → 서식 판정 + 라벨:값 추출
+│   │   │   ├── TableGrid.java   #     병합(span) 반영 논리 격자 — 없으면 연속 중복 근사
+│   │   │   ├── TableDoc.java    #     *.tables.json 최상위 (+ 미매핑 라벨 요약)
+│   │   │   └── InterpretedTable / TableRecord / TableFact / TableColumn / TableKind
+│   │   ├── Synonyms.java        #   동의어 사전 로더(resources/synonyms.json) + normalizeLabel
+│   │   ├── Labels.java          #   "라벨 : 값" 줄 스캔 + extras 라벨 채택 기준 (문단·표 공용)
 │   │   ├── Mapper.java          #   mapToSchema(RawDocument) → SchemaResult
 │   │   ├── Heuristics.java      #   고시문 제목 추정(guessTitleFromTables), 캡션 매칭
 │   │   ├── Tables.java          #   그리드 유틸 (cleanGrid, gridToTable)
 │   │   └── Address.java         #   주소 추출 휴리스틱
+│   │
+│   ├── docs/                    # ★ 검토용 문서 생성 (사전·미매핑 라벨 리포트)
+│   │   ├── SynonymsDoc.java     #   synonyms.json → docs/SYNONYMS.md
+│   │   └── ExtrasReport.java    #   *.schema.json 집계 → docs/EXTRAS_REVIEW.md
 │   │
 │   ├── engine/                  # ★ 2차 분기: 확장자별 네이티브 추출 엔진
 │   │   ├── Extractor.java       #   인터페이스: supports(ext) / extractRaw(path) / saveImages(path, dir)
@@ -108,8 +126,12 @@ extract-java/
 │       └── DbLoader.java        #   SchemaResult → documents/ref_files 적재 (PostgreSQL JDBC)
 │
 ├── .env.example                # 리눅스 서버 배포용 환경변수 예시 (.env로 복사; 우선순위 OS 환경변수 > .env > properties)
+├── docs/                       # 생성 문서 (dict 서브커맨드 산출물 — 손으로 고치지 않는다)
+│   ├── SYNONYMS.md             #   동의어 사전 검토 문서
+│   └── EXTRAS_REVIEW.md        #   미매핑 라벨 빈도 + 표준 필드 채움률
 ├── src/main/resources/
 │   ├── application.properties   # db.url=jdbc:postgresql://... , 풀 설정, ocr.cli.* 등 (기본값)
+│   ├── synonyms.json           # ★ 동의어 사전 본문 (단일 정의처 — 설명·예시 포함)
 │   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL, V2 = ref_files 절대경로, 이후 누적)
 │
 ├── src/test/java/...            # JUnit 5 — detect / mapper / 각 extractor / scan / db
@@ -190,6 +212,62 @@ Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 �
 | `applicant_name` / `applicant_address` | 신고자·피허가자 성명(상호) / 주소 |
 | `remarks` | 비고 |
 | `extras` | 매핑되지 않은 라벨:값 쌍 보존 (동의어 사전 보강용) |
+
+## 5.1. 표 해석 중간 산출물 (`*.tables.json`)
+
+`TableInterpreter.interpret(raw)`의 출력. **DB에 적재되지 않는 진단용 산출물**이며,
+`pipeline --tables` 또는 `tables` 서브커맨드로 저장한다.
+
+고시문은 정보 대부분이 표에 있고, 표 서식이 기관마다 다르다. 표준 스키마만 보면
+값이 왜 비었는지(표를 잘못 읽었나 / 라벨이 사전에 없나) 알 수 없으므로,
+**표를 어떻게 읽었는지를 그대로 남긴다.**
+
+```json
+{
+  "source_file": "고시양식.hml", "file_type": "hml", "engine": "hml-dom",
+  "summary": { "table_count": 2, "fact_count": 9,
+               "mapped_count": 7, "unmapped_count": 2,
+               "unmapped_labels": ["공작물의종류", "수면의종류"] },
+  "tables": [{
+    "index": 1, "kind": "label_value", "n_rows": 9, "n_cols": 2,
+    "header_rows": 0, "span_aware": false,
+    "columns": [],
+    "records": [{ "row": -1, "fields": [
+      { "origin": "label_pair", "row": 2, "col": 1,
+        "raw_label": "점용·사용 장소", "label": "점용·사용장소",
+        "canonical": "location", "mapped": true,
+        "value": "인천광역시 동구 만석동 2-174번지 인근 공유수면" },
+      { "origin": "label_pair", "row": 7, "col": 1,
+        "raw_label": "공작물의 종류", "label": "공작물의종류",
+        "canonical": null, "mapped": false, "value": "선가대(6기)" }
+    ]}]
+  }]
+}
+```
+
+| 필드 | 의미 |
+|---|---|
+| `kind` | `header_list`(헤더+데이터 목록표) / `label_value`(라벨·값 서식표) / `unknown` |
+| `header_rows` | 목록표에서 헤더로 쓴 행 수 (2단 병합 헤더면 2) |
+| `span_aware` | 병합 정보로 정확히 읽었는지. `false`면 내용 비교 근사(PDF·OCR 경로) |
+| `columns` | 목록표의 열별 헤더 해석 (열 인덱스 → 표준 필드) |
+| `records[].row` | 목록표는 원본 데이터 행 인덱스, 서식표는 `-1`(문서 전체 기여) |
+| `fields[].origin` | `label_pair`(라벨/값 칸 쌍) / `in_cell`(셀 안 "라벨: 값") / `header_column` |
+| `fields[].row`/`col` | 값이 있던 **원본 격자 좌표** (병합 접기 전 기준) |
+| `fields[].canonical` | 매핑된 표준 필드. `null`이면 미매핑 → `extras`로 간다 |
+
+표 읽기 규칙:
+
+1. **목록표** — 상단 1~2행의 셀 중 60% 이상이 표준 필드로 매핑되면 헤더로 보고,
+   이후 각 행을 독립 레코드로 만든다. 2단 병합 헤더는 열마다 아래쪽(더 구체적인)
+   헤더를 우선한다. 헤더는 잡혔는데 데이터 행에서 아무 값도 못 얻으면 서식표로 되돌린다.
+2. **서식표 라벨/값 칸 쌍** — 값은 **라벨 바로 다음 칸만** 본다. 빈 칸을 건너뛰며
+   값을 찾으면 병합 셀로 값 칸이 빈 서식에서 옆 필드의 라벨을 값으로 삼킨다.
+3. **셀 안 라벨:값** — 문서 전체가 1열 표(테두리 박스) 안에 든 서식용.
+
+병합 셀 처리: 엔진이 `cells`에 span을 채웠으면(hml·hwpx) 셀 경계를 정확히 알고 접는다.
+span이 없으면(PDF·OCR) 옆 칸과 내용이 같은 것을 병합으로 간주하는 근사로 접고,
+그 사실을 `span_aware: false`로 표시한다.
 
 ## 6. DB 스키마 (PostgreSQL — resources/db/migration/V1__init.sql)
 
@@ -321,14 +399,16 @@ java -jar extract.jar <서브커맨드> [옵션]
 
 | 명령 | 역할 |
 |---|---|
-| `pipeline -i input/ -o out/ [--no-db]` | 배치: 판별→추출→매핑→적재 일괄 (기존 pipeline.mjs 대체) |
+| `pipeline -i input/ -o out/ [--no-db] [--raw] [--tables]` | 배치: 판별→추출→표해석→매핑→적재 일괄 (기존 pipeline.mjs 대체) |
 | `detect 파일... [--json]` | 스캔 여부 분류 결과 출력 |
 | `extract 파일... -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (엔진 강제 지정 가능) |
+| `tables raw.json -o out/ [--summary]` | 표 해석 전용 (raw JSON → 표 해석 JSON §5.1) |
 | `map raw.json -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
 | `load out/*.schema.json` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
+| `dict [-o docs/SYNONYMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 (§9.1) |
 
 - 공통 옵션 의미는 Python 버전과 동일 (`--raw`: 원시 결과 포함,
-  `--no-images`: 이미지 저장 생략).
+  `--tables`: 표 해석 중간 결과 포함, `--no-images`: 이미지 저장 생략).
 - **DB 접속·OCR 실행 정보는 OS 환경변수 > `.env` > `application.properties`
   순으로 읽는다**(`db.*`, `ocr.cli.*`) — CLI 재정의 옵션은 두지 않는다.
   리눅스 서버 배포 시에는 `.env.example`을 `.env`로 복사해 관리한다.
@@ -345,8 +425,9 @@ java -jar extract.jar <서브커맨드> [옵션]
 3) 파일별: DetectorRegistry 판별
      스캔본  → (HWP/HWPX/HML이면 임베디드 이미지 추출 후) ScanOcrRunner 서브프로세스 → raw JSON
      네이티브 → ExtractorRegistry에서 확장자 매칭 Extractor → raw JSON
-4) Mapper.mapToSchema → out/<이름>.schema.json 저장
-5) DbLoader로 documents/ref_files 적재
+4) TableInterpreter.interpret → (--tables 시) out/<이름>.tables.json 저장
+5) Mapper.mapToSchema(표 해석 결과 재사용) → out/<이름>.schema.json 저장
+6) DbLoader로 documents/ref_files 적재
 ```
 
 ## 9. 새 확장자(형식)·엔진 통합 절차
@@ -361,11 +442,46 @@ java -jar extract.jar <서브커맨드> [옵션]
 3. **레지스트리 연결**: `ExtractorRegistry`에 등록. CLI·pipeline은 수정 불필요
    (확장자 라우팅이 레지스트리 기반이므로).
 4. **동의어 보강**: 새 문서에서 매핑 안 된 라벨이 `extras`에 남으면
-   `Synonyms`의 LABEL_SYNONYMS에 추가.
+   `src/main/resources/synonyms.json`에 추가 (절차는 §9.1).
 5. **DB는 수정 불필요**: raw JSON 계약만 지키면 `DbLoader`가 그대로 동작.
 6. **테스트**: `src/test/resources/fixtures/`에 픽스처 추가, JUnit 회귀 테스트 작성.
    Python 버전 픽스처를 공유해 두 구현의 결과를 교차 검증.
 7. **문서화**: README 형식 표에 행 추가.
+
+## 9.1. 동의어 사전 보강 절차
+
+기관마다 같은 필드를 다른 라벨로 부른다(`고시일자` / `공고일자` / `공시일자`).
+문서를 일일이 보고 판별하는 대신, **매핑 안 된 라벨을 전량 모아 빈도로 판단**한다.
+
+사전 본문은 `src/main/resources/synonyms.json` 하나다. Java 코드에 사전을 두지 않는
+이유는 검토자가 코드를 열지 않고 고칠 수 있어야 하고, 필드 설명·예시를 사전과 같은
+곳에 두어야 문서와 사전이 어긋나지 않기 때문이다.
+
+```
+1) 전량 처리        java -jar extract.jar pipeline -i input/ -o out/ --tables
+2) 리포트 생성      java -jar extract.jar dict --review out/
+                    → docs/SYNONYMS.md       (사전 검토 문서)
+                    → docs/EXTRAS_REVIEW.md  (미매핑 라벨 빈도 + 필드 채움률)
+3) 검토·판단        빈도 높은 라벨이 기존 필드와 같은 뜻인가?
+                      같음   → 해당 필드의 synonyms에 추가
+                      다름   → 여러 기관에서 반복되면 새 표준 컬럼 승격 검토
+                      드묾   → extras에 두고 다음 검토 때 재확인
+4) 사전 수정        src/main/resources/synonyms.json
+5) 회귀 확인        mvn test   (중복 등재는 기동 시 오류로 중단됨)
+6) 재적재           pipeline 재실행 — 파일 단위 멱등 적재라 기존 문서도 갱신되어
+                    extras에 있던 값이 표준 컬럼으로 승격된다
+```
+
+**표본이 아니라 전량을 세는 이유**: 라벨 표기 습관은 기관 단위로 몰려 다닌다.
+일부만 표본으로 보면 특정 기관의 표기가 통째로 빠져, 그 기관 문서에서만 필드가
+비는 현상이 뒤늦게 드러난다.
+
+**충돌 방지**: 같은 라벨이 두 필드에 등재되면 어느 쪽으로 매핑될지가 등재 순서에
+좌우된다. 사전 로드 시 정규화 결과가 중복되면 **기동을 중단**시켜 배포 전에 드러낸다.
+
+**값이 이상할 때**: 라벨이 깨져 보이거나 값이 문장 조각이면 사전 문제가 아니라
+표 읽기 문제일 수 있다. 해당 문서의 `*.tables.json`(§5.1)에서 원본 좌표와
+서식 판정(`kind`, `span_aware`)을 확인한다.
 
 ## 10. 의존성 요약
 
