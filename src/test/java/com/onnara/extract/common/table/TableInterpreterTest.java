@@ -138,6 +138,55 @@ class TableInterpreterTest {
                 "데이터가 없으면 목록표로 확정하면 안 됨");
     }
 
+    /**
+     * 실제 OCR 산출(여수 승인사항 고시) 미러: 가운뎃점이 마침표로 읽히고("점용.사용")
+     * 셀 안에 시각적 줄바꿈이 남은 2단 병합 헤더 목록표.
+     *
+     * <p>헤더가 사전과 매칭되지 않으면 목록표 판정이 통째로 실패해 데이터 행이
+     * 라벨/값 쌍으로 오독된다 — "여수 섬 요트투어 기반구축"이 extras 키가 되고
+     * "1,307 / 130"이 그 값이 되는 회귀를 막는다.
+     */
+    @Test
+    void interpretsOcrHeaderListWithDotSeparatorsAndLineBreaks() {
+        RawTable table = Tables.gridToTable(List.of(
+                List.of("승인번호\n(승인일)", "점용.사용\n장소", "점용.사용\n목적", "점용.사용\n면적(㎡)",
+                        "점용.사용 기간", "피승인자", "피승인자"),
+                List.of("승인번호\n(승인일)", "점용.사용\n장소", "점용.사용\n목적", "점용.사용\n면적(㎡)",
+                        "점용.사용 기간", "성  명", "주  소"),
+                List.of("2025-035\n('25. 11. 27.)", "여수시 남면 두모리\n945-19번지 /\n유송리\n산334-1번지 지선",
+                        "여수 섬 요트투어\n기반구축", "1,307 /\n130", "'25. 11. 27. ~ '40. 11. 26.",
+                        "전라남도 여수시\n시청로 1\n(학동)", "여수시장\n(섬박람회대책과)")));
+
+        InterpretedTable result = TableInterpreter.interpret(List.of(table)).get(0);
+
+        assertEquals(TableKind.HEADER_LIST, result.kind(), "헤더 목록표로 판정돼야 함");
+        assertEquals(2, result.headerRows());
+        assertEquals(1, result.records().size(), "데이터 행 1건만 레코드");
+
+        // 마침표로 읽힌 가운뎃점이 정규화돼 열별 표준 필드로 매핑돼야 한다
+        assertEquals("approval_no", result.columns().get(0).canonical());
+        assertEquals("location", result.columns().get(1).canonical());
+        assertEquals("work_description", result.columns().get(2).canonical());
+        assertEquals("area", result.columns().get(3).canonical());
+        assertEquals("work_period", result.columns().get(4).canonical());
+        assertEquals("applicant_name", result.columns().get(5).canonical());
+        assertEquals("applicant_address", result.columns().get(6).canonical());
+
+        // 값의 시각적 줄바꿈은 한 칸 공백으로 접힌다
+        TableFact location = factFor(result, "점용·사용장소");
+        assertNotNull(location);
+        assertEquals("여수시 남면 두모리 945-19번지 / 유송리 산334-1번지 지선", location.value());
+        TableFact area = factFor(result, "점용·사용면적(㎡)");
+        assertNotNull(area);
+        assertEquals("1,307 / 130", area.value());
+
+        // 데이터 값이 라벨:값 쌍으로 오독돼 extras로 새지 않아야 한다
+        assertTrue(result.records().stream()
+                        .flatMap(r -> r.fields().stream())
+                        .allMatch(TableFact::mapped),
+                "모든 값이 헤더 열 라벨로 매핑돼야 함");
+    }
+
     /** 라벨을 하나도 못 읽은 표는 unknown으로 남고 레코드를 만들지 않는다. */
     @Test
     void emptyTableIsUnknown() {

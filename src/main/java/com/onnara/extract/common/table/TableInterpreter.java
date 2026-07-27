@@ -130,7 +130,7 @@ public final class TableInterpreter {
             List<String> row = grid.get(r);
             List<TableFact> facts = new ArrayList<>();
             for (int c = 0; c < row.size() && c < columns.size(); c++) {
-                String value = row.get(c);
+                String value = flatten(row.get(c));
                 if (value.isEmpty()) {
                     continue;
                 }
@@ -158,7 +158,8 @@ public final class TableInterpreter {
 
     /**
      * 열별 헤더 라벨을 읽는다. 병합 헤더에서는 아래쪽 행(더 구체적인 하위 라벨)부터
-     * 표준 필드를 찾고, 못 찾으면 위쪽 행의 라벨을 extras 키 후보로 남긴다.
+     * 표준 필드를 찾고, 안 되면 상·하위를 합친 형태("피승인자 성명")로도 사전을
+     * 조회하며, 그래도 못 찾으면 하위 라벨을 extras 키 후보로 남긴다.
      */
     private static List<TableColumn> readHeaderColumns(List<List<String>> grid,
                                                        TableGrid.Cleaned cleaned,
@@ -166,26 +167,43 @@ public final class TableInterpreter {
         int nCols = grid.get(0).size();
         List<TableColumn> columns = new ArrayList<>(nCols);
         for (int c = 0; c < nCols; c++) {
-            Optional<String> canonical = Optional.empty();
-            String rawLabel = "";
-            for (int r = headerRows - 1; r >= 0 && canonical.isEmpty(); r--) {
+            // 아래 행(하위 라벨)부터 위 행(상위 라벨) 순으로, 세로 병합 반복은 접는다
+            List<String> levels = new ArrayList<>();
+            for (int r = headerRows - 1; r >= 0; r--) {
                 List<String> row = grid.get(r);
                 String cell = c < row.size() ? row.get(c) : "";
-                if (cell.isEmpty()) {
-                    continue;
+                if (!cell.isEmpty()
+                        && (levels.isEmpty() || !levels.get(levels.size() - 1).equals(cell))) {
+                    levels.add(cell);
                 }
-                if (rawLabel.isEmpty()) {
-                    rawLabel = cell;
-                }
-                canonical = Synonyms.canonicalFor(cell);
+            }
+            String rawLabel = levels.isEmpty() ? "" : levels.get(0);
+            Optional<String> canonical = Optional.empty();
+            for (String level : levels) {
+                canonical = Synonyms.canonicalFor(level);
                 if (canonical.isPresent()) {
-                    rawLabel = cell;
+                    rawLabel = level;
+                    break;
+                }
+            }
+            // 하위 라벨 단독으로 못 찾으면 "상위 하위" 합성 형태로 조회한다
+            // (사전에 "피승인자 성명"처럼 등재된 항목 대응)
+            for (int i = 1; i < levels.size() && canonical.isEmpty(); i++) {
+                String composite = levels.get(i) + " " + levels.get(0);
+                canonical = Synonyms.canonicalFor(composite);
+                if (canonical.isPresent()) {
+                    rawLabel = composite;
                 }
             }
             columns.add(new TableColumn(cleaned.colIndex()[c], rawLabel,
                     Synonyms.normalizeLabel(rawLabel), canonical.orElse(null)));
         }
         return columns;
+    }
+
+    /** 값 안의 줄바꿈·연속 공백을 한 칸으로 접는다 — OCR 셀의 시각적 줄바꿈이 값에 남지 않게. */
+    private static String flatten(String value) {
+        return value.replaceAll("[\\s\\u00A0\\u3000]+", " ").trim();
     }
 
     /** 행이 헤더로 보이는지: 병합 반복 제거 후 남은 라벨 셀 2개 이상 + 매핑 비율 충족. */
@@ -234,7 +252,7 @@ public final class TableInterpreter {
                     continue;
                 }
                 TableGrid.Cell valueCell = row.get(j + 1);
-                String value = valueCell.text();
+                String value = flatten(valueCell.text());
                 if (value.isEmpty() || Synonyms.canonicalFor(value).isPresent()) {
                     continue;
                 }
