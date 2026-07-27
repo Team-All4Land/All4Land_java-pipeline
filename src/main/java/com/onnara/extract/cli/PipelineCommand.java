@@ -3,6 +3,9 @@ package com.onnara.extract.cli;
 import com.onnara.extract.common.AppProperties;
 import com.onnara.extract.common.Mapper;
 import com.onnara.extract.common.model.SchemaResult;
+import com.onnara.extract.common.table.InterpretedTable;
+import com.onnara.extract.common.table.TableDoc;
+import com.onnara.extract.common.table.TableInterpreter;
 import com.onnara.extract.db.DataSourceFactory;
 import com.onnara.extract.db.DbLoader;
 import com.onnara.extract.db.DbSchema;
@@ -43,6 +46,10 @@ public class PipelineCommand implements Callable<Integer> {
     @Option(names = "--raw", description = "원시 결과(*.raw.json)도 함께 저장")
     boolean raw;
 
+    /** true면 표 해석 중간 결과(*.tables.json)도 저장 — 매핑 진단용. */
+    @Option(names = "--tables", description = "표 해석 중간 결과(*.tables.json)도 함께 저장")
+    boolean tables;
+
     /** true면 이미지 파일 저장을 생략. */
     @Option(names = "--no-images", description = "이미지 저장 생략")
     boolean noImages;
@@ -79,11 +86,20 @@ public class PipelineCommand implements Callable<Integer> {
                 }
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
                         file, null, output, !noImages, scanRunner);
-                SchemaResult schema = Mapper.mapToSchema(result.raw(), result.engine());
+                // 표 해석은 한 번만 하고 중간 산출물 저장과 매핑이 함께 쓴다
+                List<InterpretedTable> interpreted = TableInterpreter.interpret(
+                        TableInterpreter.tablesOf(result.raw()));
+                SchemaResult schema = Mapper.mapToSchema(result.raw(), result.engine(), interpreted);
 
                 String stem = PipelineSupport.stem(file);
                 if (raw) {
                     PipelineSupport.writeJson(result.raw(), output.resolve(stem + ".raw.json"));
+                }
+                if (tables) {
+                    PipelineSupport.writeJson(
+                            TableDoc.of(result.raw().getSourceFile(), result.raw().getFileType(),
+                                    result.raw().isScanned(), result.engine(), interpreted),
+                            output.resolve(stem + ".tables.json"));
                 }
                 PipelineSupport.writeJson(schema, output.resolve(stem + ".schema.json"));
                 schemas.add(schema);

@@ -1,20 +1,30 @@
 package com.onnara.extract.common;
 
+import com.fasterxml.jackson.databind.JsonNode;
+
+import java.io.InputStream;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
  * 라벨 동의어 사전 + 라벨 정규화.
  *
- * <p>고시문마다 같은 필드를 다른 라벨로 부르므로(예: 위치/소재지/점용·사용의 장소),
+ * <p>고시문마다 같은 필드를 다른 라벨로 부르므로(예: 고시일자/공고일자),
  * 정규화한 라벨을 canonical 필드명으로 매핑한다. 매핑 안 된 라벨은 extras에
- * 보존되며, 빈도가 쌓이면 이 사전에 추가한다(§9 동의어 보강 절차).
+ * 보존되며, 빈도가 쌓이면 사전에 추가한다(§9 동의어 보강 절차).
+ *
+ * <p>사전 본문은 {@code src/main/resources/synonyms.json}이 단일 정의처다 —
+ * 필드 설명·예시까지 함께 담아 {@code dict} 서브커맨드가 검토용 문서를 생성한다.
+ * 동의어는 사람이 읽는 형태로 적고 로드 시 {@link #normalizeLabel}로 정규화하므로,
+ * 사전 편집자는 정규화 규칙을 몰라도 된다.
  *
  * <p>{@code work_period}는 가상 필드 — Mapper가 기간을 start/end로 분리한다.
  */
@@ -23,54 +33,158 @@ public final class Synonyms {
     /** 기간 가상 필드명. NoticeRecord에는 없고 Mapper가 분리 처리한다. */
     public static final String WORK_PERIOD = "work_period";
 
+    /** 사전 리소스 경로 — 클래스패스 기준. */
+    private static final String RESOURCE = "/synonyms.json";
+
+    // 선행 번호 목록: "1." "1)" "5 "(점 생략) "가." "나)" "①" "-" "·" 등
+    // 주의: 아래 사전 로드가 normalizeLabel을 호출하므로 이 패턴이 먼저 초기화돼야 한다.
+    private static final Pattern LEADING_NUMBERING = Pattern.compile(
+            "^\\s*(?:[-–—·o○]\\s*)?(?:\\d{1,2}\\s*[.)]|\\d{1,2}(?=\\s)|[가-힣]\\s*[.)]|[①-⑳㉮-㉻])?\\s*");
+
+    /** 사전 파일에서 읽은 필드 정의 목록(선언 순서 = 문서 출력 순서). */
+    private static final List<FieldSpec> FIELDS;
+
+    /** 사전 파일의 버전 문자열 — 생성 문서에 표기한다. */
+    private static final String VERSION;
+
+    static {
+        JsonNode root = readResource();
+        FIELDS = loadFields(root);
+        VERSION = root.path("version").asText("unknown");
+    }
+
     /** canonical 필드 → 정규화된 동의어 라벨 목록. */
     public static final Map<String, List<String>> LABEL_SYNONYMS = createDictionary();
 
     /** 정규화된 라벨 → canonical 필드 (역인덱스). */
     private static final Map<String, String> LOOKUP = createLookup();
 
-    // 선행 번호 목록: "1." "1)" "5 "(점 생략) "가." "나)" "①" "-" "·" 등
-    private static final Pattern LEADING_NUMBERING = Pattern.compile(
-            "^\\s*(?:[-–—·o○]\\s*)?(?:\\d{1,2}\\s*[.)]|\\d{1,2}(?=\\s)|[가-힣]\\s*[.)]|[①-⑳㉮-㉻])?\\s*");
+    /**
+     * 사전의 필드 1건 — 매핑에 쓰이는 동의어와, 검토 문서에 쓰이는 설명·예시를 함께 담는다.
+     *
+     * @param canonical   표준 필드명(= NoticeRecord 필드 키)
+     * @param display     사람이 읽는 필드 표시명
+     * @param dbColumn    대응하는 documents 테이블 컬럼명
+     * @param type        값의 성격(text / date / date_range) — 정규화 방식을 설명한다
+     * @param virtual     NoticeRecord에 대응 필드가 없는 가상 필드 여부(work_period)
+     * @param description 필드가 무엇을 담는지에 대한 설명
+     * @param synonyms    정규화된 동의어 라벨 목록
+     * @param rawSynonyms 사전 파일에 적힌 원문 동의어 목록(문서 출력용)
+     * @param examples    실제 고시문에서 관측된 값 예시
+     * @param notes       검토자를 위한 주의사항(없으면 null)
+     */
+    public record FieldSpec(String canonical, String display, String dbColumn, String type,
+                            boolean virtual, String description, List<String> synonyms,
+                            List<String> rawSynonyms, List<String> examples, String notes) {
+    }
 
     /** 인스턴스화 방지 — 정적 사전·함수만 제공하는 유틸리티 클래스. */
     private Synonyms() {
     }
 
-    /** canonical 필드 → 동의어 라벨 목록 사전을 구성한다(클래스 로드 시 1회). */
+    /** 사전에 정의된 필드 목록을 파일 순서대로 반환한다(문서 생성용). */
+    public static List<FieldSpec> fields() {
+        return FIELDS;
+    }
+
+    /** 사전 파일의 버전 문자열. */
+    public static String version() {
+        return VERSION;
+    }
+
+    /** canonical 필드명으로 필드 정의를 찾는다. */
+    public static Optional<FieldSpec> field(String canonical) {
+        return FIELDS.stream().filter(f -> f.canonical().equals(canonical)).findFirst();
+    }
+
+    /**
+     * 사전 리소스를 읽어 필드 정의로 변환한다(클래스 로드 시 1회).
+     *
+     * <p>동의어는 원문 그대로 적혀 있으므로 여기서 정규화하며, 정규화 결과가
+     * 비었거나 서로 다른 필드에 중복 등재되면 기동을 중단한다 — 사전이 커질 때
+     * 조용히 덮어써지는 매핑 충돌을 배포 전에 잡기 위함이다.
+     */
+    private static List<FieldSpec> loadFields(JsonNode root) {
+        JsonNode fieldsNode = root.path("fields");
+        if (!fieldsNode.isArray() || fieldsNode.isEmpty()) {
+            throw new IllegalStateException(RESOURCE + ": fields 배열이 비어 있습니다");
+        }
+
+        List<FieldSpec> specs = new ArrayList<>();
+        Map<String, String> seenSynonyms = new LinkedHashMap<>();
+        Set<String> seenCanonicals = new LinkedHashSet<>();
+
+        for (JsonNode node : fieldsNode) {
+            String canonical = node.path("canonical").asText("").trim();
+            if (canonical.isEmpty()) {
+                throw new IllegalStateException(RESOURCE + ": canonical이 없는 필드 항목이 있습니다");
+            }
+            if (!seenCanonicals.add(canonical)) {
+                throw new IllegalStateException(RESOURCE + ": canonical 필드가 중복 정의됨 — " + canonical);
+            }
+
+            List<String> rawSynonyms = new ArrayList<>();
+            List<String> normalized = new ArrayList<>();
+            for (JsonNode syn : node.path("synonyms")) {
+                String raw = syn.asText("");
+                String norm = normalizeLabel(raw);
+                if (norm.isEmpty()) {
+                    throw new IllegalStateException(
+                            RESOURCE + ": 정규화하면 빈 문자열이 되는 동의어 — " + canonical + " / \"" + raw + "\"");
+                }
+                String owner = seenSynonyms.putIfAbsent(norm, canonical);
+                if (owner != null) {
+                    throw new IllegalStateException(RESOURCE + ": 동의어 \"" + norm + "\"이(가) "
+                            + owner + "와 " + canonical + " 두 필드에 중복 등재됐습니다");
+                }
+                rawSynonyms.add(raw);
+                normalized.add(norm);
+            }
+            if (normalized.isEmpty()) {
+                throw new IllegalStateException(RESOURCE + ": 동의어가 하나도 없는 필드 — " + canonical);
+            }
+
+            List<String> examples = new ArrayList<>();
+            for (JsonNode ex : node.path("examples")) {
+                examples.add(ex.asText(""));
+            }
+
+            JsonNode notes = node.path("notes");
+            specs.add(new FieldSpec(
+                    canonical,
+                    node.path("display").asText(canonical),
+                    node.path("db_column").asText(canonical),
+                    node.path("type").asText("text"),
+                    node.path("virtual").asBoolean(false),
+                    node.path("description").asText(""),
+                    List.copyOf(normalized),
+                    List.copyOf(rawSynonyms),
+                    List.copyOf(examples),
+                    notes.isMissingNode() || notes.asText("").isBlank() ? null : notes.asText()));
+        }
+        return List.copyOf(specs);
+    }
+
+    /** 사전 리소스를 JSON 트리로 읽는다. 누락·파싱 실패는 기동 중단. */
+    private static JsonNode readResource() {
+        try (InputStream in = Synonyms.class.getResourceAsStream(RESOURCE)) {
+            if (in == null) {
+                throw new IllegalStateException("동의어 사전 리소스를 찾을 수 없습니다: " + RESOURCE);
+            }
+            return Json.MAPPER.readTree(in);
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("동의어 사전을 읽을 수 없습니다: " + RESOURCE, e);
+        }
+    }
+
+    /** 필드 정의에서 "canonical → 정규화 동의어 목록" 사전을 구성한다. */
     private static Map<String, List<String>> createDictionary() {
         Map<String, List<String>> d = new LinkedHashMap<>();
-        d.put("agency", List.of("기관", "고시기관", "관리청", "처분청"));
-        d.put("notice_no", List.of("고시번호", "공고번호"));
-        d.put("notice_date", List.of("고시일", "고시일자", "고시연월일", "공고일", "공고일자", "공고연월일"));
-        d.put("title", List.of("제목", "고시명", "공고명"));
-        d.put("signer", List.of("고시자", "공고자"));
-        d.put("approval_no", List.of("승인번호", "허가번호", "신고번호", "수리번호", "허가증번호"));
-        d.put("approval_date", List.of(
-                "승인일", "승인일자", "승인연월일", "허가일", "허가일자", "허가연월일",
-                "신고일", "수리일", "점용·사용허가일", "준공검사일"));
-        d.put("location", List.of(
-                "위치", "소재지", "장소", "점용·사용장소", "점용·사용의장소",
-                "사업위치", "공사위치", "점용장소", "사용장소", "점용·사용위치",
-                "점용지번", "발견장소"));
-        d.put("area", List.of(
-                "면적", "점용·사용면적", "점용·사용의면적", "점용면적",
-                "사용면적", "허가면적", "준공면적"));
-        d.put("work_description", List.of(
-                "공사내용", "사업내용", "공사명칭", "공사명", "사업명", "공사의종류",
-                "목적", "점용·사용목적", "점용·사용의목적", "점용목적", "사용목적",
-                "공사의목적및개요", "사업개요", "준공시설"));
-        d.put(WORK_PERIOD, List.of(
-                "기간", "공사기간", "점용·사용기간", "점용·사용의기간", "점용기간",
-                "사용기간", "허가기간", "공사시행기간", "사업기간"));
-        d.put("applicant_name", List.of(
-                "성명", "상호", "명칭", "대표자", "신고자", "신고인", "점용·사용자",
-                "허가를받은자", "점용·사용허가를받은자", "피허가자", "피허가자성명",
-                "피승인자", "피승인자성명", "대상자", "공사시행자",
-                "공사시행자의성명", "사업시행자"));
-        d.put("applicant_address", List.of(
-                "주소", "신고자주소", "사업자주소", "피허가자주소", "피승인자주소"));
-        d.put("remarks", List.of("비고", "기타", "참고사항"));
+        for (FieldSpec spec : FIELDS) {
+            d.put(spec.canonical(), spec.synonyms());
+        }
         return Map.copyOf(d);
     }
 

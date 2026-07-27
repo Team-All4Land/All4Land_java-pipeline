@@ -1,0 +1,170 @@
+{
+  "version": "2026-07-27",
+  "description": "고시문 라벨 → 표준 필드 동의어 사전. 이 파일이 단일 정의처이며, Synonyms 클래스가 기동 시 읽어들인다.",
+  "conventions": {
+    "synonym_form": "동의어는 사람이 읽는 형태(띄어쓰기·가운뎃점 포함)로 적는다. 적재 시 normalizeLabel()로 정규화되므로 '점용·사용의 장소'처럼 원문 그대로 써도 된다.",
+    "normalization": "정규화 = NFC → 선행 번호 제거 → 공백 제거 → 가운뎃점 통일(·) → 후행 콜론 제거.",
+    "uniqueness": "정규화 결과가 두 필드에 중복 등록되면 기동 시 오류로 중단된다(사전 충돌 방지).",
+    "how_to_add": "extras 검토 리포트(docs/EXTRAS_REVIEW.md)에서 빈도 높은 미매핑 라벨을 확인하고, 해당 필드의 synonyms 배열에 추가한 뒤 재적재하면 컬럼으로 승격된다."
+  },
+  "fields": [
+    {
+      "canonical": "agency",
+      "display": "고시기관",
+      "db_column": "agency",
+      "type": "text",
+      "description": "고시·공고를 발령한 행정기관명. 문단 '○○청 고시 제2026-47호' 형태에서도 자동 분리된다.",
+      "synonyms": ["기관", "고시기관", "관리청", "처분청"],
+      "examples": ["군산지방해양수산청", "부산광역시 강서구"],
+      "notes": "'관리청'은 방치선박 제거공고 서식에서 관측된다."
+    },
+    {
+      "canonical": "notice_no",
+      "display": "고시번호",
+      "db_column": "notice_no",
+      "type": "text",
+      "description": "고시·공고의 문서번호.",
+      "synonyms": ["고시번호", "공고번호"],
+      "examples": ["고시 제2026-47호", "고시 제2018–82호"],
+      "notes": "'관리번호'는 방치선박 서식의 별개 필드이므로 등재하지 않는다(extras로 보존)."
+    },
+    {
+      "canonical": "notice_date",
+      "display": "고시일자",
+      "db_column": "notice_date",
+      "type": "date",
+      "description": "고시·공고가 공표된 날짜. ISO(yyyy-MM-dd)로 정규화해 DATE 컬럼에 적재한다.",
+      "synonyms": ["고시일", "고시일자", "고시연월일", "공고일", "공고일자", "공고연월일"],
+      "examples": ["2026. 6. 17.", "2026년 06월 17일"],
+      "notes": "지자체별 표기 차이(고시일자/공고일자)가 가장 큰 필드. 파싱 실패 시 원문을 extras에 남긴다."
+    },
+    {
+      "canonical": "title",
+      "display": "제목",
+      "db_column": "title",
+      "type": "text",
+      "description": "고시문 제목. 라벨이 없으면 고시번호 다음 문단 또는 고시문 표에서 추정한다.",
+      "synonyms": ["제목", "고시명", "공고명"],
+      "examples": ["공유수면 점용·사용 변경허가 고시"]
+    },
+    {
+      "canonical": "signer",
+      "display": "고시자",
+      "db_column": "signer",
+      "type": "text",
+      "description": "고시문 말미의 발령권자 직함.",
+      "synonyms": ["고시자", "공고자"],
+      "examples": ["군산지방해양수산청장", "부산광역시 강서구청장"]
+    },
+    {
+      "canonical": "approval_no",
+      "display": "허가·승인번호",
+      "db_column": "approval_no",
+      "type": "text",
+      "description": "처분(허가/승인/신고수리) 번호. '제2026-26호(2026. 6. 11.)'처럼 일자가 병기되면 approval_date로 분리한다.",
+      "synonyms": ["승인번호", "허가번호", "신고번호", "수리번호", "허가증번호"],
+      "examples": ["제2026-26호", "2018-1"]
+    },
+    {
+      "canonical": "approval_date",
+      "display": "허가·승인일자",
+      "db_column": "approval_date",
+      "type": "date",
+      "description": "처분일자. ISO로 정규화해 DATE 컬럼에 적재한다.",
+      "synonyms": [
+        "승인일", "승인일자", "승인연월일",
+        "허가일", "허가일자", "허가연월일",
+        "신고일", "수리일", "점용·사용허가일", "준공검사일"
+      ],
+      "examples": ["2026. 6. 5."],
+      "notes": "고시일(notice_date)과 다른 날짜다 — 처분한 날이지 공표한 날이 아니다."
+    },
+    {
+      "canonical": "location",
+      "display": "점용·사용 장소",
+      "db_column": "location",
+      "type": "text",
+      "description": "점용·사용 대상 공유수면의 위치.",
+      "synonyms": [
+        "위치", "소재지", "장소",
+        "점용·사용장소", "점용·사용의 장소", "점용장소", "사용장소", "점용·사용위치",
+        "사업위치", "공사위치", "점용지번", "발견장소"
+      ],
+      "examples": ["군산시 비응로 107 인근 공유수면", "가덕도 인근 해역"],
+      "notes": "'발견장소'는 방치선박 제거공고, '점용지번'은 부산 강서구 허가고시 서식에서 관측."
+    },
+    {
+      "canonical": "area",
+      "display": "점용·사용 면적",
+      "db_column": "area",
+      "type": "text",
+      "description": "점용·사용 면적. 단위(㎡)와 자릿수 구분기호를 포함한 원문을 그대로 보존한다.",
+      "synonyms": [
+        "면적", "점용·사용면적", "점용·사용의 면적", "점용면적",
+        "사용면적", "허가면적", "준공면적"
+      ],
+      "examples": ["367,120.2㎡", "6,060.34㎡"],
+      "notes": "수치 정규화는 하지 않는다 — 원문 표기가 근거자료로서 의미가 있어 TEXT로 둔다."
+    },
+    {
+      "canonical": "work_description",
+      "display": "점용·사용 목적/공사내용",
+      "db_column": "work_description",
+      "type": "text",
+      "description": "점용·사용의 목적 또는 공사·사업의 내용.",
+      "synonyms": [
+        "공사내용", "사업내용", "공사명칭", "공사명", "사업명", "공사의 종류",
+        "목적", "점용·사용목적", "점용·사용의 목적", "점용목적", "사용목적",
+        "공사의 목적 및 개요", "사업개요", "준공시설"
+      ],
+      "examples": ["청소년 해양종합레포츠 교육 및 조종면허실기시험장 운영", "관측장비 1개소 설치"]
+    },
+    {
+      "canonical": "work_period",
+      "display": "점용·사용 기간",
+      "db_column": "work_period_start, work_period_end",
+      "type": "date_range",
+      "virtual": true,
+      "description": "점용·사용 기간. 가상 필드로, 매핑 후 시작/종료 두 DATE 컬럼으로 분리된다. 분리에 실패하면 원문을 extras에 보존한다.",
+      "synonyms": [
+        "기간", "공사기간", "점용·사용기간", "점용·사용의 기간", "점용기간",
+        "사용기간", "허가기간", "공사시행기간", "사업기간"
+      ],
+      "examples": ["2025. 9. 1. ～ 2028. 8. 31.", "2026.7.1 ~ 2028.6.30(2년)"],
+      "notes": "NoticeRecord에 대응 필드가 없는 유일한 가상 필드 — Mapper가 start/end로 분리한다."
+    },
+    {
+      "canonical": "applicant_name",
+      "display": "허가·승인 대상자 성명",
+      "db_column": "applicant_name",
+      "type": "text",
+      "description": "점용·사용 허가(승인)를 받은 자의 성명 또는 상호.",
+      "synonyms": [
+        "성명", "상호", "명칭", "대표자", "신고자", "신고인", "점용·사용자",
+        "허가를 받은 자", "점용·사용 허가를 받은 자",
+        "피허가자", "피허가자 성명", "피승인자", "피승인자 성명",
+        "대상자", "공사시행자", "공사시행자의 성명", "사업시행자"
+      ],
+      "examples": ["한국해양소년단 전북연맹", "태항조선㈜ 대표이사"],
+      "notes": "'성명(상호)' 같은 괄호 병기 라벨은 괄호 분리 후 양쪽 모두로 매핑을 시도한다."
+    },
+    {
+      "canonical": "applicant_address",
+      "display": "허가·승인 대상자 주소",
+      "db_column": "applicant_address",
+      "type": "text",
+      "description": "허가(승인)를 받은 자의 주소. 비어 있으면 성명 블록에서 주소 패턴을 보충 추출한다.",
+      "synonyms": ["주소", "신고자 주소", "사업자 주소", "피허가자 주소", "피승인자 주소"],
+      "examples": ["군산시 비응로 107", "인천광역시 동구 보세로 62(만석동)"]
+    },
+    {
+      "canonical": "remarks",
+      "display": "비고",
+      "db_column": "remarks",
+      "type": "text",
+      "description": "비고·기타 참고사항.",
+      "synonyms": ["비고", "기타", "참고사항"],
+      "examples": ["없음"]
+    }
+  ]
+}

@@ -50,6 +50,7 @@ input/
 *.db
 *.sqlite
 *.raw.json
+*.tables.json
 *.schema.json
 
 # Python (ocr-cli) 산출물

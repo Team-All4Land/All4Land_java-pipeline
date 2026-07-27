@@ -29,7 +29,11 @@ CLI: extract.jar pipeline (picocli)
         ▼
 raw JSON (공통 계약 — snake_case, Jackson DTO)
         ▼
-Mapper.mapToSchema (라벨 정규화 + 동의어 사전 매핑 + 값 정규화)
+TableInterpreter (표 서식 판정 + 라벨:값 추출 + 사전 매핑 판정)
+        ▼
+표 해석 JSON *.tables.json   ← 진단용 중간 산출물 (`--tables` 지정 시 저장)
+        ▼
+Mapper.mapToSchema (문단 메타·라벨 + 표 해석 결과 적용 + 값 정규화)
         ▼
 표준 스키마 JSON {"source_file", "records": [...], "images": [...]}
         ▼
@@ -96,13 +100,16 @@ java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
 
 | 명령 | 역할 |
 |---|---|
-| `pipeline -i input/ -o out/ [--no-db]` | 배치: 판별→추출→매핑→적재 일괄 |
+| `pipeline -i input/ -o out/ [--no-db] [--raw] [--tables]` | 배치: 판별→추출→표해석→매핑→적재 일괄 |
 | `detect 파일...\|폴더 [--json]` | 스캔 여부 분류 결과 출력 |
 | `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
+| `tables raw.json... -o out/ [--summary]` | 표 해석 전용 (raw JSON → 표 해석 JSON) |
 | `map raw.json... -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
 | `load schema.json...` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
+| `dict [-o docs/SYNONYMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 |
 
-공통 옵션: `--raw`(원시 결과도 저장), `--no-images`(이미지 저장 생략).
+공통 옵션: `--raw`(원시 결과도 저장), `--tables`(표 해석 중간 결과도 저장),
+`--no-images`(이미지 저장 생략).
 DB 접속·OCR 실행 정보는 CLI 옵션이 아니라 `application.properties` 및
 `.env`에서 읽습니다(우선순위: OS 환경변수 > `.env` > `application.properties`).
 파일 단위 실패는 `[실패] <파일>: <사유>` 로그만 남기고 배치는 계속
@@ -120,7 +127,40 @@ java -jar target/extract-pipeline-1.0.0.jar detect samples --json
 
 # PostgreSQL까지 적재 (접속 정보는 application.properties에서)
 java -jar target/extract-pipeline-1.0.0.jar pipeline -i input/ -o out/
+
+# 매핑 진단: 표를 어떻게 읽었는지 중간 산출물로 확인
+java -jar target/extract-pipeline-1.0.0.jar pipeline -i samples -o out/ --no-db --tables
+
+# 동의어 사전 문서 + 미매핑 라벨 검토 리포트 생성
+java -jar target/extract-pipeline-1.0.0.jar dict --review out/
 ```
+
+## 매핑 정교화 — 표 해석과 동의어 사전
+
+고시문은 정보 대부분이 표에 있고, 기관마다 서식과 라벨이 다릅니다
+(`고시일자` / `공고일자` …). 이를 두 단계로 나눠 다룹니다.
+
+**1. 표 해석 중간 단계 (`*.tables.json`)** — 표준 스키마는 "어느 필드가 무슨 값이
+됐는가"만 남기므로, 값이 비었을 때 표를 잘못 읽은 것인지 사전에 라벨이 없는 것인지
+구분되지 않습니다. 중간 단계는 표별 서식 판정(`kind`), 병합 셀을 정확히 읽었는지
+(`span_aware`), 각 라벨의 **원본 격자 좌표**와 사전 매핑 여부를 그대로 남깁니다.
+
+**2. 동의어 사전 (`src/main/resources/synonyms.json`)** — 사전 본문은 이 파일 하나이며,
+필드 설명·예시·검토 메모를 함께 담습니다. 동의어는 사람이 읽는 형태(`점용·사용의 장소`)로
+적으면 되고 로드할 때 정규화됩니다. 같은 라벨이 두 필드에 중복 등재되면 **기동 시
+오류로 중단**되어 매핑 충돌이 배포 전에 드러납니다.
+
+검토 문서는 `dict` 서브커맨드로 생성합니다(손으로 고치지 않습니다).
+
+| 문서 | 내용 |
+|---|---|
+| `docs/SYNONYMS.md` | 필드별 설명·값 예시·인식하는 라벨 전체 목록, 정규화 규칙, 보강 절차 |
+| `docs/EXTRAS_REVIEW.md` | 미매핑 라벨 빈도순 집계(예시 값·출현 문서), 표준 필드 채움률, 판단 기준 |
+
+사전 보강은 **표본이 아니라 전량 집계**로 판단합니다 — 라벨 표기 습관이 기관 단위로
+몰려 다니기 때문에, 일부만 표본으로 보면 특정 기관의 표기가 통째로 누락됩니다.
+라벨을 추가한 뒤 파이프라인을 다시 돌리면 파일 단위 멱등 적재라 기존 문서도
+갱신되어, `extras`에 있던 값이 표준 컬럼으로 승격됩니다.
 
 ## 설정 (`application.properties` + `.env`)
 

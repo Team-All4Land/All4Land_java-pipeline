@@ -15,8 +15,10 @@ import picocli.CommandLine.Command;
                 PipelineCommand.class,
                 DetectCommand.class,
                 ExtractCommand.class,
+                TablesCommand.class,
                 MapCommand.class,
                 LoadCommand.class,
+                DictCommand.class,
         })
 public class Main implements Runnable {
 

@@ -4,8 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link Synonyms} 라벨 정규화·동의어 매핑 단위 테스트. */
@@ -73,5 +75,55 @@ class SynonymsTest {
         assertTrue(Synonyms.canonicalFor("사업비").isEmpty());
         assertTrue(Synonyms.canonicalFor("").isEmpty());
         assertTrue(Synonyms.canonicalFor(null).isEmpty());
+    }
+
+    /**
+     * 사전 파일의 동의어는 사람이 읽는 형태(띄어쓰기·가운뎃점 포함)로 적고
+     * 로드 시 정규화된다 — 편집자가 정규화 규칙을 몰라도 되게 하기 위함이다.
+     */
+    @Test
+    void fileSynonymsAreNormalizedOnLoad() {
+        Synonyms.FieldSpec applicant = Synonyms.field("applicant_name").orElseThrow();
+        assertTrue(applicant.rawSynonyms().contains("허가를 받은 자"), "원문 형태가 보존돼야 함");
+        assertTrue(applicant.synonyms().contains("허가를받은자"), "정규화 형태로 매칭돼야 함");
+        assertEquals(Optional.of("applicant_name"), Synonyms.canonicalFor("허가를 받은 자"));
+    }
+
+    /**
+     * 같은 라벨이 두 필드에 등재되면 어느 쪽으로 매핑될지가 등재 순서에 좌우된다.
+     * 로드 시 중단시키는 규칙이 실제로 사전을 지키고 있는지, 중복이 없음을 확인한다.
+     */
+    @Test
+    void noSynonymIsRegisteredUnderTwoFields() {
+        List<String> all = Synonyms.fields().stream()
+                .flatMap(f -> f.synonyms().stream())
+                .toList();
+        assertEquals(all.size(), Set.copyOf(all).size(), "정규화 후 중복 등재된 동의어가 있음");
+    }
+
+    /** 검토 문서가 비지 않도록, 모든 필드가 표시명·설명·DB 컬럼·동의어를 갖추게 한다. */
+    @Test
+    void everyFieldCarriesReviewMetadata() {
+        for (Synonyms.FieldSpec field : Synonyms.fields()) {
+            assertFalse(field.display().isBlank(), field.canonical() + ": 표시명 없음");
+            assertFalse(field.description().isBlank(), field.canonical() + ": 설명 없음");
+            assertFalse(field.dbColumn().isBlank(), field.canonical() + ": DB 컬럼 없음");
+            assertFalse(field.synonyms().isEmpty(), field.canonical() + ": 동의어 없음");
+        }
+        assertFalse(Synonyms.version().isBlank(), "사전 버전이 있어야 함");
+    }
+
+    /** 기간만 가상 필드이고, 나머지는 documents 컬럼과 이름이 일치해야 한다. */
+    @Test
+    void onlyWorkPeriodIsVirtual() {
+        for (Synonyms.FieldSpec field : Synonyms.fields()) {
+            if (field.canonical().equals(Synonyms.WORK_PERIOD)) {
+                assertTrue(field.virtual(), "기간은 가상 필드여야 함");
+            } else {
+                assertFalse(field.virtual(), field.canonical() + ": 가상 필드가 아니어야 함");
+                assertEquals(field.canonical(), field.dbColumn(),
+                        field.canonical() + ": 표준 필드명과 DB 컬럼명이 달라짐");
+            }
+        }
     }
 }
