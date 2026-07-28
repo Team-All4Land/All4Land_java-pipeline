@@ -26,8 +26,7 @@ CLI: extract.jar pipeline (picocli)
                 ├─ .hml   →  HmlExtractor     (JDK DOM, 외부 의존성 없음)
                 └─ .pdf   →  PdfBoxExtractor  (Apache PDFBox + 선분 클러스터링 표 탐지)
                 │
-                └── + 임베디드 이미지가 있으면 같은 OCR 경로로 읽어 본문 뒤에 이어 붙임
-                        (붙임 현장사진·위치도. 도장·로고 크기는 제외)
+                └── + 임베디드 이미지는 파일로 저장하고 images 메타만 기록 (OCR 안 함)
         │
         ▼
 raw JSON (공통 계약 — snake_case, Jackson DTO)
@@ -119,15 +118,14 @@ java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
 |---|---|
 | `pipeline -i input/ -o out/ [--no-db] [--raw] [--tables]` | 배치: 판별→추출→표해석→매핑→적재 일괄 |
 | `detect 파일...\|폴더 [--json]` | 스캔 여부 분류 결과 출력 |
-| `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--no-image-ocr] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
+| `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
 | `tables raw.json... -o out/ [--summary]` | 표 해석 전용 (raw JSON → 표 해석 JSON) |
 | `map raw.json... -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
 | `load schema.json...` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
 | `dict [-o docs/SYNONYMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 |
 
 공통 옵션: `--raw`(원시 결과도 저장), `--tables`(표 해석 중간 결과도 저장),
-`--no-images`(이미지 저장 생략), `--no-image-ocr`(네이티브 문서에 삽입된 사진·위치도의
-OCR 생략 — 추론 시간은 줄지만 사진 속 정보는 적재되지 않습니다).
+`--no-images`(이미지 저장 생략).
 DB 접속·OCR 실행 정보는 CLI 옵션이 아니라 `application.properties` 및
 `.env`에서 읽습니다(우선순위: OS 환경변수 > `.env` > `application.properties`).
 파일 단위 실패는 `[실패] <파일>: <사유>` 로그만 남기고 배치는 계속
@@ -197,8 +195,6 @@ db.pool.max-size=5
 ocr.cli.command=python3
 ocr.cli.script=ocr-cli/paddleocr_vl_cli.py
 ocr.cli.timeout-sec=300
-ocr.images.enabled=true
-ocr.images.min-dimension=400
 ```
 
 ### 리눅스 서버 배포 — `.env`로 환경변수 관리
@@ -220,8 +216,6 @@ DB_POOL_MAX_SIZE=5
 OCR_CLI_COMMAND=python3            # venv 사용 시 해당 python 절대경로
 OCR_CLI_SCRIPT=ocr-cli/paddleocr_vl_cli.py
 OCR_CLI_TIMEOUT_SEC=300
-OCR_IMAGES_ENABLED=true            # 네이티브 문서에 삽입된 사진·위치도도 OCR할지
-OCR_IMAGES_MIN_DIMENSION=400       # 긴 변이 이보다 짧으면 읽지 않음 (도장·로고·서명 제외)
 ```
 
 - DB 비밀번호는 파일(`application.properties`)에 평문으로 두지 말고
@@ -252,18 +246,18 @@ PaddleOCR-VL을 구동하는 Python 스크립트(`ocr-cli/paddleocr_vl_cli.py`)�
 종료 코드 ≠0 또는 제한 시간 초과 → 해당 파일만 [실패] 처리.
 ```
 
-### 네이티브 문서에 삽입된 사진·위치도
+### 네이티브 문서에 삽입된 이미지는 OCR하지 않습니다
 
-붙임 현장사진, 위치도, 표 캡처처럼 본문이 이미지 안에만 있는 고시가 많습니다. 스캔본이
-아니어도 같은 CLI 계약으로 그 이미지들을 읽어 **본문 뒤에 이어 붙입니다**(이미지가 몇 번째
-문단에 붙어 있었는지는 복원할 수 없어 위치를 지어내지 않습니다).
+**OCR은 스캔 판정을 받은 파일만 탑니다.** 네이티브 문서(본문 텍스트가 있는 문서)에 붙임
+현장사진·위치도가 들어 있어도 그 이미지는 파일로 저장하고 `images` 메타만 기록하며, 사진
+속 글자를 본문에 섞지 않습니다.
 
-긴 변이 `ocr.images.min-dimension`(기본 400px)보다 짧은 이미지는 읽지 않습니다 —
-도장·관인·로고·서명은 읽어도 본문 정보가 없는데, 대량 배치에서는 그 추론 시간이 그대로
-배치 시간이 됩니다.
+따라서 네이티브 문서를 처리할 때 Python 서브프로세스는 실행되지 않습니다 — 배치 시간이
+문서의 삽입 이미지 개수에 좌우되지 않고, `is_scanned=false`인 문서의 `content`에는 항상
+네이티브로 읽어 낸 문단·표만 담깁니다.
 
 `paddleocr` 미설치 등으로 스크립트를 실행할 수 없으면(경로 확인: `ocr.cli.script`)
-스캔본 파일만 `[실패]` 처리되고, 네이티브 파일들은 사진 속 내용 없이 배치가 진행됩니다.
+스캔본 파일만 `[실패]` 처리되고, 네이티브 파일 처리에는 영향이 없습니다.
 
 ## 데이터베이스 스키마 (PostgreSQL)
 

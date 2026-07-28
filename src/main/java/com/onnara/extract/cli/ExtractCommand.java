@@ -35,11 +35,6 @@ public class ExtractCommand implements Callable<Integer> {
     @Option(names = "--no-images", description = "이미지 저장 생략")
     boolean noImages;
 
-    /** true면 문서에 삽입된 이미지의 OCR을 생략한다(추론 시간 단축용). */
-    @Option(names = "--no-image-ocr",
-            description = "문서에 삽입된 사진·위치도의 OCR 생략 (스캔본 처리에는 영향 없음)")
-    boolean noImageOcr;
-
     /** 지정 시 스캔 판별을 건너뛰고 해당 엔진으로 강제 추출. */
     @Option(names = "--engine", description = "엔진 강제 지정 (예: hwplib, owpml, hml-dom, pdfbox)")
     String engine;
@@ -52,8 +47,7 @@ public class ExtractCommand implements Callable<Integer> {
     public Integer call() throws Exception {
         List<Path> files = PipelineSupport.collectInputs(targets);
         AppProperties props = AppProperties.load();
-        ScanOcrConfig ocrConfig = ScanOcrConfig.fromProperties(props);
-        ScanOcrRunner scanRunner = new ScanOcrRunner(noImageOcr ? ocrConfig.withoutImageOcr() : ocrConfig);
+        ScanOcrRunner scanRunner = new ScanOcrRunner(ScanOcrConfig.fromProperties(props));
         Extractor forcedExtractor = engine != null ? ExtractorRegistry.forEngineName(engine) : null;
 
         int ok = 0;
