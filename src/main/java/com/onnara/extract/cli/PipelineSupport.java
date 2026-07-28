@@ -1,6 +1,5 @@
 package com.onnara.extract.cli;
 
-import com.onnara.extract.common.ImageProbe;
 import com.onnara.extract.common.Json;
 import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.model.RawImage;
@@ -61,6 +60,9 @@ final class PipelineSupport {
      * 파일 하나를 추출한다. {@code forcedExtractor}가 있으면 스캔 판별을 건너뛰고
      * 항상 해당 엔진으로 네이티브 추출한다({@code extract --engine} 옵션).
      *
+     * <p>OCR은 스캔 판정 파일만 탄다. 네이티브 문서의 임베디드 이미지는 파일로 저장하고
+     * {@code images} 메타만 남긴다 — 사진 속 글자를 본문에 섞지 않는다.
+     *
      * @param outputDir 스키마/원시 JSON이 저장될 기준 폴더 — 이미지는 {@code outputDir/images}에 저장되고
      *                  {@code RawImage.path}는 저장된 이미지의 절대경로로 기록된다(ref_files.file_path 적재용).
      */
@@ -76,90 +78,10 @@ final class PipelineSupport {
 
         Extractor extractor = forcedExtractor != null ? forcedExtractor : ExtractorRegistry.forExtension(ext);
         RawDocument raw = extractor.extractRaw(file);
-        if (!raw.getImages().isEmpty()) {
-            ocrEmbeddedImages(file, raw, ext, sourceFile, extractor, imagesDir, saveImages, scanRunner);
+        if (saveImages && !raw.getImages().isEmpty()) {
+            bindImagePaths(raw, extractor.saveImages(file, imagesDir));
         }
         return new ExtractResult(raw, extractor.engineName());
-    }
-
-    /**
-     * 네이티브 문서에 삽입된 이미지를 OCR해 본문 뒤에 이어 붙인다.
-     *
-     * <p>붙임 현장사진·위치도처럼 본문이 사진 안에 들어 있는 고시가 흔한데, 그 내용을 뽑는
-     * 통로는 스캔 판정 경로뿐이었다. 판별이 정확해질수록 이 문서들은 네이티브로 가고, 그때마다
-     * 사진 속 본문이 통째로 사라졌다 — 판별 정확도와 추출량이 서로 깎아먹는 구조였다.
-     * 네이티브 경로에도 같은 통로를 두어 그 결합을 끊는다.
-     *
-     * <p>이미지가 몇 번째 문단에 붙어 있었는지는 hwplib 등에서 복원할 수 없다. 위치를 지어내는
-     * 대신 본문 뒤에 이어 붙인다.
-     */
-    private static void ocrEmbeddedImages(Path file, RawDocument raw, String ext, String sourceFile,
-                                          Extractor extractor, Path imagesDir, boolean saveImages,
-                                          ScanOcrRunner scanRunner) throws IOException {
-        boolean ocr = scanRunner.config().imageOcrEnabled() && scanRunner.isAvailable();
-        if (!saveImages && !ocr) {
-            return;
-        }
-
-        // --no-images여도 OCR에는 실제 파일이 필요하므로 임시 폴더에 뽑고 나중에 지운다
-        Path tempDir = saveImages ? null : Files.createTempDirectory("extract-ocr-images-");
-        try {
-            List<Path> saved = extractor.saveImages(file, saveImages ? imagesDir : tempDir);
-            if (saveImages) {
-                bindImagePaths(raw, saved);
-            }
-            List<Path> targets = ocr ? ocrTargets(saved, scanRunner.config().imageMinDimension()) : List.of();
-            if (targets.isEmpty()) {
-                return;
-            }
-            try {
-                raw.getContent().addAll(scanRunner.parseImages(targets, sourceFile, ext).getContent());
-            } catch (IOException | RuntimeException e) {
-                // 네이티브 문단·표는 이미 뽑혀 있다 — 사진을 못 읽었다고 파일을 통째로 버리지 않는다
-                System.out.println("[경고] " + file + ": 이미지 OCR을 건너뜁니다 — " + e.getMessage());
-            }
-        } finally {
-            deleteTempDir(tempDir);
-        }
-    }
-
-    /**
-     * OCR을 돌릴 이미지만 고른다 — 긴 변이 {@code minDimension}px 이상인 것.
-     *
-     * <p>도장·관인·로고·서명은 읽어도 본문 정보가 없다. 스캔 판정본만 OCR을 타던 시절과 달리
-     * 이제 이미지가 있는 모든 네이티브 문서가 대상이라, 이 필터가 없으면 도장 하나 때문에
-     * VLM이 도는 문서가 배치 전체로 번진다.
-     *
-     * <p>크기를 못 재는 이미지는 후보에 남긴다 — 판단 불가를 '작다'로 취급하면 읽을 수 있었을
-     * 본문을 조용히 버리게 된다.
-     */
-    private static List<Path> ocrTargets(List<Path> images, int minDimension) {
-        List<Path> targets = new ArrayList<>();
-        for (Path image : images) {
-            int max = ImageProbe.maxDimension(image);
-            if (max < 0 || max >= minDimension) {
-                targets.add(image);
-            }
-        }
-        return targets;
-    }
-
-    /** 임시 이미지 폴더를 통째로 지운다(정리 실패는 무시 — OS가 정리한다). */
-    private static void deleteTempDir(Path dir) {
-        if (dir == null) {
-            return;
-        }
-        try (Stream<Path> walk = Files.walk(dir)) {
-            walk.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (IOException ignored) {
-                    // 개별 파일 정리 실패는 무시
-                }
-            });
-        } catch (IOException ignored) {
-            // 임시 폴더 정리 실패는 무시
-        }
     }
 
     /**
