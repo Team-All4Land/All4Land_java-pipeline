@@ -7,6 +7,7 @@ import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.RawParagraph;
 import com.onnara.extract.common.model.RawTable;
 import com.onnara.extract.engine.Extractor;
+import com.onnara.extract.engine.image.ImageSieve;
 import kr.dogfoot.hwplib.object.HWPFile;
 import kr.dogfoot.hwplib.object.bindata.EmbeddedBinaryData;
 import kr.dogfoot.hwplib.object.bodytext.Section;
@@ -76,7 +77,8 @@ public class HwplibExtractor implements Extractor {
             }
         }
 
-        for (ImageEntry entry : collectImages(hwpFile, stemOf(file))) {
+        // 제외 로그는 항상 실행되는 이 경로에서만 남긴다(saveImages와 중복 방지)
+        for (ImageEntry entry : collectImages(hwpFile, stemOf(file), true)) {
             raw.getImages().add(new RawImage(entry.name, entry.data.length));
         }
         return raw;
@@ -87,7 +89,7 @@ public class HwplibExtractor implements Extractor {
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
         HWPFile hwpFile = read(file);
         List<Path> saved = new ArrayList<>();
-        for (ImageEntry entry : collectImages(hwpFile, stemOf(file))) {
+        for (ImageEntry entry : collectImages(hwpFile, stemOf(file), false)) {
             Files.createDirectories(outDir);
             Path dest = outDir.resolve(entry.name);
             Files.write(dest, entry.data);
@@ -149,19 +151,31 @@ public class HwplibExtractor implements Extractor {
         return new RawTable(rowCount, colCount, cells, grid);
     }
 
-    /** 문서 전체 BinData를 (이름, 바이트)로 수집 — extractRaw/saveImages 순서·이름 일치 보장. */
-    private static List<ImageEntry> collectImages(HWPFile hwpFile, String stem) {
+    /**
+     * 문서 전체 BinData를 (이름, 바이트)로 수집 — extractRaw/saveImages 순서·이름 일치 보장.
+     *
+     * <p>정보가 없는 이미지(흰 바탕에 표식 하나 등)와 도장은 {@link ImageSieve}가 걸러낸다.
+     * 번호는 통과한 것에만 매겨 연속되게 한다.
+     */
+    private static List<ImageEntry> collectImages(HWPFile hwpFile, String stem, boolean log) {
         List<ImageEntry> out = new ArrayList<>();
         if (hwpFile.getBinData() == null) {
             return out;
         }
-        int i = 0;
         for (EmbeddedBinaryData ebd : hwpFile.getBinData().getEmbeddedBinaryDataList()) {
             byte[] data = ebd.getData();
             if (data == null || data.length == 0) {
                 continue;
             }
-            out.add(new ImageEntry(stem + "_img" + (i++) + "." + ImageFormats.extensionFor(data), data));
+            String reason = ImageSieve.reject(data);
+            if (reason != null) {
+                if (log) {
+                    System.err.println("[이미지 제외] " + stem + ": " + reason);
+                }
+                continue;
+            }
+            out.add(new ImageEntry(
+                    stem + "_img" + out.size() + "." + ImageFormats.extensionFor(data), data));
         }
         return out;
     }

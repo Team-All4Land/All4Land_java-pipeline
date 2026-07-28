@@ -5,19 +5,26 @@ import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.RawParagraph;
 import com.onnara.extract.engine.Extractor;
+import com.onnara.extract.engine.image.ImageSieve;
+import com.onnara.extract.engine.image.PdfImageTiles;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.contentstream.PDFGraphicsStreamEngine;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDResources;
-import org.apache.pdfbox.pdmodel.graphics.PDXObject;
-import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImage;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.TextPosition;
+import org.apache.pdfbox.util.Matrix;
 
 import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.Paint;
+import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -28,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -37,17 +45,12 @@ import java.util.Set;
  * 다른 엔진들과 동일한 raw 계약({@link RawDocument})으로 추출한다.
  * 표 탐지(선분 클러스터링)는 {@link TableDetector}가 담당한다.
  *
- * <p>도장(관인) 이미지는 요구사항상 추출 대상이 아니므로
- * '소형 + 붉은색 우세' 휴리스틱으로 걸러낸다.
+ * <p>이미지는 리소스 딕셔너리가 아니라 <b>콘텐츠 스트림</b>에서 모은다. 페이지에 실제로
+ * 그려진 것만 대상으로 삼고, 배치 좌표를 알 수 있어 {@link PdfImageTiles}가 가로 띠로
+ * 쪼개진 타일을 원래의 한 장으로 되돌릴 수 있다. 저장 여부(정보가 없는 이미지·도장 제외)는
+ * 전 엔진 공용 {@link ImageSieve}가 판정한다.
  */
 public class PdfBoxExtractor implements Extractor {
-
-    /**
-     * 도장 휴리스틱: 최대 변이 이 값(px) 이하이면서 붉은색 우세(R-max(G,B))가
-     * STAMP_RED_DOMINANCE 이상인 이미지는 도장으로 간주.
-     */
-    private static final int STAMP_MAX_DIM = 300;
-    private static final int STAMP_RED_DOMINANCE = 25;
 
     /** {@code pdf} 확장자만 지원한다. */
     @Override
@@ -63,7 +66,7 @@ public class PdfBoxExtractor implements Extractor {
 
     /**
      * 페이지마다 표(TableDetector)와 표 밖 문단을 각각 뽑아 top 좌표로 정렬해
-     * content에 담고, 도장을 제외한 내장 이미지를 메타로 추가한다.
+     * content에 담고, 저장 대상으로 판정된 이미지를 메타로 추가한다.
      */
     @Override
     public RawDocument extractRaw(Path file) throws IOException {
@@ -96,19 +99,20 @@ public class PdfBoxExtractor implements Extractor {
                 }
             }
 
-            for (ImageEntry img : iterImages(doc, stemOf(file))) {
+            // 제외·병합 로그는 항상 실행되는 이 경로에서만 남긴다(saveImages와 중복 방지)
+            for (ImageEntry img : iterImages(doc, stemOf(file), file.getFileName().toString(), true)) {
                 raw.getImages().add(new RawImage(img.name, img.data.length));
             }
         }
         return raw;
     }
 
-    /** 도장을 제외한 내장 이미지를 outDir에 쓰고 저장 경로 목록을 반환한다. */
+    /** 저장 대상으로 판정된 이미지를 outDir에 쓰고 저장 경로 목록을 반환한다. */
     @Override
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
         List<Path> saved = new ArrayList<>();
         try (PDDocument doc = Loader.loadPDF(file.toFile())) {
-            for (ImageEntry img : iterImages(doc, stemOf(file))) {
+            for (ImageEntry img : iterImages(doc, stemOf(file), file.getFileName().toString(), false)) {
                 Files.createDirectories(outDir);
                 Path dest = outDir.resolve(img.name);
                 Files.write(dest, img.data);
@@ -270,74 +274,229 @@ public class PdfBoxExtractor implements Extractor {
         }
     }
 
-    /** 도장을 제외한 내장 이미지를 (이름, 바이트)로 수집한다. */
-    private static List<ImageEntry> iterImages(PDDocument doc, String stem) throws IOException {
+    /**
+     * 페이지에 그려진 이미지를 모아 타일 병합 → 저장 판정을 거친 뒤 (이름, 바이트)로 반환한다.
+     *
+     * <p>{@code extractRaw}와 {@code saveImages}가 같은 결과를 내야
+     * {@code PipelineSupport.bindImagePaths}의 순서·이름 일치 계약이 유지되므로,
+     * 로그 출력 여부만 다르고 판정은 동일하다.
+     *
+     * @param log 병합·제외 사유를 표준 오류로 남길지 여부
+     */
+    private static List<ImageEntry> iterImages(PDDocument doc, String stem, String sourceName,
+                                               boolean log) throws IOException {
         List<ImageEntry> out = new ArrayList<>();
-        Set<COSBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        // 여러 페이지에 반복 등장하는 같은 스트림(머리말 로고 등)은 한 번만 저장한다
+        Set<COSBase> emitted = Collections.newSetFromMap(new IdentityHashMap<>());
         int pageNo = 0;
         for (PDPage page : doc.getPages()) {
             pageNo++;
+            DrawnImages drawn = new DrawnImages(page, sourceName, pageNo, log);
+            drawn.processPage(page);
+
             int idx = 0;
-            for (PDImageXObject image : imagesOf(page.getResources(), seen)) {
-                idx++;
-                BufferedImage bi = image.getImage();
-                if (isStamp(image, bi)) {
+            for (PdfImageTiles.Merged merged : PdfImageTiles.merge(drawn.placements)) {
+                if (merged.isStitched() && log) {
+                    System.err.println("[이미지 병합] " + sourceName + " p." + pageNo
+                            + ": 타일 " + merged.tiles().size() + "장 → 1장");
+                }
+                if (!merged.isStitched()
+                        && !emitted.add(merged.single().image().getCOSObject())) {
+                    continue; // 앞 페이지에서 이미 저장한 스트림
+                }
+                String reason = ImageSieve.reject(
+                        merged.stitched(), merged.widthMm(), merged.heightMm());
+                if (reason != null) {
+                    if (log) {
+                        System.err.println("[이미지 제외] " + sourceName + " p." + pageNo
+                                + ": " + reason);
+                    }
                     continue;
                 }
-                String ext = imageExtension(image);
-                byte[] data = encodeImage(image, bi, ext);
+                idx++;
+                String ext = merged.isStitched() ? "png" : imageExtension(merged.single().image());
+                byte[] data = merged.isStitched()
+                        ? encodePng(merged.stitched())
+                        : encodeImage(merged.single().image(), merged.stitched(), ext);
                 out.add(new ImageEntry(stem + "_p" + pageNo + "_" + idx + "." + ext, data));
             }
         }
         return out;
     }
 
-    /** 리소스(중첩 폼 XObject 포함)의 이미지들을 문서 전체 중복 제거하며 수집한다. */
-    private static List<PDImageXObject> imagesOf(PDResources resources, Set<COSBase> seen)
-            throws IOException {
-        List<PDImageXObject> images = new ArrayList<>();
-        if (resources == null) {
-            return images;
+    /**
+     * 콘텐츠 스트림을 훑어 <b>실제로 그려진</b> 이미지를 배치 사각형과 함께 모은다.
+     *
+     * <p>리소스 딕셔너리만 보던 예전 방식은 (1) 페이지에 그려지지 않는 이미지까지 저장하고
+     * (2) 배치를 몰라 가로 띠로 쪼개진 타일을 되붙일 수 없었다.
+     *
+     * <p>{@link PDFGraphicsStreamEngine}을 상속하는 이유는 이 클래스가 {@code q}/{@code Q}/
+     * {@code cm}/{@code Do} 연산자 처리를 등록해 주기 때문이다. 맨 {@code PDFStreamEngine}은
+     * 연산자를 하나도 등록하지 않아 변환 행렬이 항등으로 남는다. 그리기 계열 콜백은
+     * 이미지 수집에 쓰이지 않으므로 전부 빈 구현이다.
+     */
+    private static final class DrawnImages extends PDFGraphicsStreamEngine {
+
+        final List<PdfImageTiles.Placement> placements = new ArrayList<>();
+
+        private final Map<COSBase, BufferedImage> decoded = new IdentityHashMap<>();
+        private final String sourceName;
+        private final int pageNo;
+        private final boolean log;
+
+        DrawnImages(PDPage page, String sourceName, int pageNo, boolean log) {
+            super(page);
+            this.sourceName = sourceName;
+            this.pageNo = pageNo;
+            this.log = log;
         }
-        for (COSName name : resources.getXObjectNames()) {
-            PDXObject xobj = resources.getXObject(name);
-            if (xobj instanceof PDImageXObject) {
-                if (seen.add(xobj.getCOSObject())) {
-                    images.add((PDImageXObject) xobj);
-                }
-            } else if (xobj instanceof PDFormXObject) {
-                if (seen.add(xobj.getCOSObject())) {
-                    images.addAll(imagesOf(((PDFormXObject) xobj).getResources(), seen));
-                }
+
+        /** 이미지가 그려질 때마다 현재 변환 행렬로 배치를 기록한다. */
+        @Override
+        public void drawImage(PDImage image) {
+            if (image instanceof PDImageXObject xobject) {
+                record(xobject);
             }
         }
-        return images;
-    }
 
-    /** 도장(관인) 이미지 판별: 소형이면서 붉은색이 우세하면 도장으로 본다. */
-    static boolean isStamp(PDImageXObject image, BufferedImage bi) throws IOException {
-        if (Math.max(bi.getWidth(), bi.getHeight()) > STAMP_MAX_DIM) {
-            return false;
+        /** 현재 변환 행렬로 배치 사각형을 계산해 목록에 담는다. */
+        private void record(PDImageXObject image) {
+            BufferedImage bi = decode(image);
+            if (bi == null || bi.getWidth() <= 0 || bi.getHeight() <= 0) {
+                return;
+            }
+            Matrix ctm = getGraphicsState().getCurrentTransformationMatrix();
+            float scaleX = ctm.getScaleX();
+            float scaleY = ctm.getScaleY();
+            boolean skewed = Math.abs(ctm.getShearX()) > 1e-4f
+                    || Math.abs(ctm.getShearY()) > 1e-4f
+                    || scaleX < 0 || scaleY < 0;
+
+            // 회전·기울임이 있으면 축 정렬 크기를 알 수 없으므로 배율 크기로 근사한다
+            float width = skewed ? ctm.getScalingFactorX() : scaleX;
+            float height = skewed ? ctm.getScalingFactorY() : scaleY;
+            if (width <= 0 || height <= 0) {
+                return;
+            }
+            // 음수 배율(뒤집힘)이면 translate가 좌하단이 아니므로 사각형을 정규화한다
+            float x = scaleX < 0 ? ctm.getTranslateX() - width : ctm.getTranslateX();
+            float y = scaleY < 0 ? ctm.getTranslateY() - height : ctm.getTranslateY();
+            placements.add(new PdfImageTiles.Placement(image, bi, x, y, width, height, skewed));
         }
-        if (image.getColorSpace() == null || image.getColorSpace().getNumberOfComponents() < 3) {
-            return false;
+
+        /**
+         * 같은 스트림을 여러 번 그려도 디코딩은 한 번만 한다.
+         *
+         * <p>스텐실 마스크(ImageMask)는 잉크 색이 이미지가 아니라 그래픽 상태에 있다.
+         * 그대로 디코딩하면 검정으로 나와 붉은 도장을 알아볼 수 없으므로, 현재
+         * 비스트로크 색으로 칠해 실제로 지면에 찍히는 모습으로 만든다. 같은 스텐실을
+         * 다른 색으로 그릴 수 있어 이 경우는 캐시하지 않는다.
+         */
+        private BufferedImage decode(PDImageXObject image) {
+            if (image.isStencil()) {
+                try {
+                    return image.getStencilImage(nonStrokingPaint());
+                } catch (IOException | RuntimeException e) {
+                    return null;
+                }
+            }
+            COSBase key = image.getCOSObject();
+            if (decoded.containsKey(key)) {
+                return decoded.get(key);
+            }
+            BufferedImage bi;
+            try {
+                bi = image.getImage();
+            } catch (IOException | RuntimeException e) {
+                // 디코딩 불가 이미지 하나 때문에 파일 전체를 실패시키지 않는다
+                if (log) {
+                    System.err.println("[이미지 제외] " + sourceName + " p." + pageNo
+                            + ": 디코딩 실패 (" + e.getMessage() + ")");
+                }
+                bi = null;
+            }
+            decoded.put(key, bi);
+            return bi;
         }
-        int w = bi.getWidth();
-        int h = bi.getHeight();
-        int nPx = w * h;
-        int step = Math.max(1, nPx / 1000); // 표본만 확인
-        long r = 0;
-        long g = 0;
-        long b = 0;
-        long count = 0;
-        for (int i = 0; i < nPx; i += step) {
-            int rgb = bi.getRGB(i % w, i / w);
-            r += (rgb >> 16) & 0xFF;
-            g += (rgb >> 8) & 0xFF;
-            b += rgb & 0xFF;
-            count++;
+
+        /** 스텐실을 칠할 현재 비스트로크 색. 알 수 없으면 검정. */
+        private Paint nonStrokingPaint() {
+            try {
+                PDColor color = getGraphicsState().getNonStrokingColor();
+                float[] rgb = color.getColorSpace().toRGB(color.getComponents());
+                return new Color(clamp(rgb[0]), clamp(rgb[1]), clamp(rgb[2]));
+            } catch (IOException | RuntimeException e) {
+                return Color.BLACK;
+            }
         }
-        return (double) (r - Math.max(g, b)) / count >= STAMP_RED_DOMINANCE;
+
+        /** 색 성분을 0.0~1.0 범위로 자른다(변환 결과가 범위를 벗어날 수 있다). */
+        private static float clamp(float value) {
+            return Math.max(0f, Math.min(1f, value));
+        }
+
+        // ── 그리기 콜백: 이미지 수집과 무관하므로 전부 빈 구현 ──────────
+
+        /** 경로·도형은 수집 대상이 아니다. */
+        @Override
+        public void appendRectangle(Point2D p0, Point2D p1, Point2D p2, Point2D p3) {
+        }
+
+        /** 클리핑은 수집 대상이 아니다. */
+        @Override
+        public void clip(int windingRule) {
+        }
+
+        /** 경로 이동은 수집 대상이 아니다. */
+        @Override
+        public void moveTo(float x, float y) {
+        }
+
+        /** 직선 경로는 수집 대상이 아니다. */
+        @Override
+        public void lineTo(float x, float y) {
+        }
+
+        /** 곡선 경로는 수집 대상이 아니다. */
+        @Override
+        public void curveTo(float x1, float y1, float x2, float y2, float x3, float y3) {
+        }
+
+        /** 경로 상태를 추적하지 않으므로 현재 점은 원점으로 고정한다. */
+        @Override
+        public Point2D getCurrentPoint() {
+            return new Point2D.Float(0, 0);
+        }
+
+        /** 경로 닫기는 수집 대상이 아니다. */
+        @Override
+        public void closePath() {
+        }
+
+        /** 경로 종료는 수집 대상이 아니다. */
+        @Override
+        public void endPath() {
+        }
+
+        /** 선 그리기는 수집 대상이 아니다. */
+        @Override
+        public void strokePath() {
+        }
+
+        /** 면 채우기는 수집 대상이 아니다. */
+        @Override
+        public void fillPath(int windingRule) {
+        }
+
+        /** 채우고 그리기는 수집 대상이 아니다. */
+        @Override
+        public void fillAndStrokePath(int windingRule) {
+        }
+
+        /** 셰이딩은 수집 대상이 아니다. */
+        @Override
+        public void shadingFill(COSName shadingName) {
+        }
     }
 
     /** PDFBox suffix를 저장 확장자로 정규화한다(jpg→jpeg, 기록 불가 형식은 png). */
@@ -380,6 +539,13 @@ public class PdfBoxExtractor implements Extractor {
             bos.reset();
             ImageIO.write(toWrite, "png", bos);
         }
+        return bos.toByteArray();
+    }
+
+    /** 병합된 이미지는 원본 스트림이 없으므로 무손실 PNG로 인코딩한다. */
+    private static byte[] encodePng(BufferedImage bi) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ImageIO.write(bi, "png", bos);
         return bos.toByteArray();
     }
 

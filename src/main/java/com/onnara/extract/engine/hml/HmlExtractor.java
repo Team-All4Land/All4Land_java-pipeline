@@ -7,6 +7,7 @@ import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.RawParagraph;
 import com.onnara.extract.common.model.RawTable;
 import com.onnara.extract.engine.Extractor;
+import com.onnara.extract.engine.image.ImageSieve;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -54,14 +55,15 @@ public class HmlExtractor implements Extractor {
     /** 파일을 파싱해 raw 문서만 반환한다(이미지는 메타로만 포함). */
     @Override
     public RawDocument extractRaw(Path file) throws IOException {
-        ParseResult result = parse(file);
+        // 제외 로그는 항상 실행되는 이 경로에서만 남긴다(saveImages와 중복 방지)
+        ParseResult result = parse(file, true);
         return result.raw;
     }
 
     /** base64 BINDATA에서 복원한 이미지들을 outDir에 쓰고 저장 경로 목록을 반환한다. */
     @Override
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
-        ParseResult result = parse(file);
+        ParseResult result = parse(file, false);
         List<Path> saved = new ArrayList<>();
         for (ImageEntry entry : result.images) {
             Files.createDirectories(outDir);
@@ -73,7 +75,7 @@ public class HmlExtractor implements Extractor {
     }
 
     /** 단일 파싱 패스 — extractRaw/saveImages의 이미지 순서·이름 일치를 보장한다. */
-    private ParseResult parse(Path file) throws IOException {
+    private ParseResult parse(Path file, boolean log) throws IOException {
         Document xmlDoc = readXml(file);
         RawDocument raw = new RawDocument(file.getFileName().toString(), "hml", false);
         List<ImageEntry> images = new ArrayList<>();
@@ -119,14 +121,14 @@ public class HmlExtractor implements Extractor {
                         raw.getContent().add(parseTable(tbl));
                         for (Element pic : descendantElements(tbl, "PICTURE")) {
                             if (seenImages.add(pic)) {
-                                addImage(images, pic, binDataMap, stem);
+                                addImage(images, pic, binDataMap, stem, log);
                             }
                         }
                     }
 
                     for (Element pic : descendantElements(p, "PICTURE")) {
                         if (seenImages.add(pic)) {
-                            addImage(images, pic, binDataMap, stem);
+                            addImage(images, pic, binDataMap, stem, log);
                         }
                     }
                 }
@@ -155,15 +157,26 @@ public class HmlExtractor implements Extractor {
         }
     }
 
-    /** PICTURE의 IMAGE BinItem이 가리키는 base64 원본을 찾아 이미지 목록에 추가한다. */
+    /**
+     * PICTURE의 IMAGE BinItem이 가리키는 base64 원본을 찾아 이미지 목록에 추가한다.
+     *
+     * <p>정보가 없는 이미지(흰 바탕에 표식 하나 등)와 도장은 {@link ImageSieve}가 걸러낸다.
+     */
     private static void addImage(List<ImageEntry> images, Element pic,
-                                 Map<String, byte[]> binDataMap, String stem) {
+                                 Map<String, byte[]> binDataMap, String stem, boolean log) {
         List<Element> imageEls = descendantElements(pic, "IMAGE");
         if (imageEls.isEmpty()) {
             return;
         }
         byte[] data = binDataMap.get(imageEls.get(0).getAttribute("BinItem"));
         if (data == null || data.length == 0) {
+            return;
+        }
+        String reason = ImageSieve.reject(data);
+        if (reason != null) {
+            if (log) {
+                System.err.println("[이미지 제외] " + stem + ": " + reason);
+            }
             return;
         }
         images.add(new ImageEntry(

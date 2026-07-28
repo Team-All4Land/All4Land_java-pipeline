@@ -7,6 +7,7 @@ import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.RawParagraph;
 import com.onnara.extract.common.model.RawTable;
 import com.onnara.extract.engine.Extractor;
+import com.onnara.extract.engine.image.ImageSieve;
 import kr.dogfoot.hwpxlib.object.HWPXFile;
 import kr.dogfoot.hwpxlib.object.content.context_hpf.ManifestItem;
 import kr.dogfoot.hwpxlib.object.content.section_xml.ParaListCore;
@@ -60,14 +61,15 @@ public class OwpmlExtractor implements Extractor {
     /** 파일을 파싱해 raw 문서만 반환한다(이미지는 메타로만 포함). */
     @Override
     public RawDocument extractRaw(Path file) throws IOException {
-        ParseResult result = parse(file);
+        // 제외 로그는 항상 실행되는 이 경로에서만 남긴다(saveImages와 중복 방지)
+        ParseResult result = parse(file, true);
         return result.raw;
     }
 
     /** manifest에서 복원한 이미지들을 outDir에 쓰고 저장 경로 목록을 반환한다. */
     @Override
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
-        ParseResult result = parse(file);
+        ParseResult result = parse(file, false);
         List<Path> saved = new ArrayList<>();
         for (ImageEntry entry : result.images) {
             Files.createDirectories(outDir);
@@ -79,7 +81,7 @@ public class OwpmlExtractor implements Extractor {
     }
 
     /** 단일 파싱 패스 — extractRaw/saveImages의 이미지 순서·이름 일치를 보장한다. */
-    private ParseResult parse(Path file) throws IOException {
+    private ParseResult parse(Path file, boolean log) throws IOException {
         HWPXFile hwpxFile;
         try {
             hwpxFile = HWPXReader.fromFilepath(file.toString());
@@ -119,12 +121,12 @@ public class OwpmlExtractor implements Extractor {
                             for (Tr tr : table.trs()) {
                                 for (Tc tc : tr.tcs()) {
                                     for (Picture pic : findPictures(tc.subList())) {
-                                        addImage(images, pic, binDataMap, stem);
+                                        addImage(images, pic, binDataMap, stem, log);
                                     }
                                 }
                             }
                         } else if (runItem instanceof Picture picture) {
-                            addImage(images, picture, binDataMap, stem);
+                            addImage(images, picture, binDataMap, stem, log);
                         }
                     }
                 }
@@ -137,14 +139,25 @@ public class OwpmlExtractor implements Extractor {
         return new ParseResult(raw, images);
     }
 
-    /** Picture가 참조하는 manifest 바이너리(binaryItemIDRef)를 찾아 이미지 목록에 추가한다. */
+    /**
+     * Picture가 참조하는 manifest 바이너리(binaryItemIDRef)를 찾아 이미지 목록에 추가한다.
+     *
+     * <p>정보가 없는 이미지(흰 바탕에 표식 하나 등)와 도장은 {@link ImageSieve}가 걸러낸다.
+     */
     private static void addImage(List<ImageEntry> images, Picture pic,
-                                 Map<String, byte[]> binDataMap, String stem) {
+                                 Map<String, byte[]> binDataMap, String stem, boolean log) {
         if (pic.img() == null) {
             return;
         }
         byte[] data = binDataMap.get(pic.img().binaryItemIDRef());
         if (data == null || data.length == 0) {
+            return;
+        }
+        String reason = ImageSieve.reject(data);
+        if (reason != null) {
+            if (log) {
+                System.err.println("[이미지 제외] " + stem + ": " + reason);
+            }
             return;
         }
         images.add(new ImageEntry(
