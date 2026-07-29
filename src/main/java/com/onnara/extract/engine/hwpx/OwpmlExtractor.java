@@ -7,6 +7,7 @@ import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.RawParagraph;
 import com.onnara.extract.common.model.RawTable;
 import com.onnara.extract.engine.Extractor;
+import com.onnara.extract.engine.image.ImageSieve;
 import kr.dogfoot.hwpxlib.object.HWPXFile;
 import kr.dogfoot.hwpxlib.object.content.context_hpf.ManifestItem;
 import kr.dogfoot.hwpxlib.object.content.section_xml.ParaListCore;
@@ -137,7 +138,11 @@ public class OwpmlExtractor implements Extractor {
         return new ParseResult(raw, images);
     }
 
-    /** Picture가 참조하는 manifest 바이너리(binaryItemIDRef)를 찾아 이미지 목록에 추가한다. */
+    /**
+     * Picture가 참조하는 manifest 바이너리(binaryItemIDRef)를 찾아 이미지 목록에 추가한다.
+     *
+     * <p>정보가 없는 이미지(흰 바탕에 표식 하나 등)와 도장은 {@link ImageSieve}가 걸러낸다.
+     */
     private static void addImage(List<ImageEntry> images, Picture pic,
                                  Map<String, byte[]> binDataMap, String stem) {
         if (pic.img() == null) {
@@ -145,6 +150,9 @@ public class OwpmlExtractor implements Extractor {
         }
         byte[] data = binDataMap.get(pic.img().binaryItemIDRef());
         if (data == null || data.length == 0) {
+            return;
+        }
+        if (!ImageSieve.accept(data)) {
             return;
         }
         images.add(new ImageEntry(

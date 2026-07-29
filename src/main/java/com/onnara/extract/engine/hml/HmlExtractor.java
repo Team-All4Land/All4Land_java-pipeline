@@ -7,6 +7,7 @@ import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.RawParagraph;
 import com.onnara.extract.common.model.RawTable;
 import com.onnara.extract.engine.Extractor;
+import com.onnara.extract.engine.image.ImageSieve;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -155,7 +156,11 @@ public class HmlExtractor implements Extractor {
         }
     }
 
-    /** PICTURE의 IMAGE BinItem이 가리키는 base64 원본을 찾아 이미지 목록에 추가한다. */
+    /**
+     * PICTURE의 IMAGE BinItem이 가리키는 base64 원본을 찾아 이미지 목록에 추가한다.
+     *
+     * <p>정보가 없는 이미지(흰 바탕에 표식 하나 등)와 도장은 {@link ImageSieve}가 걸러낸다.
+     */
     private static void addImage(List<ImageEntry> images, Element pic,
                                  Map<String, byte[]> binDataMap, String stem) {
         List<Element> imageEls = descendantElements(pic, "IMAGE");
@@ -164,6 +169,9 @@ public class HmlExtractor implements Extractor {
         }
         byte[] data = binDataMap.get(imageEls.get(0).getAttribute("BinItem"));
         if (data == null || data.length == 0) {
+            return;
+        }
+        if (!ImageSieve.accept(data)) {
             return;
         }
         images.add(new ImageEntry(
