@@ -77,8 +77,7 @@ public class HwplibExtractor implements Extractor {
             }
         }
 
-        // 제외 로그는 항상 실행되는 이 경로에서만 남긴다(saveImages와 중복 방지)
-        for (ImageEntry entry : collectImages(hwpFile, stemOf(file), true)) {
+        for (ImageEntry entry : collectImages(hwpFile, stemOf(file))) {
             raw.getImages().add(new RawImage(entry.name, entry.data.length));
         }
         return raw;
@@ -89,7 +88,7 @@ public class HwplibExtractor implements Extractor {
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
         HWPFile hwpFile = read(file);
         List<Path> saved = new ArrayList<>();
-        for (ImageEntry entry : collectImages(hwpFile, stemOf(file), false)) {
+        for (ImageEntry entry : collectImages(hwpFile, stemOf(file))) {
             Files.createDirectories(outDir);
             Path dest = outDir.resolve(entry.name);
             Files.write(dest, entry.data);
@@ -157,7 +156,7 @@ public class HwplibExtractor implements Extractor {
      * <p>정보가 없는 이미지(흰 바탕에 표식 하나 등)와 도장은 {@link ImageSieve}가 걸러낸다.
      * 번호는 통과한 것에만 매겨 연속되게 한다.
      */
-    private static List<ImageEntry> collectImages(HWPFile hwpFile, String stem, boolean log) {
+    private static List<ImageEntry> collectImages(HWPFile hwpFile, String stem) {
         List<ImageEntry> out = new ArrayList<>();
         if (hwpFile.getBinData() == null) {
             return out;
@@ -167,11 +166,7 @@ public class HwplibExtractor implements Extractor {
             if (data == null || data.length == 0) {
                 continue;
             }
-            String reason = ImageSieve.reject(data);
-            if (reason != null) {
-                if (log) {
-                    System.err.println("[이미지 제외] " + stem + ": " + reason);
-                }
+            if (!ImageSieve.accept(data)) {
                 continue;
             }
             out.add(new ImageEntry(

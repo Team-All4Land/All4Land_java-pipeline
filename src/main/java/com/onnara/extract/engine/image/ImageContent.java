@@ -12,19 +12,30 @@ import java.awt.image.BufferedImage;
 public record ImageContent(
         /** 배경색과 다른(=잉크) 픽셀의 비율 0.0~1.0. */
         double inkRatio,
-        /** 잉크 픽셀 바운딩박스 면적 / 전체 면적 0.0~1.0. 잉크가 없으면 0. */
-        double inkBoxRatio,
+        /**
+         * 잉크가 뻗은 범위 — 가로·세로 각각의 바운딩박스 변 길이 비 중 <b>큰 쪽</b> 0.0~1.0.
+         *
+         * <p>면적(가로×세로)이 아니라 최대 변을 쓴다. 지면을 가로지르는 가는 선은 면적으로
+         * 재면 한구석에 몰린 것처럼 보이지만, 실제로는 이미지 전체에 걸쳐 있다.
+         */
+        double inkSpread,
         /** 잉크 픽셀 중 붉은 픽셀의 비율 0.0~1.0. 잉크가 없으면 0. */
         double redInkRatio,
-        /** 4bit/채널로 양자화했을 때 서로 다른 색의 수(0~{@value #COLOR_CAP}). */
-        int distinctColors,
         /** 원본 픽셀 폭. */
         int width,
         /** 원본 픽셀 높이. */
         int height) {
 
-    /** 표본으로 볼 픽셀 수의 상한 — 두 축 stride로 이 정도까지만 훑는다. */
-    private static final int MAX_SAMPLES = 20_000;
+    /**
+     * 전 픽셀을 훑는 상한. 이보다 큰 이미지만 두 축 stride로 건너뛴다.
+     *
+     * <p>표본을 성기게 잡으면 <b>1px 가는 선을 통째로 건너뛴다</b>. 괘선만 있는 위치도가
+     * 그렇게 '잉크 없음'으로 측정돼 버려졌었다. 선 도면을 지키려면 원칙적으로 전 픽셀을
+     * 봐야 하므로, 값을 실사용 이미지가 거의 다 들어올 만큼 크게 잡는다
+     * (300dpi A4 전면 스캔이 약 870만 픽셀). 여기를 넘는 크기의 이미지는 사진이지
+     * 선 도면이 아니므로 건너뛰어도 판정이 뒤집히지 않는다.
+     */
+    private static final int MAX_SCAN_PIXELS = 40_000_000;
 
     /** 4bit×3채널 양자화 색 공간의 크기 — 히스토그램 길이이자 색 수의 상한. */
     static final int COLOR_CAP = 4096;
@@ -48,23 +59,22 @@ public record ImageContent(
         int w = bi.getWidth();
         int h = bi.getHeight();
         if (w <= 0 || h <= 0) {
-            return new ImageContent(0, 0, 0, 0, Math.max(w, 0), Math.max(h, 0));
+            return new ImageContent(0, 0, 0, Math.max(w, 0), Math.max(h, 0));
         }
 
         int step = 1;
-        while ((long) (w / step) * (h / step) > MAX_SAMPLES) {
+        while ((long) (w / step) * (h / step) > MAX_SCAN_PIXELS) {
             step++;
         }
+        // 픽셀은 행 단위로 읽는다 — getRGB를 픽셀마다 부르는 것보다 훨씬 빠르다
+        int[] row = new int[w];
 
-        // 1차 순회: 양자화 색 히스토그램 → 최빈색(배경)과 색 수
+        // 1차 순회: 양자화 색 히스토그램 → 최빈색(배경)
         int[] histogram = new int[COLOR_CAP];
-        int distinct = 0;
         for (int y = 0; y < h; y += step) {
+            bi.getRGB(0, y, w, 1, row, 0, w);
             for (int x = 0; x < w; x += step) {
-                int q = quantize(composite(bi.getRGB(x, y)));
-                if (histogram[q]++ == 0) {
-                    distinct++;
-                }
+                histogram[quantize(composite(row[x]))]++;
             }
         }
         int background = 0;
@@ -86,9 +96,10 @@ public record ImageContent(
         int maxX = Integer.MIN_VALUE;
         int maxY = Integer.MIN_VALUE;
         for (int y = 0; y < h; y += step) {
+            bi.getRGB(0, y, w, 1, row, 0, w);
             for (int x = 0; x < w; x += step) {
                 sampled++;
-                int rgb = composite(bi.getRGB(x, y));
+                int rgb = composite(row[x]);
                 int r = (rgb >> 16) & 0xFF;
                 int g = (rgb >> 8) & 0xFF;
                 int b = rgb & 0xFF;
@@ -108,14 +119,15 @@ public record ImageContent(
         }
 
         if (ink == 0) {
-            return new ImageContent(0, 0, 0, distinct, w, h);
+            return new ImageContent(0, 0, 0, w, h);
         }
-        double boxRatio = ((double) (maxX - minX + step) / w) * ((double) (maxY - minY + step) / h);
+        double spread = Math.max(
+                (double) (maxX - minX + step) / w,
+                (double) (maxY - minY + step) / h);
         return new ImageContent(
                 (double) ink / sampled,
-                Math.min(1.0, boxRatio),
+                Math.min(1.0, spread),
                 (double) redInk / ink,
-                distinct,
                 w, h);
     }
 
@@ -134,12 +146,5 @@ public record ImageContent(
     /** RGB를 4bit/채널(12bit)로 양자화한다. */
     private static int quantize(int rgb) {
         return (((rgb >> 20) & 0xF) << 8) | (((rgb >> 12) & 0xF) << 4) | ((rgb >> 4) & 0xF);
-    }
-
-    /** 로그용 요약 — 제외 사유와 함께 임계값 조정 근거로 남긴다. */
-    public String describe() {
-        return String.format(
-                "%dx%d, ink=%.2f%%, box=%.1f%%, red=%.0f%%, colors=%d",
-                width, height, inkRatio * 100, inkBoxRatio * 100, redInkRatio * 100, distinctColors);
     }
 }

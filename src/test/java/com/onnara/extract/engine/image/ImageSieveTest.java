@@ -8,8 +8,8 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.util.Random;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@link ImageSieve} 판정 경계 검증.
@@ -41,7 +41,7 @@ class ImageSieveTest {
         g.fillRect(30, 70, 10, 10); // 전체의 0.3%, 한구석에 몰려 있다
         g.dispose();
 
-        assertNotNull(ImageSieve.reject(bi, UNKNOWN, UNKNOWN));
+        assertFalse(ImageSieve.accept(bi, UNKNOWN, UNKNOWN));
     }
 
     @Test
@@ -59,26 +59,75 @@ class ImageSieveTest {
         g.drawOval(300, 200, 200, 200);
         g.dispose();
 
-        assertNull(ImageSieve.reject(bi, UNKNOWN, UNKNOWN));
+        assertTrue(ImageSieve.accept(bi, UNKNOWN, UNKNOWN));
+    }
+
+    @Test
+    @DisplayName("흑백 2색 선도면을 남긴다 — 색 수로 거르면 도면이 통째로 죽는다")
+    void keepsTwoColorLineDrawing() {
+        BufferedImage bi = blank(1000, 700);
+        Graphics2D g = bi.createGraphics();
+        g.setColor(Color.BLACK);
+        g.setStroke(new java.awt.BasicStroke(1f));
+        for (int i = 0; i < 6; i++) {
+            g.drawLine(80, 100 + i * 90, 920, 100 + i * 90); // 필지 경계선
+        }
+        g.drawRect(80, 100, 840, 450);
+        g.dispose();
+
+        // 흑백 도면은 색이 2개뿐이고 잉크도 1% 미만이다. 색 수를 조건에 넣으면
+        // 이 부류가 통째로 걸린다 — 잉크가 어디까지 뻗었는지만 본다.
+        assertTrue(ImageSieve.accept(bi, UNKNOWN, UNKNOWN));
+    }
+
+    @Test
+    @DisplayName("1px 가는 선만 있는 도면을 남긴다 — 표본을 성기게 잡으면 선을 건너뛴다")
+    void keepsHairlineDrawingInLargeImage() {
+        BufferedImage bi = blank(1600, 1200);
+        Graphics2D g = bi.createGraphics();
+        g.setColor(Color.BLACK);
+        g.setStroke(new java.awt.BasicStroke(1f));
+        // 표본 간격의 배수를 피한 좌표에 hairline을 둔다
+        g.drawLine(37, 101, 1550, 101);
+        g.drawLine(37, 1099, 1550, 1099);
+        g.drawLine(37, 101, 37, 1099);
+        g.dispose();
+
+        assertTrue(ImageSieve.accept(bi, UNKNOWN, UNKNOWN));
+    }
+
+    @Test
+    @DisplayName("지면을 가로지르는 얇은 선을 남긴다 — 뻗은 범위는 면적이 아니라 최대 변으로 잰다")
+    void keepsThinFullWidthRule() {
+        BufferedImage bi = blank(1200, 300);
+        Graphics2D g = bi.createGraphics();
+        g.setColor(Color.BLACK);
+        g.setStroke(new java.awt.BasicStroke(1f));
+        g.drawLine(20, 150, 1180, 150);
+        g.dispose();
+
+        // 바운딩박스 면적으로 재면 0.3%라 한구석에 몰린 것처럼 보이지만,
+        // 실제로는 가로로 이미지 전체(97%)에 걸쳐 있다.
+        assertTrue(ImageSieve.accept(bi, UNKNOWN, UNKNOWN));
     }
 
     @Test
     @DisplayName("단색 캔버스는 제외한다")
     void rejectsUniformCanvas() {
-        assertNotNull(ImageSieve.reject(blank(300, 300), UNKNOWN, UNKNOWN));
+        assertFalse(ImageSieve.accept(blank(300, 300), UNKNOWN, UNKNOWN));
     }
 
     @Test
     @DisplayName("괘선 조각처럼 아주 작은 이미지는 제외한다")
     void rejectsTinyImage() {
-        assertNotNull(ImageSieve.reject(blank(16, 4), UNKNOWN, UNKNOWN));
+        assertFalse(ImageSieve.accept(blank(16, 4), UNKNOWN, UNKNOWN));
     }
 
     @Test
     @DisplayName("붉은 관인은 제외한다 — 흰 배경이 아니라 잉크 픽셀 기준으로 재기 때문")
     void rejectsRedSeal() {
         BufferedImage bi = stamp();
-        assertNotNull(ImageSieve.reject(bi, 25.0, 25.0));
+        assertFalse(ImageSieve.accept(bi, 25.0, 25.0));
     }
 
     @Test
@@ -96,7 +145,7 @@ class ImageSieveTest {
         g.dispose();
 
         // 픽셀로는 900px이지만 지면에서는 30mm — 예전 픽셀 기준(300px)은 이걸 놓쳤다
-        assertNotNull(ImageSieve.reject(bi, 30.0, 30.0));
+        assertFalse(ImageSieve.accept(bi, 30.0, 30.0));
     }
 
     @Test
@@ -109,7 +158,7 @@ class ImageSieveTest {
         g.drawImage(rgb, 0, 0, null);
         g.dispose();
 
-        assertNotNull(ImageSieve.reject(indexed, 25.0, 25.0));
+        assertFalse(ImageSieve.accept(indexed, 25.0, 25.0));
     }
 
     @Test
@@ -125,20 +174,20 @@ class ImageSieveTest {
                 bi.setRGB(x, y, (r << 16) | (g << 8) | b);
             }
         }
-        assertNull(ImageSieve.reject(bi, 120.0, 90.0));
+        assertTrue(ImageSieve.accept(bi, 120.0, 90.0));
     }
 
     @Test
     @DisplayName("붉지만 지면에서 큰 이미지는 도장이 아니다 (붉은 계열 사진 오탐 방지)")
     void keepsLargeRedImage() {
         BufferedImage bi = stamp();
-        assertNull(ImageSieve.reject(bi, 150.0, 150.0));
+        assertTrue(ImageSieve.accept(bi, 150.0, 150.0));
     }
 
     @Test
     @DisplayName("디코딩할 수 없는 형식은 통과시킨다 (fail-open)")
     void keepsUndecodableBytes() {
-        assertNull(ImageSieve.reject(new byte[] {0x01, 0x02, 0x03, 0x04}));
+        assertTrue(ImageSieve.accept(new byte[] {0x01, 0x02, 0x03, 0x04}));
     }
 
     /** 흰 바탕에 붉은 원과 글자가 든 전형적인 관인 이미지. */

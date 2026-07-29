@@ -61,15 +61,14 @@ public class OwpmlExtractor implements Extractor {
     /** 파일을 파싱해 raw 문서만 반환한다(이미지는 메타로만 포함). */
     @Override
     public RawDocument extractRaw(Path file) throws IOException {
-        // 제외 로그는 항상 실행되는 이 경로에서만 남긴다(saveImages와 중복 방지)
-        ParseResult result = parse(file, true);
+        ParseResult result = parse(file);
         return result.raw;
     }
 
     /** manifest에서 복원한 이미지들을 outDir에 쓰고 저장 경로 목록을 반환한다. */
     @Override
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
-        ParseResult result = parse(file, false);
+        ParseResult result = parse(file);
         List<Path> saved = new ArrayList<>();
         for (ImageEntry entry : result.images) {
             Files.createDirectories(outDir);
@@ -81,7 +80,7 @@ public class OwpmlExtractor implements Extractor {
     }
 
     /** 단일 파싱 패스 — extractRaw/saveImages의 이미지 순서·이름 일치를 보장한다. */
-    private ParseResult parse(Path file, boolean log) throws IOException {
+    private ParseResult parse(Path file) throws IOException {
         HWPXFile hwpxFile;
         try {
             hwpxFile = HWPXReader.fromFilepath(file.toString());
@@ -121,12 +120,12 @@ public class OwpmlExtractor implements Extractor {
                             for (Tr tr : table.trs()) {
                                 for (Tc tc : tr.tcs()) {
                                     for (Picture pic : findPictures(tc.subList())) {
-                                        addImage(images, pic, binDataMap, stem, log);
+                                        addImage(images, pic, binDataMap, stem);
                                     }
                                 }
                             }
                         } else if (runItem instanceof Picture picture) {
-                            addImage(images, picture, binDataMap, stem, log);
+                            addImage(images, picture, binDataMap, stem);
                         }
                     }
                 }
@@ -145,7 +144,7 @@ public class OwpmlExtractor implements Extractor {
      * <p>정보가 없는 이미지(흰 바탕에 표식 하나 등)와 도장은 {@link ImageSieve}가 걸러낸다.
      */
     private static void addImage(List<ImageEntry> images, Picture pic,
-                                 Map<String, byte[]> binDataMap, String stem, boolean log) {
+                                 Map<String, byte[]> binDataMap, String stem) {
         if (pic.img() == null) {
             return;
         }
@@ -153,11 +152,7 @@ public class OwpmlExtractor implements Extractor {
         if (data == null || data.length == 0) {
             return;
         }
-        String reason = ImageSieve.reject(data);
-        if (reason != null) {
-            if (log) {
-                System.err.println("[이미지 제외] " + stem + ": " + reason);
-            }
+        if (!ImageSieve.accept(data)) {
             return;
         }
         images.add(new ImageEntry(

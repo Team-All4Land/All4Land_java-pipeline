@@ -99,8 +99,7 @@ public class PdfBoxExtractor implements Extractor {
                 }
             }
 
-            // 제외·병합 로그는 항상 실행되는 이 경로에서만 남긴다(saveImages와 중복 방지)
-            for (ImageEntry img : iterImages(doc, stemOf(file), file.getFileName().toString(), true)) {
+            for (ImageEntry img : iterImages(doc, stemOf(file), file.getFileName().toString())) {
                 raw.getImages().add(new RawImage(img.name, img.data.length));
             }
         }
@@ -112,7 +111,7 @@ public class PdfBoxExtractor implements Extractor {
     public List<Path> saveImages(Path file, Path outDir) throws IOException {
         List<Path> saved = new ArrayList<>();
         try (PDDocument doc = Loader.loadPDF(file.toFile())) {
-            for (ImageEntry img : iterImages(doc, stemOf(file), file.getFileName().toString(), false)) {
+            for (ImageEntry img : iterImages(doc, stemOf(file), file.getFileName().toString())) {
                 Files.createDirectories(outDir);
                 Path dest = outDir.resolve(img.name);
                 Files.write(dest, img.data);
@@ -278,39 +277,27 @@ public class PdfBoxExtractor implements Extractor {
      * 페이지에 그려진 이미지를 모아 타일 병합 → 저장 판정을 거친 뒤 (이름, 바이트)로 반환한다.
      *
      * <p>{@code extractRaw}와 {@code saveImages}가 같은 결과를 내야
-     * {@code PipelineSupport.bindImagePaths}의 순서·이름 일치 계약이 유지되므로,
-     * 로그 출력 여부만 다르고 판정은 동일하다.
-     *
-     * @param log 병합·제외 사유를 표준 오류로 남길지 여부
+     * {@code PipelineSupport.bindImagePaths}의 순서·이름 일치 계약이 유지되므로
+     * 두 경로가 이 메서드를 공유한다.
      */
-    private static List<ImageEntry> iterImages(PDDocument doc, String stem, String sourceName,
-                                               boolean log) throws IOException {
+    private static List<ImageEntry> iterImages(PDDocument doc, String stem, String sourceName)
+            throws IOException {
         List<ImageEntry> out = new ArrayList<>();
         // 여러 페이지에 반복 등장하는 같은 스트림(머리말 로고 등)은 한 번만 저장한다
         Set<COSBase> emitted = Collections.newSetFromMap(new IdentityHashMap<>());
         int pageNo = 0;
         for (PDPage page : doc.getPages()) {
             pageNo++;
-            DrawnImages drawn = new DrawnImages(page, sourceName, pageNo, log);
+            DrawnImages drawn = new DrawnImages(page, sourceName, pageNo);
             drawn.processPage(page);
 
             int idx = 0;
             for (PdfImageTiles.Merged merged : PdfImageTiles.merge(drawn.placements)) {
-                if (merged.isStitched() && log) {
-                    System.err.println("[이미지 병합] " + sourceName + " p." + pageNo
-                            + ": 타일 " + merged.tiles().size() + "장 → 1장");
-                }
                 if (!merged.isStitched()
                         && !emitted.add(merged.single().image().getCOSObject())) {
                     continue; // 앞 페이지에서 이미 저장한 스트림
                 }
-                String reason = ImageSieve.reject(
-                        merged.stitched(), merged.widthMm(), merged.heightMm());
-                if (reason != null) {
-                    if (log) {
-                        System.err.println("[이미지 제외] " + sourceName + " p." + pageNo
-                                + ": " + reason);
-                    }
+                if (!ImageSieve.accept(merged.stitched(), merged.widthMm(), merged.heightMm())) {
                     continue;
                 }
                 idx++;
@@ -342,13 +329,11 @@ public class PdfBoxExtractor implements Extractor {
         private final Map<COSBase, BufferedImage> decoded = new IdentityHashMap<>();
         private final String sourceName;
         private final int pageNo;
-        private final boolean log;
 
-        DrawnImages(PDPage page, String sourceName, int pageNo, boolean log) {
+        DrawnImages(PDPage page, String sourceName, int pageNo) {
             super(page);
             this.sourceName = sourceName;
             this.pageNo = pageNo;
-            this.log = log;
         }
 
         /** 이미지가 그려질 때마다 현재 변환 행렬로 배치를 기록한다. */
@@ -408,11 +393,10 @@ public class PdfBoxExtractor implements Extractor {
             try {
                 bi = image.getImage();
             } catch (IOException | RuntimeException e) {
-                // 디코딩 불가 이미지 하나 때문에 파일 전체를 실패시키지 않는다
-                if (log) {
-                    System.err.println("[이미지 제외] " + sourceName + " p." + pageNo
-                            + ": 디코딩 실패 (" + e.getMessage() + ")");
-                }
+                // 디코딩 불가 이미지 하나 때문에 파일 전체를 실패시키지 않는다.
+                // 다만 조용히 버리면 본문 이미지가 사라진 것을 알 수 없으므로 경고는 남긴다.
+                System.err.println("[경고] " + sourceName + " p." + pageNo
+                        + ": 이미지를 디코딩할 수 없어 건너뜁니다 (" + e.getMessage() + ")");
                 bi = null;
             }
             decoded.put(key, bi);

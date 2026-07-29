@@ -19,8 +19,8 @@ import java.io.InputStream;
  * </ol>
  *
  * <p>임계값은 전부 이 클래스 상단에 모아 둔다. 실제 배치 파일로 조정할 때
- * 여기만 보면 되도록 한 것이다 — 제외 로그에 측정값({@link ImageContent#describe()})이
- * 함께 찍히므로 조정 근거를 로그에서 얻을 수 있다.
+ * 여기만 보면 되도록 한 것이다. 어떤 이미지가 왜 걸렸는지 확인해야 하면
+ * {@link ImageContent#measure(java.awt.image.BufferedImage)}를 직접 불러 수치를 본다.
  */
 public final class ImageSieve {
 
@@ -29,14 +29,8 @@ public final class ImageSieve {
     /** '점 하나' 판정: 잉크가 이 비율 미만이면서 한구석에 몰려 있으면 버린다. */
     private static final double SPARSE_INK_RATIO = 0.01;
 
-    /** '점 하나' 판정: 잉크 바운딩박스가 지면의 이 비율 미만이면 한구석에 몰린 것으로 본다. */
-    private static final double SPARSE_INK_BOX_RATIO = 0.25;
-
-    /** '2색 표식' 판정: 색이 이 수 이하이면서 잉크가 {@link #FLAT_INK_RATIO} 미만이면 버린다. */
-    private static final int FLAT_COLOR_COUNT = 4;
-
-    /** '2색 표식' 판정의 잉크 비율 상한. */
-    private static final double FLAT_INK_RATIO = 0.02;
+    /** '점 하나' 판정: 잉크가 어느 방향으로도 이 비율만큼 뻗지 못하면 한구석에 몰린 것으로 본다. */
+    private static final double SPARSE_INK_SPREAD = 0.25;
 
     /** 이 픽셀 크기(최대 변) 미만은 불릿·괘선 조각으로 보고 버린다. */
     private static final int MIN_PIXELS = 24;
@@ -75,8 +69,8 @@ public final class ImageSieve {
      * HWP/HWPX/HML의 BinData처럼 <b>지면 크기를 모르는</b> 바이트 이미지를 판정한다.
      * 판정은 픽셀 기준으로 대체되며, 디코딩할 수 없는 형식(wmf/emf/ole 등)은 통과시킨다.
      */
-    public static String reject(byte[] data) {
-        return reject(decode(data), Double.NaN, Double.NaN);
+    public static boolean accept(byte[] data) {
+        return accept(decode(data), Double.NaN, Double.NaN);
     }
 
     /** 바이트를 이미지로 디코딩한다. ImageIO가 읽지 못하면 {@code null}. */
@@ -92,43 +86,39 @@ public final class ImageSieve {
     }
 
     /**
-     * 저장 대상이면 {@code null}, 버릴 대상이면 사람이 읽을 수 있는 제외 사유를 반환한다.
+     * 첨부로 저장할 이미지이면 {@code true}, 버릴 이미지이면 {@code false}.
      *
      * @param decoded    디코딩된 이미지. ImageIO가 읽지 못한 형식(wmf/emf 등)이면 {@code null}을
      *                   넘겨도 되며, 그 경우 판정하지 않고 통과시킨다(fail-open).
      * @param widthMm    지면에 그려지는 폭(mm). 모르면 {@link Double#NaN}.
      * @param heightMm   지면에 그려지는 높이(mm). 모르면 {@link Double#NaN}.
      */
-    public static String reject(BufferedImage decoded, double widthMm, double heightMm) {
+    public static boolean accept(BufferedImage decoded, double widthMm, double heightMm) {
         if (decoded == null) {
-            return null; // 판정할 수 없으면 살린다 — 본문 이미지를 잃는 쪽이 더 나쁘다
+            return true; // 판정할 수 없으면 살린다 — 본문 이미지를 잃는 쪽이 더 나쁘다
         }
         ImageContent c = ImageContent.measure(decoded);
 
         boolean knowsPageSize = !Double.isNaN(widthMm) && !Double.isNaN(heightMm)
                 && widthMm > 0 && heightMm > 0;
 
+        // 괘선 조각·불릿
         if (Math.max(c.width(), c.height()) < MIN_PIXELS) {
-            return "극소 이미지 (" + c.describe() + ")";
+            return false;
         }
         if (knowsPageSize && Math.max(widthMm, heightMm) < MIN_MM) {
-            return String.format("극소 이미지 (%.1fx%.1fmm)", widthMm, heightMm);
+            return false;
         }
+        // 단색 캔버스
         if (c.inkRatio() == 0) {
-            return "단색 이미지 (" + c.describe() + ")";
+            return false;
         }
-        // 잉크가 적으면서 '동시에' 한구석에 몰려 있을 때만 버린다.
-        // 선이 드문 도면·위치도는 잉크가 지면 전체에 퍼져 바운딩박스가 크므로 살아남는다.
-        if (c.inkRatio() < SPARSE_INK_RATIO && c.inkBoxRatio() < SPARSE_INK_BOX_RATIO) {
-            return "점 하나 (" + c.describe() + ")";
+        // '점 하나': 잉크가 적으면서 '동시에' 한구석에 몰려 있을 때만 버린다.
+        // 선이 드문 도면·위치도는 잉크가 지면을 가로질러 뻗으므로 살아남는다.
+        if (c.inkRatio() < SPARSE_INK_RATIO && c.inkSpread() < SPARSE_INK_SPREAD) {
+            return false;
         }
-        if (c.distinctColors() <= FLAT_COLOR_COUNT && c.inkRatio() < FLAT_INK_RATIO) {
-            return "표식 (" + c.describe() + ")";
-        }
-        if (isStamp(c, knowsPageSize, widthMm, heightMm)) {
-            return "도장 (" + c.describe() + ")";
-        }
-        return null;
+        return !isStamp(c, knowsPageSize, widthMm, heightMm);
     }
 
     /**
