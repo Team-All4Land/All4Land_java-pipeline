@@ -121,7 +121,7 @@ java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
 | 명령 | 역할 |
 |---|---|
 | `pipeline -i input/ -o out/ [--no-db] [--raw] [--tables]` | 배치: 판별→추출→표해석→매핑→적재 일괄 |
-| `detect 파일...\|폴더 [--json]` | 스캔 여부 분류 결과 출력 |
+| `detect 파일...\|폴더 [--json] [--summary]` | 스캔 여부 분류·집계 (추출·OCR 없음) |
 | `extract 파일...\|폴더 -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (DB 적재 없음, 엔진 강제 지정 가능) |
 | `tables raw.json... -o out/ [--summary]` | 표 해석 전용 (raw JSON → 표 해석 JSON) |
 | `map raw.json... -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
@@ -144,6 +144,9 @@ java -jar target/extract-pipeline-1.0.0.jar pipeline -i samples -o out/ --no-db
 
 # 스캔 여부만 확인
 java -jar target/extract-pipeline-1.0.0.jar detect samples --json
+
+# 전체 문서 중 스캔본이 몇 개인지만 집계 (파일별 목록 없이)
+java -jar target/extract-pipeline-1.0.0.jar detect input/ --summary
 
 # PostgreSQL까지 적재 (접속 정보는 application.properties에서)
 java -jar target/extract-pipeline-1.0.0.jar pipeline -i input/ -o out/
@@ -262,6 +265,28 @@ PaddleOCR-VL을 구동하는 Python 스크립트(`ocr-cli/paddleocr_vl_cli.py`)�
 
 `paddleocr` 미설치 등으로 스크립트를 실행할 수 없으면(경로 확인: `ocr.cli.script`)
 스캔본 파일만 `[실패]` 처리되고, 네이티브 파일 처리에는 영향이 없습니다.
+
+### OCR 전에 스캔본이 몇 건인지 먼저 세기
+
+`detect --summary`는 판별 단계만 돌립니다 — 추출·매핑·DB 적재는 물론 OCR 서브프로세스도
+띄우지 않으므로 전체 문서에 돌려도 비용은 파일 파싱뿐입니다. 스캔본 건수를 먼저 알면
+배치 소요 시간과 `ocr.cli.timeout-sec`(파일당 제한)를 가늠할 수 있습니다.
+
+```bash
+java -jar target/extract-pipeline-1.0.0.jar detect input/ --summary
+```
+
+```
+[집계] 총 8개 — 스캔본 1개(12.5%), 네이티브 7개(87.5%), 판별 실패 0개
+       hml   총 3개 · 스캔본 0 · 네이티브 3 · 실패 0
+       hwp   총 2개 · 스캔본 0 · 네이티브 2 · 실패 0
+       hwpx  총 3개 · 스캔본 1 · 네이티브 2 · 실패 0
+```
+
+판별 실패(지원하지 않는 확장자, 손상 파일)는 네이티브가 아니라 별도로 세고 비율의
+분모에서도 빠집니다 — 실패를 네이티브에 합치면 스캔본 비중이 실제보다 낮게 보입니다.
+`--json`을 함께 주면 `summary` / `by_extension` / `files`(`--summary`면 생략) 구조로
+출력됩니다.
 
 ## 데이터베이스 스키마 (PostgreSQL)
 

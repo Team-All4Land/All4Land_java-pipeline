@@ -69,7 +69,7 @@ extract-java/
 │   ├── cli/                     # ★ 진입점 (picocli 서브커맨드)
 │   │   ├── Main.java            #   서브커맨드 등록·공통 옵션
 │   │   ├── PipelineCommand.java #   pipeline: 판별→추출→매핑→적재 일괄 (기존 pipeline.mjs 대체)
-│   │   ├── DetectCommand.java   #   detect: 스캔 여부 일괄 분류 (--json)
+│   │   ├── DetectCommand.java   #   detect: 스캔 여부 일괄 분류·집계 (--json, --summary)
 │   │   ├── ExtractCommand.java  #   extract: 형식/엔진 지정 추출 (+--raw, --no-images)
 │   │   ├── MapCommand.java      #   map: raw JSON → 스키마 JSON (매핑 전용)
 │   │   └── LoadCommand.java     #   load: 스키마 JSON → PostgreSQL (적재 전용)
@@ -77,6 +77,7 @@ extract-java/
 │   ├── detect/                  # ★ 1차 분기: 스캔 판별
 │   │   ├── ScanDetector.java    #   인터페이스: boolean isScanned(Path)
 │   │   ├── DetectorRegistry.java#   확장자 → 판별기 매핑 (§3)
+│   │   ├── ScanSurvey.java      #   문서 집합 스캔 판별 집계 (추출·OCR 없이 1차 분기만)
 │   │   ├── PdfScanDetector.java #   첫 페이지 텍스트 레이어·이미지 유무 (PDFBox)
 │   │   ├── HwpScanDetector.java #   네이티브 텍스트량 vs 임베디드 이미지 비중 (hwplib)
 │   │   ├── HwpxScanDetector.java#   ZIP 내 본문 XML 텍스트 검사
@@ -534,7 +535,7 @@ java -jar extract.jar <서브커맨드> [옵션]
 | 명령 | 역할 |
 |---|---|
 | `pipeline -i input/ -o out/ [--no-db] [--raw] [--tables]` | 배치: 판별→추출→표해석→매핑→적재 일괄 (기존 pipeline.mjs 대체) |
-| `detect 파일... [--json]` | 스캔 여부 분류 결과 출력 |
+| `detect 파일... [--json] [--summary]` | 스캔 여부 분류·집계 (판별만 실행 — 추출·OCR 없음) |
 | `extract 파일... -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (엔진 강제 지정 가능) |
 | `tables raw.json -o out/ [--summary]` | 표 해석 전용 (raw JSON → 표 해석 JSON §5.1) |
 | `map raw.json -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
