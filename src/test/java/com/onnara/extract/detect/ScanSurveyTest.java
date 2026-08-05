@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -51,6 +52,48 @@ class ScanSurveyTest {
         assertEquals(ScanSurvey.Status.FAILED, failedEntry.status());
         assertNotNull(failedEntry.error(), "실패 사유가 남아야 함");
         assertTrue(failedEntry.error().contains("txt"), "사유에 확장자가 드러나야 함: " + failedEntry.error());
+        assertNotNull(failedEntry.kind(), "실패 갈래가 채워져야 함");
+    }
+
+    /**
+     * 실패는 갈래별로 세어야 대응이 갈린다 — "판별 실패 N개"만으로는 손쓸 수 있는 게 없다.
+     * 예시 파일도 함께 들어 사유를 곧바로 확인할 수 있어야 한다.
+     */
+    @Test
+    void groupsFailuresByKindWithSamples() {
+        Path nativeHwp = TestFixtures.sample("공유수면 점용사용 허가 고시문.hwp");
+        Path unsupported = Path.of("samples", "존재하지-않는-형식.txt");
+        Path missing = Path.of("samples", "없는-파일.hwp");
+
+        ScanSurvey survey = ScanSurvey.of(List.of(nativeHwp, unsupported, missing));
+
+        assertEquals(2, survey.failed());
+        assertEquals(2, survey.failures().size());
+
+        List<ScanSurvey.FailureStat> stats = survey.byFailureKind(3);
+        assertEquals(2, stats.size());
+        assertEquals(2, stats.stream().mapToInt(ScanSurvey.FailureStat::count).sum());
+        for (ScanSurvey.FailureStat stat : stats) {
+            assertFalse(stat.samples().isEmpty(), "갈래마다 예시 파일이 있어야 함: " + stat.kind());
+            assertFalse(stat.kind().description().isBlank(), "갈래에 설명이 있어야 함");
+        }
+        // 성공 건은 실패 집계에 섞이지 않는다
+        assertTrue(stats.stream().flatMap(s -> s.samples().stream()).noneMatch(nativeHwp::equals));
+    }
+
+    /** 예시 수 상한을 지켜야 집계 출력이 파일 목록으로 번지지 않는다. */
+    @Test
+    void limitsNumberOfSamplesPerKind() {
+        List<Path> broken = List.of(
+                Path.of("samples", "a.txt"), Path.of("samples", "b.txt"),
+                Path.of("samples", "c.txt"), Path.of("samples", "d.txt"));
+
+        ScanSurvey survey = ScanSurvey.of(broken);
+        List<ScanSurvey.FailureStat> stats = survey.byFailureKind(2);
+
+        assertEquals(1, stats.size());
+        assertEquals(4, stats.get(0).count());
+        assertEquals(2, stats.get(0).samples().size());
     }
 
     /** 확장자별 소계가 확장자 오름차순으로, 상태별로 나뉘어 나오는지 검증한다. */

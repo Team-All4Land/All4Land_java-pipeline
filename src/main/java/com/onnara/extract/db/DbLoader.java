@@ -1,5 +1,6 @@
 package com.onnara.extract.db;
 
+import com.onnara.extract.common.Errors;
 import com.onnara.extract.common.Json;
 import com.onnara.extract.common.model.NoticeRecord;
 import com.onnara.extract.common.model.RawImage;
@@ -53,14 +54,27 @@ public final class DbLoader implements AutoCloseable {
         this.conn.setAutoCommit(false);
     }
 
-    /** 파일 목록을 전부 적재한다. 파일 단위 실패는 로그 후 다음 파일로 계속 진행한다. */
+    /**
+     * 파일 목록을 전부 적재한다. 파일 단위 실패는 로그 후 다음 파일로 계속 진행한다.
+     *
+     * <p>매핑 단계에서 적재 제외 판정을 받은 파일({@code db_skip_reason})은 건너뛴다 —
+     * 판정을 여기서 존중해야 {@code pipeline} 한 번에 도는 경로와 {@code map} → {@code load}로
+     * 나눠 도는 경로가 같은 결과를 낸다.
+     */
     public LoadStats loadAll(List<SchemaResult> files) throws SQLException {
         int filesOk = 0;
         int filesFailed = 0;
+        int filesSkipped = 0;
         int documentsInserted = 0;
         int refFilesInserted = 0;
 
         for (SchemaResult file : files) {
+            if (file.isDbSkipped()) {
+                filesSkipped++;
+                System.out.println("[적재제외] " + file.getSourceFile() + ": " + file.getDbSkipReason()
+                        + " — 안내문류로 보고 DB 적재를 건너뜁니다");
+                continue;
+            }
             Savepoint savepoint = conn.setSavepoint();
             try {
                 loadOne(file);
@@ -73,11 +87,11 @@ public final class DbLoader implements AutoCloseable {
             } catch (Exception e) {
                 conn.rollback(savepoint);
                 filesFailed++;
-                System.out.println("[실패] " + file.getSourceFile() + ": " + e.getMessage());
+                System.out.println("[실패] " + file.getSourceFile() + ": " + Errors.describe(e));
             }
         }
         conn.commit();
-        return new LoadStats(filesOk, filesFailed, documentsInserted, refFilesInserted);
+        return new LoadStats(filesOk, filesFailed, filesSkipped, documentsInserted, refFilesInserted);
     }
 
     /**

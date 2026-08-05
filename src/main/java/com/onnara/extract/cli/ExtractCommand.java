@@ -1,6 +1,7 @@
 package com.onnara.extract.cli;
 
 import com.onnara.extract.common.AppProperties;
+import com.onnara.extract.common.LoadPolicy;
 import com.onnara.extract.common.Mapper;
 import com.onnara.extract.common.model.SchemaResult;
 import com.onnara.extract.engine.Extractor;
@@ -12,7 +13,9 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 /** {@code extract}: 형식/엔진 지정 추출 + 매핑 (DB 적재 없음) (§8). */
@@ -39,6 +42,15 @@ public class ExtractCommand implements Callable<Integer> {
     @Option(names = "--engine", description = "엔진 강제 지정 (예: hwplib, owpml, hml-dom, pdfbox)")
     String engine;
 
+    /** 지정하면 실패 건만 따로 JSON으로 저장. */
+    @Option(names = "--failures", paramLabel = "FILE",
+            description = "실패 건만 JSON으로 저장 (단계·사유·원인 체인 포함)")
+    Path failuresFile;
+
+    /** true면 실패마다 스택 트레이스를 stderr로 남긴다. */
+    @Option(names = "--stacktrace", description = "실패 시 스택 트레이스도 출력")
+    boolean stacktrace;
+
     /**
      * 각 파일을 추출·매핑해 out/&lt;이름&gt;.schema.json(+--raw 시 raw.json)을 저장한다.
      * 파일 단위 실패는 [실패] 로그로 격리하며, 하나라도 실패하면 종료 코드 1.
@@ -50,27 +62,36 @@ public class ExtractCommand implements Callable<Integer> {
         ScanOcrRunner scanRunner = new ScanOcrRunner(ScanOcrConfig.fromProperties(props));
         Extractor forcedExtractor = engine != null ? ExtractorRegistry.forEngineName(engine) : null;
 
+        LoadPolicy loadPolicy = LoadPolicy.fromProperties(props);
+
         int ok = 0;
-        int failed = 0;
+        List<Map<String, Object>> failures = new ArrayList<>();
         for (Path file : files) {
+            String stage = "추출";
             try {
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
                         file, forcedExtractor, outputDir, !noImages, scanRunner);
-                SchemaResult schema = Mapper.mapToSchema(result.raw(), result.engine());
 
+                stage = "매핑";
+                SchemaResult schema = loadPolicy.apply(
+                        Mapper.mapToSchema(result.raw(), result.engine()), result.raw());
+
+                stage = "저장";
                 String stem = PipelineSupport.stem(file);
                 if (raw) {
                     PipelineSupport.writeJson(result.raw(), outputDir.resolve(stem + ".raw.json"));
                 }
                 PipelineSupport.writeJson(schema, outputDir.resolve(stem + ".schema.json"));
                 ok++;
-            } catch (Exception e) {
-                failed++;
-                System.out.println("[실패] " + file + ": " + e.getMessage());
+            } catch (Throwable t) {
+                failures.add(PipelineSupport.reportFailure(file, stage, t, stacktrace));
             }
         }
+        if (failuresFile != null) {
+            PipelineSupport.writeFailures(failures, files.size(), failuresFile);
+        }
 
-        System.out.printf("총 %d개 중 %d개 완료, %d개 실패%n", files.size(), ok, failed);
-        return failed == 0 ? 0 : 1;
+        System.out.printf("총 %d개 중 %d개 완료, %d개 실패%n", files.size(), ok, failures.size());
+        return failures.isEmpty() ? 0 : 1;
     }
 }

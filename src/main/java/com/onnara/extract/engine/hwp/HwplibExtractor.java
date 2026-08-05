@@ -169,8 +169,15 @@ public class HwplibExtractor implements Extractor {
             if (!ImageSieve.accept(data)) {
                 continue;
             }
-            out.add(new ImageEntry(
-                    stem + "_img" + out.size() + "." + ImageFormats.extensionFor(data), data));
+            // BinData 스트림명("BIN0001.jpg")은 매직바이트 판별이 실패했을 때만 쓰는 확장자 힌트다.
+            // 이게 없으면 wmf/emf/ole처럼 서명이 제각각인 형식이 전부 .bin으로 떨어진다.
+            String ext = ImageFormats.extensionFor(data, ebd.getName());
+            String name = stem + "_img" + out.size() + "." + ext;
+            if (ImageFormats.isUnknown(ext)) {
+                System.err.println("[경고] 알 수 없는 이미지 형식이라 " + name + "으로 저장합니다"
+                        + " (매직 " + ImageFormats.magicOf(data) + ", 힌트 " + ebd.getName() + ")");
+            }
+            out.add(new ImageEntry(name, data));
         }
         return out;
     }

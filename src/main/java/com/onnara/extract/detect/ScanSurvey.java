@@ -2,6 +2,7 @@ package com.onnara.extract.detect;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -20,8 +21,13 @@ import java.util.TreeMap;
  */
 public record ScanSurvey(List<Entry> entries) {
 
-    /** 파일 한 건의 판별 결과. 판별에 실패한 건만 {@code error}가 채워진다. */
-    public record Entry(Path file, String ext, Status status, String error) {
+    /**
+     * 파일 한 건의 판별 결과. 판별에 실패한 건만 {@code kind}·{@code error}가 채워진다.
+     *
+     * @param kind  실패의 갈래 — 수백 건을 대응 단위로 묶는 축({@link FailureClassifier})
+     * @param error 원인 체인까지 담은 사유 문장({@link com.onnara.extract.common.Errors#describe})
+     */
+    public record Entry(Path file, String ext, Status status, FailureKind kind, String error) {
 
         /** 스캔본으로 판정됐는지 — 판별 실패는 false다(스캔본 목록에 넣으면 안 된다). */
         public boolean scanned() {
@@ -31,6 +37,10 @@ public record ScanSurvey(List<Entry> entries) {
 
     /** 확장자 하나에 대한 소계. */
     public record ExtStat(String ext, int total, int scanned, int nativeCount, int failed) {
+    }
+
+    /** 실패 갈래 하나에 대한 소계 — 예시 파일을 함께 들어 사유를 곧바로 확인할 수 있게 한다. */
+    public record FailureStat(FailureKind kind, int count, List<Path> samples) {
     }
 
     /** 파일별 판별 결과 상태. */
@@ -58,6 +68,10 @@ public record ScanSurvey(List<Entry> entries) {
     /**
      * 파일 목록을 순서대로 판별해 집계한다. 파일 단위 실패는 {@link Status#FAILED}로
      * 격리하므로 중간에 멈추지 않는다(배치 격리 규칙과 동일).
+     *
+     * <p>{@code Exception}이 아니라 {@code Throwable}을 잡는다 — 파일 하나가 힙을 다 먹어
+     * {@code OutOfMemoryError}가 나면 그 한 건만 실패로 세고 나머지 수만 건은 계속 돌아야 한다.
+     * {@code Exception}만 잡으면 코퍼스 전체 판별이 통째로 중단된다.
      */
     public static ScanSurvey of(List<Path> files) {
         List<Entry> entries = new ArrayList<>();
@@ -65,9 +79,10 @@ public record ScanSurvey(List<Entry> entries) {
             String ext = DetectorRegistry.extensionOf(file);
             try {
                 Status status = DetectorRegistry.isScanned(file) ? Status.SCANNED : Status.NATIVE;
-                entries.add(new Entry(file, ext, status, null));
-            } catch (Exception e) {
-                entries.add(new Entry(file, ext, Status.FAILED, reasonOf(e)));
+                entries.add(new Entry(file, ext, status, null, null));
+            } catch (Throwable t) {
+                FailureClassifier.Result reason = FailureClassifier.classify(file, t);
+                entries.add(new Entry(file, ext, Status.FAILED, reason.kind(), reason.detail()));
             }
         }
         return new ScanSurvey(List.copyOf(entries));
@@ -128,13 +143,39 @@ public record ScanSurvey(List<Entry> entries) {
         return List.copyOf(stats);
     }
 
-    private int count(Status status) {
-        return (int) entries.stream().filter(e -> e.status() == status).count();
+    /**
+     * 실패 갈래별 소계 — 건수 내림차순(같으면 갈래 선언 순서).
+     *
+     * <p>실패를 한 덩어리로 세면 "구버전이라 변환하면 살릴 수 있는 것"과 "암호가 걸려 원본이
+     * 필요한 것"과 "깨져서 포기할 것"이 구분되지 않는다. 대응이 갈리는 축으로 나눠 센다.
+     *
+     * @param sampleLimit 갈래마다 함께 들 예시 파일 수(0이면 예시 없음)
+     */
+    public List<FailureStat> byFailureKind(int sampleLimit) {
+        Map<FailureKind, List<Path>> buckets = new EnumMap<>(FailureKind.class);
+        for (Entry entry : entries) {
+            if (entry.status() == Status.FAILED) {
+                buckets.computeIfAbsent(entry.kind() == null ? FailureKind.OTHER : entry.kind(),
+                        k -> new ArrayList<>()).add(entry.file());
+            }
+        }
+        List<FailureStat> stats = new ArrayList<>();
+        for (Map.Entry<FailureKind, List<Path>> bucket : buckets.entrySet()) {
+            List<Path> files = bucket.getValue();
+            stats.add(new FailureStat(bucket.getKey(), files.size(),
+                    List.copyOf(files.subList(0, Math.min(sampleLimit, files.size())))));
+        }
+        stats.sort(Comparator.comparingInt(FailureStat::count).reversed()
+                .thenComparing(s -> s.kind().ordinal()));
+        return List.copyOf(stats);
     }
 
-    /** 예외 메시지 — 메시지 없는 예외는 타입 이름으로 대신한다. */
-    private static String reasonOf(Exception e) {
-        String message = e.getMessage();
-        return message == null || message.isBlank() ? e.getClass().getSimpleName() : message;
+    /** 판별에 실패한 항목만 입력 순서대로 반환한다(실패 리포트 저장용). */
+    public List<Entry> failures() {
+        return entries.stream().filter(e -> e.status() == Status.FAILED).toList();
+    }
+
+    private int count(Status status) {
+        return (int) entries.stream().filter(e -> e.status() == status).count();
     }
 }

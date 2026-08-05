@@ -69,8 +69,9 @@ extract-java/
 │   ├── cli/                     # ★ 진입점 (picocli 서브커맨드)
 │   │   ├── Main.java            #   서브커맨드 등록·공통 옵션
 │   │   ├── PipelineCommand.java #   pipeline: 판별→추출→매핑→적재 일괄 (기존 pipeline.mjs 대체)
-│   │   ├── DetectCommand.java   #   detect: 스캔 여부 일괄 분류·집계 (--json, --summary)
+│   │   ├── DetectCommand.java   #   detect: 스캔 여부 일괄 분류·집계 (--json, --summary, --failures)
 │   │   ├── ExtractCommand.java  #   extract: 형식/엔진 지정 추출 (+--raw, --no-images)
+│   │   ├── RenderCommand.java   #   render: raw JSON의 표 → HTML 복원 (검수용, §5.2)
 │   │   ├── MapCommand.java      #   map: raw JSON → 스키마 JSON (매핑 전용)
 │   │   └── LoadCommand.java     #   load: 스키마 JSON → PostgreSQL (적재 전용)
 │   │
@@ -78,6 +79,8 @@ extract-java/
 │   │   ├── ScanDetector.java    #   인터페이스: boolean isScanned(Path)
 │   │   ├── DetectorRegistry.java#   확장자 → 판별기 매핑 (§3)
 │   │   ├── ScanSurvey.java      #   문서 집합 스캔 판별 집계 (추출·OCR 없이 1차 분기만)
+│   │   ├── FailureKind.java     #   판별 실패의 갈래 (구버전/암호/개명/손상/OOM…) (§3.1)
+│   │   ├── FailureClassifier.java#  매직바이트 + 원인 체인으로 갈래 판정 (§3.1)
 │   │   ├── PdfScanDetector.java #   첫 페이지 텍스트 레이어·이미지 유무 (PDFBox)
 │   │   ├── HwpScanDetector.java #   네이티브 텍스트량 vs 임베디드 이미지 비중 (hwplib)
 │   │   ├── HwpxScanDetector.java#   ZIP 내 본문 XML 텍스트 검사
@@ -88,12 +91,17 @@ extract-java/
 │   │   │   ├── RawDocument.java #     source_file / file_type / is_scanned / content / images
 │   │   │   ├── RawParagraph.java, RawTable.java, RawCell.java, RawImage.java
 │   │   │   ├── NoticeRecord.java#     15개 표준 필드 + extras (java record)
-│   │   │   └── SchemaResult.java#     source_file / records / images
+│   │   │   └── SchemaResult.java#     source_file / records / images / body_chars / db_skip_reason
 │   │   ├── table/               #   표 해석 중간 단계 (§5.1)
 │   │   │   ├── TableInterpreter.java # raw 표 → 서식 판정 + 라벨:값 추출
 │   │   │   ├── TableGrid.java   #     병합(span) 반영 논리 격자 — 없으면 연속 중복 근사
+│   │   │   ├── TableRenderer.java#    raw 표 → HTML 복원 (병합은 rowspan/colspan, §5.2)
 │   │   │   ├── TableDoc.java    #     *.tables.json 최상위 (+ 미매핑 라벨 요약)
 │   │   │   └── InterpretedTable / TableRecord / TableFact / TableColumn / TableKind
+│   │   ├── Errors.java          #   예외 → 원인 체인까지 담은 사유 문장 (모든 [실패] 로그의 출처)
+│   │   ├── ImageFormats.java    #   저장 확장자 판별 — 매직바이트 + 컨테이너 힌트 폴백 (§4.2)
+│   │   ├── DocumentSize.java    #   본문 글자 수 측정 (문단 + 표 셀, 공백 제외)
+│   │   ├── LoadPolicy.java      #   적재 여부 판정 — 안내문류 차단 (map.max-body-chars, §5)
 │   │   ├── Synonyms.java        #   동의어 사전 로더(resources/synonyms.json) + normalizeLabel
 │   │   ├── Labels.java          #   "라벨 : 값" 줄 스캔 + extras 라벨 채택 기준 (문단·표 공용)
 │   │   ├── Mapper.java          #   mapToSchema(RawDocument) → SchemaResult
@@ -131,7 +139,9 @@ extract-java/
 │   └── db/                      # ★ 최종 적재 계층
 │       ├── DataSourceFactory.java #  HikariCP 커넥션 풀 생성 (환경변수/.env/application.properties)
 │       ├── DbSchema.java        #   DDL(§6) 실행 (Flyway 사용 시 마이그레이션은 resources/db/migration/)
-│       └── DbLoader.java        #   SchemaResult → documents/ref_files 적재 (PostgreSQL JDBC)
+│       ├── DbLoader.java        #   SchemaResult → documents/ref_files 적재 (PostgreSQL JDBC)
+│       │                        #   db_skip_reason이 있는 파일은 [적재제외]로 건너뜀
+│       └── LoadStats.java       #   적재 요약 (성공/실패/적재제외 건수)
 │
 ├── .env.example                # 리눅스 서버 배포용 환경변수 예시 (.env로 복사; 우선순위 OS 환경변수 > .env > properties)
 ├── docs/                       # 생성 문서 (dict 서브커맨드 산출물 — 손으로 고치지 않는다)
@@ -203,6 +213,29 @@ PDF에서 첫 페이지만 보는 이유는 이 절의 원칙 자체다. 예전�
 
 스캔본으로 판별되면 확장자와 무관하게 `ScanOcrRunner`가 PaddleOCR-VL CLI를
 서브프로세스로 실행해 처리한다.
+
+### 3.1. 판별 실패의 분류 (detect/FailureKind, FailureClassifier)
+
+판별 실패는 **총계로 세면 아무것도 못 한다.** 한글 3.0 구버전(변환하면 살릴 수 있다), 암호
+문서(원본을 다시 받아야 한다), 손상 파일(포기한다)은 대응이 전혀 다른데 예전에는 셋이 한
+덩어리였다. 게다가 판별기가 원인 예외를 `UncheckedIOException`으로 감싸고 `ScanSurvey`가
+`getMessage()`만 남겨, 사유가 `"HWP 스캔 판별 실패: <경로>"` 한 줄로 뭉개졌다.
+
+두 계층으로 나눠 푼다.
+
+- `common/Errors.describe(Throwable)` — 원인 체인을 끝까지 이어 붙인다(중복 메시지는 한 번만,
+  순환 참조 방어, 최대 깊이 8). 배치의 모든 `[실패]` 로그가 이것을 쓴다.
+- `detect/FailureClassifier.classify(Path, Throwable)` — `FailureKind`로 분류한다.
+
+분류 근거는 둘이고, **매직바이트가 예외 메시지보다 신뢰할 수 있다.** 라이브러리는 "읽지
+못했다"까지만 말하지만, 파일 앞 64바이트를 직접 보면 한글 3.0(`HWP Document File`)·
+CFB(`D0CF11E0…`)·ZIP(`PK\x03\x04`)·PDF(`%PDF`)가 갈린다. 전량 배치에서도 비용이 없다.
+
+`ScanSurvey.of`는 `Exception`이 아니라 **`Throwable`**을 잡는다 — 파일 하나의
+`OutOfMemoryError`가 수만 건 배치를 통째로 죽이면 안 된다.
+
+집계는 `ScanSurvey.byFailureKind(sampleLimit)`가 갈래별 건수와 예시 파일로 낸다.
+`detect --failures <경로>`는 실패 전건을 JSON으로 떨궈 재처리 대상을 그대로 넘길 수 있게 한다.
 
 ## 4. 공통 계약: raw JSON 형식 (Python 버전과 동일)
 
@@ -308,6 +341,32 @@ HWP 계열 BinData는 그림이 통째로 들어 있어 이 문제가 없다 —
 걸렸는지 확인해야 하면 `ImageContent.measure`를 직접 불러 수치를 본다.
 디코딩 자체가 안 되는 이미지는 조용히 사라지면 알 수 없으므로 `[경고]`로 남긴다.
 
+### 4.2. 저장 확장자 판별 (common/ImageFormats)
+
+`.bin`은 "판별에 실패했다"는 뜻이지 "손상됐다"는 뜻이 아니다. 예전에는 JPEG/PNG/BMP/GIF
+넷만 알고 나머지를 전부 `.bin`으로 떨어뜨렸는데, 고시류에는 WMF·EMF·TIFF·OLE 개체가
+일상적으로 들어간다.
+
+판별은 두 순위다.
+
+1. **매직바이트** — 위 넷에 TIFF/WEBP/WMF/EMF/SVG/ICO와 OLE 복합문서(`ole`)를 더했다.
+   OLE는 이미지가 아니라 삽입 개체(수식·차트)이므로 이미지 확장자를 붙이지 않고 형식을
+   그대로 밝힌다. 뷰어가 깨진 그림으로 오해하는 것보다 낫다.
+2. **컨테이너가 선언한 확장자** — 매직바이트로 못 알아봤을 때만. 세 형식 모두 이 정보를
+   갖고 있는데 예전에는 쓰지 않았다: HWP는 BinData 스트림명(`BIN0001.jpg`), HWPX는
+   manifest의 `href`/`mediaType`, HML은 `<BINITEM Format="…">`.
+   확장자는 파일 경로가 되므로 화이트리스트 검증 후에만 채택한다.
+
+순서가 이 방향인 이유: 컨테이너 선언은 개명·잘못 저장된 서식에서 틀릴 수 있으므로 바이트가
+말하는 것이 이긴다. 다만 스니핑이 실패했을 때 **대안이 아예 없던 것**이 `.bin`의 실체였다.
+
+HML의 `<BINDATA Compress="true">`는 풀어서 저장한다 — 압축된 채로 두면 확장자 판별이
+실패할 뿐 아니라 저장된 파일 자체가 열리지 않는다. 속성이 없어도 zlib처럼 보이면 한 번
+시도하고, 풀리지 않으면 원본을 그대로 쓴다(손해가 없다). HWP는 hwplib이 이미 풀어 준다.
+
+둘 다 실패하면 `.bin`을 유지하되 `[경고]`에 매직바이트와 힌트를 적는다 — 남은 사례를
+특정해 서명을 추가할 수 있어야 한다.
+
 ## 5. 표준 스키마 (common/model/NoticeRecord.java)
 
 `Mapper.mapToSchema(raw)`의 출력은 `{"source_file", "records": [...], "images": [...]}`.
@@ -322,6 +381,26 @@ HWP 계열 BinData는 그림이 통째로 들어 있어 이 문제가 없다 —
 | `applicant_name` / `applicant_address` | 신고자·피허가자 성명(상호) / 주소 |
 | `remarks` | 비고 |
 | `extras` | 매핑되지 않은 라벨:값 쌍 보존 (동의어 사전 보강용) |
+
+`SchemaResult`(파일 단위 묶음)에는 **적재 판단**도 함께 실린다.
+
+| 필드 | 의미 |
+|---|---|
+| `body_chars` | 본문 글자 수 (`common/DocumentSize.bodyChars` — 문단 + 표 셀, 공백 제외) |
+| `db_skip_reason` | 적재를 건너뛰는 사유. 없으면 필드 자체가 빠진다(적재 대상) |
+
+판단을 매핑 단계(`common/LoadPolicy`)에 두고 결과를 스키마 JSON에 남기는 이유는,
+`pipeline`으로 한 번에 돌리든 `map` → `load`로 나눠 돌리든 **같은 파일이 같은 결정**을
+받아야 하기 때문이다. `DbLoader.loadAll`이 이 값을 보고 건너뛰므로 두 경로가 갈리지 않는다.
+
+기준은 본문 **글자 수**다. 쪽수는 형식마다 의미가 다르고(HWP 계열은 추출 결과에 쪽 개념이
+없다), 파일 크기는 이미지 용량에 좌우돼 본문 분량과 무관하다. 실측한 39쪽 안내문이 8,355자밖에
+안 되는 것이 그 증거다 — 지면 대부분이 스크린샷이라 쪽수로 짐작한 값으로는 걸러지지 않는다.
+
+추출·매핑은 정상 수행하고 **적재만** 건너뛴다. 임계치를 잘못 잡아 진짜 고시문이 걸려도
+`raw.json`·`schema.json`이 남아 있어 `load`로 다시 넣으면 된다. 그래서 임계치는 고시문 쪽에
+여유를 두고 잡는다 — 안내문 한 건이 더 들어오는 쪽이 고시문 한 건이 빠지는 쪽보다 낫다.
+값은 `map.max-body-chars`(기본 5000, `0`이면 제한 없음)로 조정한다.
 
 ## 5.1. 표 해석 중간 산출물 (`*.tables.json`)
 
@@ -378,6 +457,28 @@ HWP 계열 BinData는 그림이 통째로 들어 있어 이 문제가 없다 —
 병합 셀 처리: 엔진이 `cells`에 span을 채웠으면(hml·hwpx) 셀 경계를 정확히 알고 접는다.
 span이 없으면(PDF·OCR) 옆 칸과 내용이 같은 것을 병합으로 간주하는 근사로 접고,
 그 사실을 `span_aware: false`로 표시한다.
+
+## 5.2. 표 복원 산출물 (`*.tables.html` — `render` 서브커맨드)
+
+§5.1이 "표를 **어떻게 읽었는가**"라면 이쪽은 "**무엇이 뽑혔는가**"다. 매핑 결과가 비었을 때
+표를 잘못 읽은 것인지 사전에 라벨이 없는 것인지 가르려면, 그 이전에 **표가 제대로 뽑혔는지**
+부터 봐야 한다. `common/table/TableRenderer`가 `raw.json`의 표를 HTML로 되돌린다.
+
+`grid`는 병합 셀의 텍스트를 덮인 칸마다 반복해 담으므로 그대로 그리면 원본에서 한 칸이던
+것이 세 칸으로 보인다. `cells`의 span을 살려 앵커 셀에만 `rowspan`/`colspan`을 내고 덮인
+칸은 생략한다(판정 기준은 `TableGrid.of`와 동일).
+
+```html
+<tr><td rowspan="2">승인번호<br>(연월일)</td><td colspan="2">피승인자</td><td rowspan="2">목적</td>…</tr>
+<tr><td>주소</td><td>성명</td></tr>
+```
+
+**병합 정보가 없으면 추측하지 않는다.** PDF·OCR 경로는 span이 전부 1이라 §5.1의 연속 중복
+근사밖에 쓸 수 없는데, 검수용 산출물에서 원본에 없던 병합을 만들어 보여 주는 쪽이 있는
+구조를 못 보여 주는 쪽보다 나쁘다. 그런 표는 격자 그대로 내고 표마다 어느 쪽인지 밝힌다.
+
+서브커맨드 이름이 `table`이 아니라 `render`인 이유: 기존 `tables`와 한 글자 차이면 오타 한
+번에 엉뚱한 명령이 돈다.
 
 ## 6. DB 스키마 (PostgreSQL — resources/db/migration/V1__init.sql)
 
@@ -538,12 +639,15 @@ java -jar extract.jar <서브커맨드> [옵션]
 | `detect 파일... [--json] [--summary]` | 스캔 여부 분류·집계 (판별만 실행 — 추출·OCR 없음) |
 | `extract 파일... -o out/ [--raw] [--no-images] [--engine hwplib]` | 추출+매핑 (엔진 강제 지정 가능) |
 | `tables raw.json -o out/ [--summary]` | 표 해석 전용 (raw JSON → 표 해석 JSON §5.1) |
+| `render raw.json\|폴더 -o out/` | 표 복원 전용 (raw JSON → HTML, 검수용 — §5.2) |
 | `map raw.json -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
 | `load out/*.schema.json` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
 | `dict [-o docs/SYNONYMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 (§9.1) |
 
 - 공통 옵션 의미는 Python 버전과 동일 (`--raw`: 원시 결과 포함,
   `--tables`: 표 해석 중간 결과 포함, `--no-images`: 이미지 저장 생략).
+- 실패 진단 옵션: `--failures <경로>`(실패 건만 JSON으로 저장 — 실패 파일은 `schema.json`이
+  아예 생기지 않아 입력과 출력의 차집합을 손으로 떠야 했다), `--stacktrace`.
 - **DB 접속·OCR 실행 정보는 OS 환경변수 > `.env` > `application.properties`
   순으로 읽는다**(`db.*`, `ocr.cli.*`) — CLI 재정의 옵션은 두지 않는다.
   리눅스 서버 배포 시에는 `.env.example`을 `.env`로 복사해 관리한다.
@@ -556,14 +660,21 @@ java -jar extract.jar <서브커맨드> [옵션]
 
 ```
 1) input/ 재귀 스캔 → .hwp/.hwpx/.hml/.pdf 파일 목록 수집
-2) 스캔본이 있으면 OCR 스크립트(ocr.cli.script) 존재 확인 (없으면 스캔 파일만 [실패] 처리)
-3) 파일별: DetectorRegistry 판별
+2) ScanSurvey.of(files) — 판별을 배치 전체에서 딱 한 번만 돈다
+     (예전에는 OCR 사전 점검이 전 파일을 판별하고 extractOne이 파일마다 또 판별해
+      파싱 비용이 정확히 두 배였다. 수만 건 배치에서 그대로 배치 시간이 된다)
+3) 스캔본이 있으면 OCR 스크립트(ocr.cli.script) 존재 확인 (없으면 스캔 파일만 [실패] 처리)
+4) 파일별: 2)의 판별 결과로 라우팅
      스캔본  → (HWP/HWPX/HML이면 임베디드 이미지 추출 후) ScanOcrRunner 서브프로세스 → raw JSON
      네이티브 → ExtractorRegistry에서 확장자 매칭 Extractor → raw JSON
                 + 임베디드 이미지가 있으면 같은 경로로 OCR해 본문 뒤에 이어 붙임 (§7.1)
-4) TableInterpreter.interpret → (--tables 시) out/<이름>.tables.json 저장
-5) Mapper.mapToSchema(표 해석 결과 재사용) → out/<이름>.schema.json 저장
-6) DbLoader로 documents/ref_files 적재
+5) TableInterpreter.interpret → (--tables 시) out/<이름>.tables.json 저장
+6) Mapper.mapToSchema(표 해석 결과 재사용) → LoadPolicy.apply → out/<이름>.schema.json 저장
+7) DbLoader로 documents/ref_files 적재 (db_skip_reason이 있는 파일은 [적재제외])
+
+단계마다 실패를 `[실패] <파일>: (<단계>) <사유>`로 격리한다. 단계는 판별/추출/표해석/매핑/저장
+다섯이고, 사유는 `Errors.describe`로 원인 체인까지 담는다(§3.1). `Exception`이 아니라
+`Throwable`을 잡아 `OutOfMemoryError`도 파일 단위로 격리한다.
 ```
 
 ## 9. 새 확장자(형식)·엔진 통합 절차
@@ -574,7 +685,9 @@ java -jar extract.jar <서브커맨드> [옵션]
    `DetectorRegistry`에 확장자 매핑 추가 (스캔 변형이 없으면 항상 `false` 반환 스텁).
 2. **Extractor 구현**: `engine/xyz/XyzExtractor implements Extractor` —
    `extractRaw`가 §4 계약(`RawDocument`)을 지키도록 구현. 병합 셀을 복원할 수 있으면
-   `cells`에 span을 채우고, 이미지 저장 시 `path`를 반드시 기록 (매직바이트 확장자 판별 권장).
+   `cells`에 span을 채우고, 이미지 저장 시 `path`를 반드시 기록.
+   저장 확장자는 `ImageFormats.extensionFor(data, hint)`로 정한다 — 컨테이너가 아는 확장자를
+   `hint`로 넘겨야 매직바이트로 못 알아보는 형식이 `.bin`으로 떨어지지 않는다 (§4.2).
 3. **레지스트리 연결**: `ExtractorRegistry`에 등록. CLI·pipeline은 수정 불필요
    (확장자 라우팅이 레지스트리 기반이므로).
 4. **동의어 보강**: 새 문서에서 매핑 안 된 라벨이 `extras`에 남으면

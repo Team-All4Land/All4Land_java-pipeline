@@ -1,5 +1,6 @@
 package com.onnara.extract.cli;
 
+import com.onnara.extract.common.Errors;
 import com.onnara.extract.common.Json;
 import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.table.TableDoc;
@@ -56,7 +57,7 @@ public class TablesCommand implements Callable<Integer> {
                 ok++;
             } catch (Exception e) {
                 failed++;
-                System.out.println("[실패] " + file + ": " + e.getMessage());
+                System.out.println("[실패] " + file + ": " + Errors.describe(e));
             }
         }
         System.out.printf("총 %d개 중 %d개 완료, %d개 실패%n", rawFiles.size(), ok, failed);
