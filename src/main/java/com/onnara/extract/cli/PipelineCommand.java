@@ -1,6 +1,7 @@
 package com.onnara.extract.cli;
 
 import com.onnara.extract.common.AppProperties;
+import com.onnara.extract.common.LoadPolicy;
 import com.onnara.extract.common.Mapper;
 import com.onnara.extract.common.model.SchemaResult;
 import com.onnara.extract.common.table.InterpretedTable;
@@ -10,7 +11,7 @@ import com.onnara.extract.db.DataSourceFactory;
 import com.onnara.extract.db.DbLoader;
 import com.onnara.extract.db.DbSchema;
 import com.onnara.extract.db.LoadStats;
-import com.onnara.extract.detect.DetectorRegistry;
+import com.onnara.extract.detect.ScanSurvey;
 import com.onnara.extract.scan.ScanOcrConfig;
 import com.onnara.extract.scan.ScanOcrRunner;
 import com.zaxxer.hikari.HikariDataSource;
@@ -21,6 +22,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
@@ -58,6 +60,15 @@ public class PipelineCommand implements Callable<Integer> {
     @Option(names = "--no-db", description = "DB 적재 생략 (DB 없는 스모크런용)")
     boolean noDb;
 
+    /** 지정하면 실패 건만 따로 JSON으로 저장 — 배치 후 실패 목록을 손으로 뽑지 않아도 되게. */
+    @Option(names = "--failures", paramLabel = "FILE",
+            description = "실패 건만 JSON으로 저장 (단계·사유·원인 체인 포함)")
+    Path failuresFile;
+
+    /** true면 실패마다 스택 트레이스를 stderr로 남긴다(원인 체인만으로 부족할 때). */
+    @Option(names = "--stacktrace", description = "실패 시 스택 트레이스도 출력")
+    boolean stacktrace;
+
     /**
      * 입력 폴더를 재귀 수집해 파일별로 판별→추출→매핑→저장하고, --no-db가 아니면
      * 마지막에 DB로 적재한다. 스캔본이 있으면 시작 전에 OCR 스크립트 존재를 확인한다.
@@ -72,25 +83,45 @@ public class PipelineCommand implements Callable<Integer> {
             return 0;
         }
 
+        // 판별은 배치 전체에서 딱 한 번만 돈다. 예전에는 OCR 사전 점검이 전 파일을 한 번 판별하고
+        // extractOne이 파일마다 또 판별해, 수만 건 배치에서 파싱이 정확히 두 배로 들었다.
+        ScanSurvey survey = ScanSurvey.of(files);
         ScanOcrConfig ocrConfig = ScanOcrConfig.fromProperties(props);
         ScanOcrRunner scanRunner = new ScanOcrRunner(ocrConfig);
-        boolean ocrReady = checkOcrRunnerIfNeeded(files, scanRunner, ocrConfig);
+        boolean ocrReady = checkOcrRunnerIfNeeded(survey, scanRunner, ocrConfig);
+        LoadPolicy loadPolicy = LoadPolicy.fromProperties(props);
 
         List<SchemaResult> schemas = new ArrayList<>();
+        List<Map<String, Object>> failures = new ArrayList<>();
         int ok = 0;
-        int failed = 0;
-        for (Path file : files) {
+        for (ScanSurvey.Entry entry : survey.entries()) {
+            Path file = entry.file();
+            if (entry.status() == ScanSurvey.Status.FAILED) {
+                // 판별 단계는 이미 갈래와 원인 체인을 갖고 있다 — 예외로 다시 감싸지 않는다
+                failures.add(PipelineSupport.reportFailure(
+                        file, "판별", entry.error(), entry.kind().name()));
+                continue;
+            }
+            String stage = "추출";
             try {
-                if (!ocrReady && DetectorRegistry.isScanned(file)) {
+                boolean scanned = entry.scanned();
+                if (!ocrReady && scanned) {
                     throw new IOException("OCR 실행 스크립트가 없어 스캔본을 처리할 수 없습니다");
                 }
+
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
-                        file, null, output, !noImages, scanRunner);
+                        file, null, output, !noImages, scanRunner, scanned);
+
+                stage = "표해석";
                 // 표 해석은 한 번만 하고 중간 산출물 저장과 매핑이 함께 쓴다
                 List<InterpretedTable> interpreted = TableInterpreter.interpret(
                         TableInterpreter.tablesOf(result.raw()));
-                SchemaResult schema = Mapper.mapToSchema(result.raw(), result.engine(), interpreted);
 
+                stage = "매핑";
+                SchemaResult schema = loadPolicy.apply(
+                        Mapper.mapToSchema(result.raw(), result.engine(), interpreted), result.raw());
+
+                stage = "저장";
                 String stem = PipelineSupport.stem(file);
                 if (raw) {
                     PipelineSupport.writeJson(result.raw(), output.resolve(stem + ".raw.json"));
@@ -104,40 +135,35 @@ public class PipelineCommand implements Callable<Integer> {
                 PipelineSupport.writeJson(schema, output.resolve(stem + ".schema.json"));
                 schemas.add(schema);
                 ok++;
-            } catch (Exception e) {
-                failed++;
-                System.out.println("[실패] " + file + ": " + e.getMessage());
+            } catch (Throwable t) {
+                failures.add(PipelineSupport.reportFailure(file, stage, t, stacktrace));
             }
         }
 
         if (!noDb && !schemas.isEmpty()) {
             loadToDatabase(props, schemas);
         }
+        if (failuresFile != null) {
+            PipelineSupport.writeFailures(failures, files.size(), failuresFile);
+        }
 
-        System.out.printf("총 %d개 중 %d개 완료, %d개 실패%n", files.size(), ok, failed);
-        return failed == 0 ? 0 : 1;
+        System.out.printf("총 %d개 중 %d개 완료, %d개 실패%n", files.size(), ok, failures.size());
+        return failures.isEmpty() ? 0 : 1;
     }
 
-    /** 스캔본이 1건 이상일 때만 OCR 스크립트 존재를 확인한다(§8) — 스캔본이 없으면 스크립트 없이도 배치가 동작한다. */
-    private boolean checkOcrRunnerIfNeeded(List<Path> files, ScanOcrRunner scanRunner, ScanOcrConfig ocrConfig) {
-        boolean anyScanned = false;
-        for (Path file : files) {
-            try {
-                if (DetectorRegistry.isScanned(file)) {
-                    anyScanned = true;
-                    break;
-                }
-            } catch (Exception ignored) {
-                // 판별 실패는 추출 단계에서 [실패]로 다시 잡힌다
-            }
-        }
-        if (!anyScanned) {
+    /**
+     * 스캔본이 1건 이상일 때만 OCR 스크립트 존재를 확인한다(§8) — 스캔본이 없으면 스크립트 없이도
+     * 배치가 동작한다. 이미 끝난 판별 결과를 쓰므로 파일을 다시 열지 않는다.
+     */
+    private boolean checkOcrRunnerIfNeeded(ScanSurvey survey, ScanOcrRunner scanRunner,
+                                           ScanOcrConfig ocrConfig) {
+        if (survey.scanned() == 0) {
             return true;
         }
         boolean ready = scanRunner.isAvailable();
         if (!ready) {
             System.out.println("[경고] OCR 실행 스크립트를 찾을 수 없습니다(" + ocrConfig.script()
-                    + "). 스캔본 파일은 [실패] 처리됩니다.");
+                    + "). 스캔본 " + survey.scanned() + "건은 [실패] 처리됩니다.");
         }
         return ready;
     }
@@ -148,8 +174,9 @@ public class PipelineCommand implements Callable<Integer> {
             DbSchema.migrate(dataSource);
             try (DbLoader loader = new DbLoader(dataSource)) {
                 LoadStats stats = loader.loadAll(schemas);
-                System.out.printf("DB 적재: %d개 파일, documents %d행, ref_files %d행%n",
-                        stats.filesOk(), stats.documentsInserted(), stats.refFilesInserted());
+                System.out.printf("DB 적재: %d개 파일, documents %d행, ref_files %d행 (적재제외 %d개)%n",
+                        stats.filesOk(), stats.documentsInserted(), stats.refFilesInserted(),
+                        stats.filesSkipped());
             }
         }
     }

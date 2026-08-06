@@ -1,9 +1,11 @@
 package com.onnara.extract.cli;
 
+import com.onnara.extract.common.Errors;
 import com.onnara.extract.common.Json;
 import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.detect.DetectorRegistry;
+import com.onnara.extract.detect.FailureClassifier;
 import com.onnara.extract.engine.Extractor;
 import com.onnara.extract.engine.ExtractorRegistry;
 import com.onnara.extract.scan.ScanOcrRunner;
@@ -13,8 +15,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -68,11 +72,23 @@ final class PipelineSupport {
      */
     static ExtractResult extractOne(Path file, Extractor forcedExtractor, Path outputDir,
                                     boolean saveImages, ScanOcrRunner scanRunner) throws IOException {
+        boolean scanned = forcedExtractor == null && DetectorRegistry.isScanned(file);
+        return extractOne(file, forcedExtractor, outputDir, saveImages, scanRunner, scanned);
+    }
+
+    /**
+     * 스캔 판별 결과를 이미 알고 있을 때 쓰는 진입점 — 배치가 판별을 한 번만 돌리기 위한 것이다.
+     *
+     * @param scanned 이 파일이 스캔본인지({@code forcedExtractor}가 있으면 무시된다)
+     */
+    static ExtractResult extractOne(Path file, Extractor forcedExtractor, Path outputDir,
+                                    boolean saveImages, ScanOcrRunner scanRunner,
+                                    boolean scanned) throws IOException {
         String ext = extensionOf(file);
         String sourceFile = file.getFileName().toString();
         Path imagesDir = outputDir.resolve("images");
 
-        if (forcedExtractor == null && DetectorRegistry.isScanned(file)) {
+        if (forcedExtractor == null && scanned) {
             return extractScanned(file, ext, sourceFile, imagesDir, saveImages, scanRunner);
         }
 
@@ -98,19 +114,44 @@ final class PipelineSupport {
         }
 
         Extractor nativeExtractor = ExtractorRegistry.forExtension(ext);
-        Path targetDir = saveImages ? imagesDir : Files.createTempDirectory("extract-scan-");
-        List<Path> saved = nativeExtractor.saveImages(file, targetDir);
+        // --no-images일 때 쓰는 임시 폴더는 이 파일 처리가 끝나면 지운다. 남겨 두면 배치 한 번에
+        // 스캔본 수만큼 폴더가 /tmp에 쌓여 디스크를 먹는다(OCR에 넘긴 뒤에는 쓸 일이 없다).
+        Path tempDir = saveImages ? null : Files.createTempDirectory("extract-scan-");
+        Path targetDir = saveImages ? imagesDir : tempDir;
+        try {
+            List<Path> saved = nativeExtractor.saveImages(file, targetDir);
 
-        RawDocument raw = scanRunner.parseImages(saved, sourceFile, ext);
-        raw.setImages(new ArrayList<>());
-        for (Path p : saved) {
-            RawImage image = new RawImage(p.getFileName().toString(), Files.size(p));
-            if (saveImages) {
-                image.setPath(absolutePath(p));
+            RawDocument raw = scanRunner.parseImages(saved, sourceFile, ext);
+            raw.setImages(new ArrayList<>());
+            for (Path p : saved) {
+                RawImage image = new RawImage(p.getFileName().toString(), Files.size(p));
+                if (saveImages) {
+                    image.setPath(absolutePath(p));
+                }
+                raw.getImages().add(image);
             }
-            raw.getImages().add(image);
+            return new ExtractResult(raw, "paddleocr-vl");
+        } finally {
+            deleteQuietly(tempDir);
         }
-        return new ExtractResult(raw, "paddleocr-vl");
+    }
+
+    /** 임시 폴더와 그 안의 파일을 지운다. 실패해도 배치를 막지 않는다(정리 실패는 치명적이지 않다). */
+    private static void deleteQuietly(Path dir) {
+        if (dir == null) {
+            return;
+        }
+        try (Stream<Path> walk = Files.walk(dir)) {
+            walk.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                    // 다음 파일 정리로 넘어간다
+                }
+            });
+        } catch (IOException ignored) {
+            // 정리 실패는 로그로 남길 가치가 없다 — OS가 /tmp를 회수한다
+        }
     }
 
     /** saveImages 반환 순서 == raw.images 순서 계약을 이용해 절대 경로를 채운다. */
@@ -124,6 +165,53 @@ final class PipelineSupport {
     /** 저장된 이미지 파일의 절대 경로 문자열(ref_files.file_path 적재용, 구분자는 '/'). */
     private static String absolutePath(Path path) {
         return path.toAbsolutePath().normalize().toString().replace('\\', '/');
+    }
+
+    /**
+     * 실패 한 건을 로그로 남기고, {@code --failures} 산출물에 넣을 행을 만든다.
+     *
+     * <p>메시지는 {@link Errors#describe}로 원인 체인까지 적는다 — 맨 바깥 예외의 메시지만 찍으면
+     * "읽지 못했다"는 사실만 남고 왜인지가 사라져, 수백 건의 실패를 사후에 분류할 수 없다.
+     *
+     * @param stage      실패한 단계(판별/추출/표해석/매핑/저장) — 한 try에 뭉쳐 있으면 어디서
+     *                   깨졌는지 알 수 없어 재현이 어렵다
+     * @param stacktrace true면 스택 트레이스도 stderr로 남긴다
+     */
+    static Map<String, Object> reportFailure(Path file, String stage, Throwable t, boolean stacktrace) {
+        if (stacktrace) {
+            t.printStackTrace(System.err);
+        }
+        Map<String, Object> row = reportFailure(file, stage, Errors.describe(t),
+                FailureClassifier.classify(file, t).kind().name());
+        row.put("exception", t.getClass().getName());
+        return row;
+    }
+
+    /**
+     * 이미 사유가 서술된 실패를 보고한다 — 판별 단계처럼 {@link com.onnara.extract.detect.ScanSurvey}가
+     * 갈래와 원인 체인을 이미 갖고 있는 경우다. 그것을 예외로 다시 감싸면 사유가
+     * {@code IOException: UncheckedIOException: …}처럼 이중으로 찍혀 읽기 나빠진다.
+     */
+    static Map<String, Object> reportFailure(Path file, String stage, String message, String kind) {
+        System.out.println("[실패] " + file + ": (" + stage + ") " + message);
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("file", file.toString());
+        row.put("ext", extensionOf(file));
+        row.put("stage", stage);
+        row.put("kind", kind);
+        row.put("message", message);
+        return row;
+    }
+
+    /** {@code --failures} 산출물을 저장한다 — 실패 목록을 손으로 추리지 않아도 되게. */
+    static void writeFailures(List<Map<String, Object>> failures, int total, Path dest)
+            throws IOException {
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("total", total);
+        report.put("failed", failures.size());
+        report.put("failures", failures);
+        writeJson(report, dest);
+        System.out.println("실패 " + failures.size() + "건을 " + dest + "에 저장했습니다");
     }
 
     /** 객체를 들여쓰기 JSON으로 저장한다(상위 폴더는 자동 생성). */

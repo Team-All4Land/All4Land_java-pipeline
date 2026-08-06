@@ -1,6 +1,9 @@
 package com.onnara.extract.cli;
 
+import com.onnara.extract.common.AppProperties;
+import com.onnara.extract.common.Errors;
 import com.onnara.extract.common.Json;
+import com.onnara.extract.common.LoadPolicy;
 import com.onnara.extract.common.Mapper;
 import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.model.SchemaResult;
@@ -33,17 +36,18 @@ public class MapCommand implements Callable<Integer> {
      */
     @Override
     public Integer call() throws Exception {
+        LoadPolicy loadPolicy = LoadPolicy.fromProperties(AppProperties.load());
         int ok = 0;
         int failed = 0;
         for (Path file : rawFiles) {
             try {
                 RawDocument raw = Json.MAPPER.readValue(file.toFile(), RawDocument.class);
-                SchemaResult schema = Mapper.mapToSchema(raw);
+                SchemaResult schema = loadPolicy.apply(Mapper.mapToSchema(raw), raw);
                 PipelineSupport.writeJson(schema, outputDir.resolve(stemFor(file) + ".schema.json"));
                 ok++;
             } catch (Exception e) {
                 failed++;
-                System.out.println("[실패] " + file + ": " + e.getMessage());
+                System.out.println("[실패] " + file + ": " + Errors.describe(e));
             }
         }
         System.out.printf("총 %d개 중 %d개 완료, %d개 실패%n", rawFiles.size(), ok, failed);

@@ -1,6 +1,7 @@
 package com.onnara.extract.cli;
 
 import com.onnara.extract.common.AppProperties;
+import com.onnara.extract.common.Errors;
 import com.onnara.extract.common.Json;
 import com.onnara.extract.common.model.SchemaResult;
 import com.onnara.extract.db.DataSourceFactory;
@@ -43,7 +44,7 @@ public class LoadCommand implements Callable<Integer> {
                 schemas.add(Json.MAPPER.readValue(file.toFile(), SchemaResult.class));
             } catch (Exception e) {
                 readFailed++;
-                System.out.println("[실패] " + file + ": " + e.getMessage());
+                System.out.println("[실패] " + file + ": " + Errors.describe(e));
             }
         }
 
@@ -52,9 +53,9 @@ public class LoadCommand implements Callable<Integer> {
             try (DbLoader loader = new DbLoader(dataSource)) {
                 LoadStats stats = loader.loadAll(schemas);
                 System.out.printf(
-                        "총 %d개 중 %d개 완료, %d개 실패 (documents %d행, ref_files %d행)%n",
+                        "총 %d개 중 %d개 완료, %d개 실패, %d개 적재제외 (documents %d행, ref_files %d행)%n",
                         schemaFiles.size(), stats.filesOk(), stats.filesFailed() + readFailed,
-                        stats.documentsInserted(), stats.refFilesInserted());
+                        stats.filesSkipped(), stats.documentsInserted(), stats.refFilesInserted());
                 return (stats.filesFailed() + readFailed) == 0 ? 0 : 1;
             }
         }

@@ -35,6 +35,14 @@ public class DetectCommand implements Callable<Integer> {
     @Option(names = "--summary", description = "파일별 결과 없이 집계만 출력")
     boolean summaryOnly;
 
+    /** 지정하면 판별 실패 건만 따로 JSON으로 저장 — 수백 건을 오프라인에서 분류·재처리할 때. */
+    @Option(names = "--failures", paramLabel = "FILE",
+            description = "판별 실패 건만 JSON으로 저장 (갈래·사유·원인 체인 포함)")
+    Path failuresFile;
+
+    /** 실패 갈래마다 집계 출력에 함께 드는 예시 파일 수. */
+    private static final int FAILURE_SAMPLES = 3;
+
     /**
      * 각 파일의 스캔 여부를 판별해 출력하고 마지막에 집계를 낸다(텍스트 또는 --json).
      * 판별 실패 파일은 [실패]로 격리해 집계의 failed로 세며, 하나라도 실패하면 종료 코드 1.
@@ -48,6 +56,10 @@ public class DetectCommand implements Callable<Integer> {
             System.out.println(Json.PRETTY.writeValueAsString(toJsonReport(survey)));
         } else {
             printText(survey);
+        }
+        if (failuresFile != null) {
+            PipelineSupport.writeJson(toFailureReport(survey), failuresFile);
+            System.out.println("판별 실패 " + survey.failed() + "건을 " + failuresFile + "에 저장했습니다");
         }
         return survey.failed() == 0 ? 0 : 1;
     }
@@ -78,6 +90,30 @@ public class DetectCommand implements Callable<Integer> {
                     stat.ext().isEmpty() ? "(없음)" : stat.ext(),
                     stat.total(), stat.scanned(), stat.nativeCount(), stat.failed());
         }
+        printFailureKinds(survey);
+    }
+
+    /**
+     * 실패 사유 집계 — {@code --summary}에서도 낸다.
+     *
+     * <p>"판별 실패 203개"만으로는 손쓸 것이 없다. 갈래별로 나눠야 변환하면 살릴 수 있는 구버전과,
+     * 원본을 다시 받아야 하는 암호 문서와, 포기할 손상 파일이 갈린다.
+     */
+    private void printFailureKinds(ScanSurvey survey) {
+        if (survey.failed() == 0) {
+            return;
+        }
+        System.out.printf("%n[실패 사유] 총 %d개%n", survey.failed());
+        for (ScanSurvey.FailureStat stat : survey.byFailureKind(FAILURE_SAMPLES)) {
+            System.out.printf("       %-18s %4d개  %s%n",
+                    stat.kind().name(), stat.count(), stat.kind().description());
+            for (Path sample : stat.samples()) {
+                System.out.println("                          예) " + sample);
+            }
+        }
+        if (failuresFile == null) {
+            System.out.println("       ※ 전건 목록은 --failures <경로> 로 저장할 수 있습니다");
+        }
     }
 
     /** JSON 출력 구조 — summary / by_extension / files(--summary면 생략). */
@@ -101,9 +137,20 @@ public class DetectCommand implements Callable<Integer> {
             byExtension.add(row);
         }
 
+        List<Map<String, Object>> byFailureKind = new ArrayList<>();
+        for (ScanSurvey.FailureStat stat : survey.byFailureKind(FAILURE_SAMPLES)) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("kind", stat.kind().name());
+            row.put("description", stat.kind().description());
+            row.put("count", stat.count());
+            row.put("samples", stat.samples().stream().map(Path::toString).toList());
+            byFailureKind.add(row);
+        }
+
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("summary", summary);
         report.put("by_extension", byExtension);
+        report.put("by_failure_kind", byFailureKind);
         if (!summaryOnly) {
             List<Map<String, Object>> rows = new ArrayList<>();
             for (ScanSurvey.Entry entry : survey.entries()) {
@@ -112,6 +159,9 @@ public class DetectCommand implements Callable<Integer> {
                 row.put("ext", entry.ext());
                 row.put("status", entry.status().label());
                 row.put("is_scanned", entry.scanned());
+                if (entry.kind() != null) {
+                    row.put("kind", entry.kind().name());
+                }
                 if (entry.error() != null) {
                     row.put("error", entry.error());
                 }
@@ -119,6 +169,25 @@ public class DetectCommand implements Callable<Integer> {
             }
             report.put("files", rows);
         }
+        return report;
+    }
+
+    /** {@code --failures} 산출물 — 실패 건만 담아 재처리 대상을 그대로 넘길 수 있게 한다. */
+    private Map<String, Object> toFailureReport(ScanSurvey survey) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (ScanSurvey.Entry entry : survey.failures()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("file", entry.file().toString());
+            row.put("ext", entry.ext());
+            row.put("kind", entry.kind().name());
+            row.put("description", entry.kind().description());
+            row.put("error", entry.error());
+            rows.add(row);
+        }
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("total", survey.total());
+        report.put("failed", survey.failed());
+        report.put("failures", rows);
         return report;
     }
 

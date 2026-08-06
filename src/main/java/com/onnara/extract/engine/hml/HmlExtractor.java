@@ -16,6 +16,7 @@ import org.xml.sax.SAXException;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +27,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.zip.DataFormatException;
+import java.util.zip.Inflater;
 
 /**
  * HML(HWPML — 한/글 XML 내보내기, .hml) 네이티브 추출 엔진 — JDK 내장 DOM 파싱.
@@ -80,7 +83,7 @@ public class HmlExtractor implements Extractor {
         List<ImageEntry> images = new ArrayList<>();
         String stem = stemOf(file);
 
-        // 이미지 원본: BINDATASTORAGE > BINDATA (base64, 비압축)
+        // 이미지 원본: BINDATASTORAGE > BINDATA (base64, Compress 속성이 있으면 압축)
         Map<String, byte[]> binDataMap = new HashMap<>();
         NodeList binDataList = xmlDoc.getElementsByTagName("BINDATA");
         for (int i = 0; i < binDataList.getLength(); i++) {
@@ -91,12 +94,17 @@ public class HmlExtractor implements Extractor {
             if (bid != null && !bid.isEmpty() && "base64".equalsIgnoreCase(encoding)
                     && text != null && !text.isEmpty()) {
                 try {
-                    binDataMap.put(bid, Base64.getMimeDecoder().decode(text.trim()));
-                } catch (IllegalArgumentException ignored) {
-                    // 손상된 base64는 건너뜀
+                    byte[] decoded = Base64.getMimeDecoder().decode(text.trim());
+                    binDataMap.put(bid, inflateIfNeeded(decoded, bindata.getAttribute("Compress")));
+                } catch (IllegalArgumentException e) {
+                    System.err.println("[경고] BINDATA " + bid + "의 base64가 손상돼 건너뜁니다: "
+                            + e.getMessage());
                 }
             }
         }
+        // BINITEM의 Format 속성("jpg"/"wmf"/…)은 매직바이트 판별이 실패했을 때 쓸 확장자 힌트다.
+        // BinItem 참조가 BINDATA Id를 가리키는 서식과 BINITEM 순번을 가리키는 서식이 모두 있어 둘 다 받는다.
+        Map<String, String> formatHints = collectFormatHints(xmlDoc);
 
         Set<Node> seenTables = new HashSet<>();
         Set<Node> seenImages = new HashSet<>();
@@ -120,14 +128,14 @@ public class HmlExtractor implements Extractor {
                         raw.getContent().add(parseTable(tbl));
                         for (Element pic : descendantElements(tbl, "PICTURE")) {
                             if (seenImages.add(pic)) {
-                                addImage(images, pic, binDataMap, stem);
+                                addImage(images, pic, binDataMap, formatHints, stem);
                             }
                         }
                     }
 
                     for (Element pic : descendantElements(p, "PICTURE")) {
                         if (seenImages.add(pic)) {
-                            addImage(images, pic, binDataMap, stem);
+                            addImage(images, pic, binDataMap, formatHints, stem);
                         }
                     }
                 }
@@ -162,20 +170,106 @@ public class HmlExtractor implements Extractor {
      * <p>정보가 없는 이미지(흰 바탕에 표식 하나 등)와 도장은 {@link ImageSieve}가 걸러낸다.
      */
     private static void addImage(List<ImageEntry> images, Element pic,
-                                 Map<String, byte[]> binDataMap, String stem) {
+                                 Map<String, byte[]> binDataMap, Map<String, String> formatHints,
+                                 String stem) {
         List<Element> imageEls = descendantElements(pic, "IMAGE");
         if (imageEls.isEmpty()) {
             return;
         }
-        byte[] data = binDataMap.get(imageEls.get(0).getAttribute("BinItem"));
+        String binItem = imageEls.get(0).getAttribute("BinItem");
+        byte[] data = binDataMap.get(binItem);
         if (data == null || data.length == 0) {
+            System.err.println("[경고] 그림이 참조하는 BINDATA를 찾지 못해 건너뜁니다: BinItem=" + binItem);
             return;
         }
         if (!ImageSieve.accept(data)) {
             return;
         }
-        images.add(new ImageEntry(
-                stem + "_img" + images.size() + "." + ImageFormats.extensionFor(data), data));
+        String hint = formatHints.get(binItem);
+        String ext = ImageFormats.extensionFor(data, hint);
+        String name = stem + "_img" + images.size() + "." + ext;
+        if (ImageFormats.isUnknown(ext)) {
+            System.err.println("[경고] 알 수 없는 이미지 형식이라 " + name + "으로 저장합니다"
+                    + " (매직 " + ImageFormats.magicOf(data) + ", 힌트 " + hint + ")");
+        }
+        images.add(new ImageEntry(name, data));
+    }
+
+    /**
+     * {@code <BINITEM BinData="1" Format="jpg"/>}에서 확장자 힌트를 모은다.
+     *
+     * <p>{@code <IMAGE BinItem="…">}가 BINDATA의 Id를 가리키는 서식과 BINITEM의 1-기반 순번을
+     * 가리키는 서식이 둘 다 유통되므로 양쪽 키로 넣어 어느 쪽이 와도 찾히게 한다.
+     */
+    private static Map<String, String> collectFormatHints(Document xmlDoc) {
+        Map<String, String> hints = new HashMap<>();
+        NodeList items = xmlDoc.getElementsByTagName("BINITEM");
+        for (int i = 0; i < items.getLength(); i++) {
+            Element item = (Element) items.item(i);
+            String format = item.getAttribute("Format");
+            if (format == null || format.isBlank()) {
+                continue;
+            }
+            hints.putIfAbsent(String.valueOf(i + 1), format);
+            String binData = item.getAttribute("BinData");
+            if (binData != null && !binData.isBlank()) {
+                hints.put(binData, format);
+            }
+        }
+        return hints;
+    }
+
+    /**
+     * HWPML의 {@code Compress} 속성이 참이면 base64 복원 바이트를 푼다.
+     *
+     * <p>속성이 없어도 결과가 zlib 스트림처럼 보이면 한 번 시도해 본다 — 속성을 빠뜨리고 저장하는
+     * 서식이 있고, 압축된 채로 저장하면 확장자 판별이 실패해 {@code .bin}이 될 뿐 아니라
+     * 저장된 파일 자체가 열리지 않는다. 풀리지 않으면 원본 바이트를 그대로 쓴다(손해가 없다).
+     */
+    private static byte[] inflateIfNeeded(byte[] data, String compressAttr) {
+        boolean declared = compressAttr != null
+                && ("true".equalsIgnoreCase(compressAttr) || "1".equals(compressAttr));
+        if (!declared && !looksDeflated(data)) {
+            return data;
+        }
+        byte[] inflated = inflate(data, false);      // zlib 헤더 있음
+        if (inflated == null) {
+            inflated = inflate(data, true);          // raw deflate
+        }
+        if (inflated == null && declared) {
+            System.err.println("[경고] Compress=\"" + compressAttr
+                    + "\"로 선언됐지만 압축을 풀지 못해 원본 바이트를 그대로 씁니다");
+        }
+        return inflated != null ? inflated : data;
+    }
+
+    /** zlib 스트림의 흔한 앞 두 바이트(0x78 계열)인지. */
+    private static boolean looksDeflated(byte[] data) {
+        return data.length >= 2 && (data[0] & 0xFF) == 0x78;
+    }
+
+    /** 압축을 푼 바이트, 풀지 못하면 null. */
+    private static byte[] inflate(byte[] data, boolean raw) {
+        Inflater inflater = new Inflater(raw);
+        inflater.setInput(data);
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream(Math.max(data.length, 1024))) {
+            byte[] buffer = new byte[8192];
+            while (!inflater.finished()) {
+                int n = inflater.inflate(buffer);
+                if (n == 0) {
+                    if (inflater.needsInput() || inflater.needsDictionary()) {
+                        return null;      // 입력이 압축 스트림이 아니었다
+                    }
+                    continue;
+                }
+                out.write(buffer, 0, n);
+            }
+            return out.size() == 0 ? null : out.toByteArray();
+        } catch (DataFormatException | IOException e) {
+            return null;
+        } finally {
+            inflater.end();
+        }
     }
 
     // ── 표 파싱 ─────────────────────────────────────────────────

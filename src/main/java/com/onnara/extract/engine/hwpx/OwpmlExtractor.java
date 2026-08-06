@@ -93,10 +93,14 @@ public class OwpmlExtractor implements Extractor {
         String stem = stemOf(file);
 
         // 이미지 원본: content.hpf manifest의 attachedFile에서 id → bytes
+        // href("BinData/image1.bmp")·mediaType("image/png")은 매직바이트 판별이 실패했을 때만 쓸
+        // 확장자 힌트로 함께 들고 간다 — 이게 없으면 wmf/emf 같은 형식이 전부 .bin으로 떨어진다
         Map<String, byte[]> binDataMap = new HashMap<>();
+        Map<String, String> hintMap = new HashMap<>();
         for (ManifestItem item : hwpxFile.contentHPFFile().manifest().items()) {
             if (item.hasAttachedFile() && item.attachedFile() != null) {
                 binDataMap.put(item.id(), item.attachedFile().data());
+                hintMap.put(item.id(), item.href() != null ? item.href() : item.mediaType());
             }
         }
 
@@ -120,12 +124,12 @@ public class OwpmlExtractor implements Extractor {
                             for (Tr tr : table.trs()) {
                                 for (Tc tc : tr.tcs()) {
                                     for (Picture pic : findPictures(tc.subList())) {
-                                        addImage(images, pic, binDataMap, stem);
+                                        addImage(images, pic, binDataMap, hintMap, stem);
                                     }
                                 }
                             }
                         } else if (runItem instanceof Picture picture) {
-                            addImage(images, picture, binDataMap, stem);
+                            addImage(images, picture, binDataMap, hintMap, stem);
                         }
                     }
                 }
@@ -144,19 +148,27 @@ public class OwpmlExtractor implements Extractor {
      * <p>정보가 없는 이미지(흰 바탕에 표식 하나 등)와 도장은 {@link ImageSieve}가 걸러낸다.
      */
     private static void addImage(List<ImageEntry> images, Picture pic,
-                                 Map<String, byte[]> binDataMap, String stem) {
+                                 Map<String, byte[]> binDataMap, Map<String, String> hintMap,
+                                 String stem) {
         if (pic.img() == null) {
             return;
         }
-        byte[] data = binDataMap.get(pic.img().binaryItemIDRef());
+        String id = pic.img().binaryItemIDRef();
+        byte[] data = binDataMap.get(id);
         if (data == null || data.length == 0) {
+            System.err.println("[경고] 그림이 참조하는 BinData를 찾지 못해 건너뜁니다: " + id);
             return;
         }
         if (!ImageSieve.accept(data)) {
             return;
         }
-        images.add(new ImageEntry(
-                stem + "_img" + images.size() + "." + ImageFormats.extensionFor(data), data));
+        String ext = ImageFormats.extensionFor(data, hintMap.get(id));
+        String name = stem + "_img" + images.size() + "." + ext;
+        if (ImageFormats.isUnknown(ext)) {
+            System.err.println("[경고] 알 수 없는 이미지 형식이라 " + name + "으로 저장합니다"
+                    + " (매직 " + ImageFormats.magicOf(data) + ", 힌트 " + hintMap.get(id) + ")");
+        }
+        images.add(new ImageEntry(name, data));
     }
 
     /** 셀 하위 문단 구조(ParaListCore)에서 Picture RunItem을 모두 찾아 반환한다. */

@@ -1,5 +1,6 @@
 package com.onnara.extract.cli;
 
+import com.onnara.extract.common.Errors;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
@@ -16,6 +17,7 @@ import picocli.CommandLine.Command;
                 DetectCommand.class,
                 ExtractCommand.class,
                 TablesCommand.class,
+                RenderCommand.class,
                 MapCommand.class,
                 LoadCommand.class,
                 DictCommand.class,
@@ -26,7 +28,7 @@ public class Main implements Runnable {
     public static void main(String[] args) {
         CommandLine cli = new CommandLine(new Main());
         cli.setExecutionExceptionHandler((ex, commandLine, parseResult) -> {
-            System.err.println("[오류] " + ex.getMessage());
+            System.err.println("[오류] " + Errors.describe(ex));
             return 1;
         });
         System.exit(cli.execute(args));
