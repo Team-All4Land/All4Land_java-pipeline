@@ -18,14 +18,20 @@ import java.util.List;
  * 두고 결과를 스키마 JSON에 남겨야, {@code pipeline}으로 한 번에 돌리든 {@code map} → {@code load}로
  * 나눠 돌리든 같은 파일이 같은 결정을 받는다.
  */
-@JsonPropertyOrder({"source_file", "file_type", "is_scanned", "engine",
+@JsonPropertyOrder({"source_file", "file_type", "detected_format", "is_scanned", "engine",
         "body_chars", "db_skip_reason", "records", "images"})
 public class SchemaResult {
 
     /** 원본 파일명 — 파일 단위 레코드 묶음의 키. */
     private String sourceFile;
-    /** 형식 식별자: hwp / hwpx / hml / pdf. */
+    /** 형식 식별자: hwp / hwpx / hml / pdf — <b>파일명 확장자</b>가 기준이다. */
     private String fileType;
+    /**
+     * 내용으로 판정한 실제 형식: hwp / hwp3 / hwpx / hml / pdf (documents.detected_format).
+     *
+     * <p>{@code fileType}과 다른 행이 곧 "확장자가 어긋난 파일" 목록이 된다.
+     */
+    private String detectedFormat;
     /** 스캔본 여부. */
     private boolean scanned;
     /** 실제 사용된 추출 엔진 식별자(documents.engine). */
@@ -71,6 +77,17 @@ public class SchemaResult {
     /** 형식 식별자를 설정한다. */
     public void setFileType(String fileType) {
         this.fileType = fileType;
+    }
+
+    /** 내용으로 판정한 실제 형식을 반환한다(documents.detected_format). 판정 전이면 null. */
+    @JsonProperty("detected_format")
+    public String getDetectedFormat() {
+        return detectedFormat;
+    }
+
+    /** 내용으로 판정한 실제 형식을 설정한다. */
+    public void setDetectedFormat(String detectedFormat) {
+        this.detectedFormat = detectedFormat;
     }
 
     /** 스캔본 여부를 반환한다. */

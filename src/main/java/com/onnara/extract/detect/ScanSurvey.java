@@ -24,6 +24,8 @@ public record ScanSurvey(List<Entry> entries) {
     /**
      * 파일 한 건의 판별 결과. 판별에 실패한 건만 {@code kind}·{@code error}가 채워진다.
      *
+     * @param ext   판별된 <b>실제 형식</b> 키({@link DocFormat#routingKey}) — 확장자가 아니다.
+     *              확장자가 어긋난 파일이 소계를 오염시키지 않게 하려는 것이다
      * @param kind  실패의 갈래 — 수백 건을 대응 단위로 묶는 축({@link FailureClassifier})
      * @param error 원인 체인까지 담은 사유 문장({@link com.onnara.extract.common.Errors#describe})
      */
@@ -76,13 +78,15 @@ public record ScanSurvey(List<Entry> entries) {
     public static ScanSurvey of(List<Path> files) {
         List<Entry> entries = new ArrayList<>();
         for (Path file : files) {
-            String ext = DetectorRegistry.extensionOf(file);
+            // 집계 축은 확장자가 아니라 판별된 실제 형식이다 — .hwp로 저장된 HWPX가
+            // hwp 소계에 섞이면 "hwp 실패가 많다"는 잘못된 신호를 준다
+            String format = DocFormat.routingKey(file);
             try {
                 Status status = DetectorRegistry.isScanned(file) ? Status.SCANNED : Status.NATIVE;
-                entries.add(new Entry(file, ext, status, null, null));
+                entries.add(new Entry(file, format, status, null, null));
             } catch (Throwable t) {
                 FailureClassifier.Result reason = FailureClassifier.classify(file, t);
-                entries.add(new Entry(file, ext, Status.FAILED, reason.kind(), reason.detail()));
+                entries.add(new Entry(file, format, Status.FAILED, reason.kind(), reason.detail()));
             }
         }
         return new ScanSurvey(List.copyOf(entries));
