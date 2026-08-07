@@ -48,19 +48,37 @@ class FailureClassifierTest {
         assertEquals(FailureKind.NOT_COMPOUND_FILE, result.kind());
     }
 
-    /** .hwpx가 ZIP이 아니면 개명 파일이고, 무엇이었는지까지 상세에 남겨야 대응할 수 있다. */
+    /**
+     * 개명 파일은 더 이상 "개명"으로 분류되지 않는다 — 확장자가 아니라 내용으로 라우팅되므로,
+     * 실패했다면 <b>실제 내용</b>이 실패한 것이다.
+     *
+     * <p>.hwpx라는 이름이 붙은 HWP 5.0 컨테이너는 hwplib으로 가고, 그래도 실패하면
+     * "컨테이너는 정상인데 안이 깨졌다"({@link FailureKind#DOCUMENT_PARSE})가 맞는 진단이다.
+     * 예전처럼 {@code NOT_ZIP}으로 세면 "ZIP을 다시 받아라"라는 엉뚱한 대응을 부른다.
+     */
     @Test
-    void detectsHwpThatWasRenamedToHwpx(@TempDir Path dir) throws IOException {
+    void classifiesRenamedFileByItsRealContent(@TempDir Path dir) throws IOException {
         Path file = writeBytes(dir, "개명.hwpx",
                 new byte[]{(byte) 0xD0, (byte) 0xCF, 0x11, (byte) 0xE0,
                         (byte) 0xA1, (byte) 0xB1, 0x1A, (byte) 0xE1});
 
         FailureClassifier.Result result = FailureClassifier.classify(file,
-                new UncheckedIOException("HWPX 스캔 판별 실패: " + file,
-                        new ZipException("error in opening zip file")));
+                new UncheckedIOException("HWP 스캔 판별 실패: " + file,
+                        new IOException("Invalid header signature")));
 
-        assertEquals(FailureKind.NOT_ZIP, result.kind());
-        assertTrue(result.detail().contains("HWP 5.0"), result.detail());
+        assertEquals(FailureKind.DOCUMENT_PARSE, result.kind());
+    }
+
+    /** .hwp라는 이름이 붙은 한글 3.0 파일은 확장자가 아니라 내용으로 갈래가 정해진다. */
+    @Test
+    void classifiesLegacyHwp3ByItsSignature(@TempDir Path dir) throws IOException {
+        Path file = write(dir, "구버전.hwp", "HWP Document File V3.00 이후 내용이 깨져 있음");
+
+        FailureClassifier.Result result = FailureClassifier.classify(file,
+                new UncheckedIOException("한글 3.0 스캔 판별 실패: " + file,
+                        new IOException("한글 3.0 본문이 잘렸습니다")));
+
+        assertEquals(FailureKind.HWP3_LEGACY, result.kind());
     }
 
     /** ZIP은 맞는데 항목이 암호화됐다면 손상이 아니라 암호다 — 원본을 다시 받아야 한다. */
@@ -75,16 +93,21 @@ class FailureClassifierTest {
         assertEquals(FailureKind.ENCRYPTED, result.kind());
     }
 
-    /** %PDF 서명이 없으면 구조 손상이 아니라 애초에 PDF가 아니다 — 상세에 남긴다. */
+    /**
+     * 아는 서명이 하나도 없으면 구조 손상이 아니라 애초에 그 형식이 아니다 — 상세에 남긴다.
+     *
+     * <p>내용 기반 라우팅을 거친 뒤에도 여기 오는 건은 개명 파일이 아니라(개명은 라우팅이
+     * 흡수한다) 헤더가 손상됐거나 지원 대상이 아닌 형식이다.
+     */
     @Test
-    void notesWhenPdfLacksSignature(@TempDir Path dir) throws IOException {
+    void notesWhenNoKnownSignatureIsFound(@TempDir Path dir) throws IOException {
         Path file = write(dir, "가짜.pdf", "not a pdf at all");
 
         FailureClassifier.Result result = FailureClassifier.classify(file,
                 new UncheckedIOException("PDF 스캔 판별 실패: " + file, new IOException("bad xref")));
 
         assertEquals(FailureKind.PDF_LOAD, result.kind());
-        assertTrue(result.detail().contains("%PDF 서명이 없습니다"), result.detail());
+        assertTrue(result.detail().contains("아는 형식 서명이 없습니다"), result.detail());
     }
 
     /** 0바이트 파일은 형식 판정 이전에 걸러 내야 근거 없는 갈래로 새지 않는다. */

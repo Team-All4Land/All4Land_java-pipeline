@@ -28,12 +28,12 @@ public final class DbLoader implements AutoCloseable {
     /** documents 1행 삽입 + 생성된 seq 반환(레코드당 1회 실행). */
     private static final String INSERT_DOCUMENT = """
             INSERT INTO documents (
-                source_file, file_type, is_scanned, engine,
+                source_file, file_type, detected_format, is_scanned, engine,
                 agency, notice_no, notice_date, title, signer,
                 approval_no, approval_date, location, area,
                 work_description, work_period_start, work_period_end,
                 applicant_name, applicant_address, remarks, extras
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
             RETURNING seq
             """;
 
@@ -143,6 +143,7 @@ public final class DbLoader implements AutoCloseable {
         int i = 1;
         insert.setString(i++, file.getSourceFile());
         insert.setString(i++, file.getFileType());
+        insert.setString(i++, file.getDetectedFormat());
         insert.setBoolean(i++, file.isScanned());
         insert.setString(i++, file.getEngine());
         insert.setString(i++, record.agency());

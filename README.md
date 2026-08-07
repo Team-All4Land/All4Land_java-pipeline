@@ -1,6 +1,6 @@
 # 공유수면 고시문 추출 파이프라인 (Java)
 
-공유수면 점용·사용 고시류 문서(**HWP / HWPX / HML / PDF — 네이티브·스캔본 모두**)에서
+공유수면 점용·사용 고시류 문서(**HWP 5.0 / 한글 3.0 / HWPX / HML / PDF — 네이티브·스캔본 모두**)에서
 텍스트·표·이미지를 추출하고, 표준 필드 스키마로 정규화한 뒤 **PostgreSQL DB에
 적재**하는 배치 파이프라인입니다.
 
@@ -11,7 +11,7 @@ PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 스캔본 처리만
 ## 전체 흐름
 
 ```
-입력 파일 (.hwp / .hwpx / .hml / .pdf)   ← 모든 확장자가 스캔본일 수 있음
+입력 파일 (.hwp / .hwpx / .hml / .pdf)   ← 확장자와 내용이 어긋날 수 있고, 모두 스캔본일 수 있음
         │
         ▼
 CLI: extract.jar pipeline (picocli)
@@ -20,11 +20,12 @@ CLI: extract.jar pipeline (picocli)
         │
         ├── 스캔본 ──► ScanOcrRunner ──서브프로세스──► PaddleOCR-VL CLI (ocr-cli/, Python)
         │
-        └── 네이티브 ── [2차 분기] 확장자별 Extractor
-                ├─ .hwp   →  HwplibExtractor  (hwplib)
-                ├─ .hwpx  →  OwpmlExtractor   (hwpxlib)
-                ├─ .hml   →  HmlExtractor     (JDK DOM, 외부 의존성 없음)
-                └─ .pdf   →  PdfBoxExtractor  (Apache PDFBox + 선분 클러스터링 표 탐지)
+        └── 네이티브 ── [2차 분기] 형식별 Extractor (매직바이트로 판정 — DocFormat)
+                ├─ HWP 5.0 →  HwplibExtractor  (hwplib)
+                ├─ 한글 3.0 →  Hwp3Extractor    (자체 파서, 외부 의존성 없음)
+                ├─ HWPX   →  OwpmlExtractor   (hwpxlib)
+                ├─ HML    →  HmlExtractor     (JDK DOM, 외부 의존성 없음)
+                └─ PDF    →  PdfBoxExtractor  (Apache PDFBox + 선분 클러스터링 표 탐지)
                 │
                 └── + 임베디드 이미지는 파일로 저장하고 images 메타만 기록 (OCR 안 함)
         │
@@ -50,12 +51,32 @@ PostgreSQL (documents / ref_files 2테이블) + images/ 폴더
 
 | 형식 | 판별기 | 추출 엔진 | 비고 |
 |---|---|---|---|
-| `.hwp` | `HwpScanDetector` | `HwplibExtractor` (hwplib) | 이미지 위치 복원 불가(BinData 전체 추출), 확장자는 스트림명 폴백 |
-| `.hwpx` | `HwpxScanDetector` | `OwpmlExtractor` (hwpxlib) | 인라인 태그(`<hp:fwSpace/>` 등) 텍스트 잘림 방지 처리 |
-| `.hml` | `HmlScanDetector` | `HmlExtractor` (JDK DOM) | ColSpan/RowSpan 병합 구조 복원 |
-| `.pdf` | `PdfScanDetector` | `PdfBoxExtractor` | 선분 클러스터링 표 탐지, 도장 제외 휴리스틱 |
+| HWP 5.0 | `HwpScanDetector` | `HwplibExtractor` (hwplib) | 이미지 위치 복원 불가(BinData 전체 추출), 확장자는 스트림명 폴백 |
+| 한글 3.0 | `Hwp3ScanDetector` | `Hwp3Extractor` (자체 파서) | 조합형(KSSM) 문자·표 좌표 복원, 캡션 추출. 외부 의존성 없음 |
+| HWPX | `HwpxScanDetector` | `OwpmlExtractor` (hwpxlib) | 인라인 태그(`<hp:fwSpace/>` 등) 텍스트 잘림 방지 처리 |
+| HML | `HmlScanDetector` | `HmlExtractor` (JDK DOM) | ColSpan/RowSpan 병합 구조 복원 |
+| PDF | `PdfScanDetector` | `PdfBoxExtractor` | 선분 클러스터링 표 탐지, 도장 제외 휴리스틱 |
 
-스캔 판별 기준(네 형식 공통):
+### 라우팅은 확장자가 아니라 내용으로 한다
+
+표의 첫 칸이 확장자가 아니라 형식 이름인 이유입니다. 판별기·추출기 선택은 파일 앞부분의
+**매직바이트**로 합니다(`DocFormat`). 고시류 코퍼스에는 확장자와 내용이 어긋난 파일이 흔한데,
+확장자만 보면 읽을 수 있는 문서를 형식 판정 하나 때문에 버리게 됩니다.
+
+- HWPX 컨테이너를 `.hwp`로 저장한 파일 → 예전에는 hwplib으로 가 `NOT_COMPOUND_FILE` 실패,
+  지금은 hwpxlib으로 라우팅돼 정상 처리됩니다.
+- 한글 3.0 파일도 확장자는 똑같이 `.hwp`라, 서명(`HWP Document File V3.00`)으로만 갈립니다.
+
+판정할 수 없는 파일은 지금까지처럼 **확장자로 폴백**합니다 — 새 규칙이 기존 동작을 좁히지
+않습니다. `documents.file_type`은 파일명 확장자를 그대로 유지하고, 판정된 실제 형식은
+`documents.detected_format`에 따로 남깁니다. 둘이 다른 행이 곧 확장자가 어긋난 파일 목록입니다.
+
+```sql
+SELECT source_file, file_type, detected_format
+  FROM documents WHERE detected_format IS NOT NULL AND file_type <> detected_format;
+```
+
+스캔 판별 기준(다섯 형식 공통):
 
 ```
 스캔본 = 네이티브 본문 텍스트가 한 글자도 없다 AND 임베디드 이미지가 1개 이상
@@ -81,15 +102,15 @@ PDF도 같은 규칙을 쓰지만 **첫 페이지에만** 적용합니다 — �
 ```
 src/main/java/com/onnara/extract/
 ├── cli/          picocli 진입점 — Main + 7개 서브커맨드
-├── detect/       1차 분기: 스캔본 판별 (ScanDetector 구현체 4종)
-├── engine/       2차 분기: 확장자별 네이티브 추출기 (Extractor 구현체 4종)
+├── detect/       1차 분기: 형식 판별(DocFormat) + 스캔본 판별 (ScanDetector 구현체 5종)
+├── engine/       2차 분기: 형식별 네이티브 추출기 (Extractor 구현체 5종)
 ├── common/       형식 공통 계층 — raw JSON 모델, 매퍼, 동의어 사전, 날짜/주소 휴리스틱
 ├── scan/         스캔본 처리 — PaddleOCR-VL CLI 서브프로세스 실행기
 └── db/           PostgreSQL 적재 (HikariCP + Flyway)
 
 src/main/resources/
 ├── application.properties   DB 접속·OCR CLI 실행 설정 (설정의 단일 출처)
-└── db/migration/            Flyway 마이그레이션 (V1__init.sql)
+└── db/migration/            Flyway 마이그레이션 (V1__init.sql ~ V3)
 
 src/test/java/...   JUnit 5 — detect/engine/common/scan 단위 테스트 + samples/ 기반 회귀 테스트
 samples/             실제 고시문 픽스처 (형식·스캔 여부별)
@@ -314,34 +335,38 @@ java -jar target/extract-pipeline-1.0.0.jar detect input/ --summary
 ### 판별 실패
 
 전량 배치에서 나오는 수백 건의 실패는 "판별 실패 203개"라는 총계만으로는 손쓸 수 없습니다.
-**변환하면 살릴 수 있는 것**(한글 3.0 구버전), **원본을 다시 받아야 하는 것**(암호 문서),
-**포기할 것**(손상 파일)은 대응이 전혀 다릅니다. 그래서 갈래별로 나눠 셉니다
-(`--summary`에서도 나옵니다).
+**원본을 다시 받아야 하는 것**(암호 문서)과 **포기할 것**(손상 파일)은 대응이 전혀 다릅니다.
+그래서 갈래별로 나눠 셉니다(`--summary`에서도 나옵니다).
+
+> 예전에 가장 큰 갈래였던 **한글 3.0 구버전**과 **확장자 개명**은 더 이상 실패가 아닙니다.
+> 한글 3.0은 전용 엔진이 읽고, 개명 파일은 내용 기반 라우팅이 흡수합니다. 지금 이 갈래로
+> 떨어지는 건은 "구버전이라 대상이 아니다"가 아니라 **실제로 깨진 파일**입니다.
 
 ```
-[실패 사유] 총 203개
-       HWP3_LEGACY         141개  한글 3.0 이하 구버전 파일 — hwplib이 읽지 못합니다(한글에서 재저장 필요)
-                          예) input/2015_고시_001.hwp
+[실패 사유] 총 54개
        ENCRYPTED            38개  암호가 걸려 있습니다(배포용 문서 포함) — 암호 해제본이 필요합니다
-       NOT_ZIP              16개  HWPX 컨테이너(ZIP)가 아닙니다 — .hwp를 .hwpx로 개명했을 수 있습니다
+                          예) input/2015_고시_001.hwp
+       ZIP_CORRUPT          10개  ZIP 구조가 손상돼 항목을 읽을 수 없습니다
+       DOCUMENT_PARSE        6개  컨테이너는 정상이나 내부 문서 구조를 읽지 못했습니다
        …
 ```
 
 | 갈래 | 뜻 | 대응 |
 |---|---|---|
-| `HWP3_LEGACY` | 한글 3.0 이하 — CFB가 아니라 hwplib이 못 읽음 | 한글에서 재저장(변환)하면 살아남 |
-| `NOT_COMPOUND_FILE` | `.hwp`인데 OLE 복합문서가 아님 | 실제 형식 확인 후 확장자 교정 |
-| `NOT_ZIP` | `.hwpx`인데 ZIP이 아님(대개 `.hwp` 개명) | 확장자 교정 |
+| `HWP3_LEGACY` | 한글 3.0인데 자체 파서가 못 읽음 | 손상 여부 확인(구버전이라서가 아님) |
+| `NOT_COMPOUND_FILE` | `.hwp`인데 아는 서명이 하나도 없음 | 헤더 손상 또는 지원 대상 아닌 형식 |
+| `NOT_ZIP` | `.hwpx`인데 아는 서명이 하나도 없음 | 헤더 손상 또는 지원 대상 아닌 형식 |
 | `ENCRYPTED` | 암호·배포용 문서 | 암호 해제본 확보 |
 | `ZIP_CORRUPT` / `XML_PARSE` | 컨테이너·본문 XML 손상 | 원본 재수집 |
 | `DOCUMENT_PARSE` | 컨테이너는 정상, 내부 구조에서 깨짐 | 개별 확인(라이브러리 미지원 레코드일 수 있음) |
-| `PDF_LOAD` | PDF를 열지 못함 | `%PDF` 서명 유무를 상세에서 확인 |
+| `PDF_LOAD` | PDF를 열지 못함 | 서명 유무를 상세에서 확인 |
 | `EMPTY_FILE` / `FILE_ACCESS` | 0바이트 / 경로·권한 문제 | 수집 단계 점검 |
 | `OUT_OF_MEMORY` | 파일 하나가 힙을 다 씀 | `-Xmx` 상향 또는 해당 파일 제외 |
 
-갈래는 **파일 앞부분의 매직바이트**와 **원인 체인의 맨 끝 예외** 두 가지로 판정합니다.
-라이브러리는 "읽지 못했다"까지만 말해 주지만, 헤더를 직접 보면 "한글 3.0이라 애초에 대상이
-아니다"와 "정상 컨테이너인데 안이 깨졌다"가 갈립니다.
+갈래는 **파일 앞부분의 매직바이트**(라우팅과 같은 `DocFormat`)와 **원인 체인의 맨 끝 예외**
+두 가지로 판정합니다. 라이브러리는 "읽지 못했다"까지만 말해 주지만, 헤더를 직접 보면
+"한글 3.0이다"와 "정상 컨테이너인데 안이 깨졌다"가 갈립니다. 라우팅과 실패 분류가 같은 근거를
+써야 "라우팅은 HWPX로 보냈는데 실패 갈래는 HWP 얘기를 한다" 같은 어긋남이 생기지 않습니다.
 
 전건 목록은 `--failures`로 저장합니다 — 재처리 대상을 그대로 넘길 수 있습니다.
 
@@ -350,10 +375,10 @@ java -jar target/extract-pipeline-1.0.0.jar detect input/ --summary --failures o
 ```
 
 ```json
-{"total": 23702, "failed": 203, "failures": [
-  {"file": "input/2015_고시_001.hwp", "ext": "hwp", "kind": "HWP3_LEGACY",
-   "description": "한글 3.0 이하 구버전 파일 — hwplib이 읽지 못합니다(한글에서 재저장 필요)",
-   "error": "UncheckedIOException: HWP 스캔 판별 실패: … [원인: IOException: Unable to read entire header; 28 bytes read; expected 512 bytes]"}
+{"total": 23702, "failed": 54, "failures": [
+  {"file": "input/2015_고시_001.hwp", "ext": "hwp", "kind": "ENCRYPTED",
+   "description": "암호가 걸려 있습니다(배포용 문서 포함) — 암호 해제본이 필요합니다",
+   "error": "UncheckedIOException: HWP 스캔 판별 실패: … [원인: IOException: Cannot process encrypted document]"}
 ]}
 ```
 
@@ -483,13 +508,16 @@ java -jar target/extract-pipeline-1.0.0.jar render out/ -o out/     # out/<이�
 
 ## 데이터베이스 스키마 (PostgreSQL)
 
-Flyway 마이그레이션(`src/main/resources/db/migration/V1__init.sql`)이 2테이블을
-생성합니다.
+Flyway 마이그레이션(`src/main/resources/db/migration/`)이 2테이블을 생성합니다.
 
 | 테이블 | 설명 |
 |---|---|
-| `documents` | 문서 1레코드 = 1행. 15개 표준 필드(`agency`, `notice_no`, `notice_date`, `title`, `approval_no`, `location`, `area`, `work_period_start/end` 등) + `engine`/`is_scanned` + 매핑 안 된 라벨을 보존하는 `extras JSONB` |
+| `documents` | 문서 1레코드 = 1행. 15개 표준 필드(`agency`, `notice_no`, `notice_date`, `title`, `approval_no`, `location`, `area`, `work_period_start/end` 등) + `engine`/`is_scanned` + `file_type`/`detected_format` + 매핑 안 된 라벨을 보존하는 `extras JSONB` |
 | `ref_files` | 이미지 1개 = 1행. `documents.seq`를 참조하며 `ON DELETE CASCADE` |
+
+`file_type`은 **파일명 확장자**, `detected_format`은 **내용으로 판정한 실제 형식**입니다
+(`V3__documents_detected_format.sql`). 기존 적재 데이터·집계 쿼리와의 호환을 위해
+`file_type`의 의미는 그대로 두고 새 컬럼을 더했습니다.
 
 적재 규칙: 같은 `source_file` 재적재 시 기존 행을 삭제 후 재삽입(멱등,
 CASCADE로 `ref_files` 자동 정리). 파일 단위로 세이브포인트를 잡아 한 파일의
@@ -509,10 +537,14 @@ mvn test -Dgroups=db -DexcludedGroups= \
 `ScanOcrRunner`는 스텁 셸 스크립트를 서브프로세스로 실행해 검증하므로
 PaddleOCR-VL 설치 없이도 실행됩니다(Windows에서는 해당 테스트 생략).
 
-## 새 형식(확장자)·엔진 통합 절차
+## 새 형식·엔진 통합 절차
 
+0. **형식 판별 등록**: `DocFormat`에 상수와 매직바이트 서명을 추가. 여기서 내는 **형식 키**가
+   아래 두 레지스트리의 키가 된다. 확장자를 새로 받아야 하면 `ExtractorRegistry.EXTENSIONS`에도
+   추가한다(입력 폴더 수집용이며, 형식 키와는 별개다 — 한글 3.0처럼 기존 확장자를 쓰는
+   형식은 추가할 필요가 없다).
 1. **detect 등록**: `XyzScanDetector implements ScanDetector` 구현 후
-   `DetectorRegistry`에 확장자 매핑 추가 (스캔 변형이 없으면 항상 `false` 스텁).
+   `DetectorRegistry`에 형식 키 매핑 추가 (스캔 변형이 없으면 항상 `false` 스텁).
 2. **Extractor 구현**: `engine/xyz/XyzExtractor implements Extractor` —
    `extractRaw`가 raw JSON 계약을 지키도록 구현. 병합 셀은 `cells`에 span을
    채우고, 이미지 저장 시 `path`를 기록. 저장 확장자는

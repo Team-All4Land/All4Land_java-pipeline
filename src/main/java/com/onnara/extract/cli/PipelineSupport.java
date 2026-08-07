@@ -5,6 +5,7 @@ import com.onnara.extract.common.Json;
 import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.detect.DetectorRegistry;
+import com.onnara.extract.detect.DocFormat;
 import com.onnara.extract.detect.FailureClassifier;
 import com.onnara.extract.engine.Extractor;
 import com.onnara.extract.engine.ExtractorRegistry;
@@ -84,20 +85,39 @@ final class PipelineSupport {
     static ExtractResult extractOne(Path file, Extractor forcedExtractor, Path outputDir,
                                     boolean saveImages, ScanOcrRunner scanRunner,
                                     boolean scanned) throws IOException {
-        String ext = extensionOf(file);
+        // 라우팅 근거는 확장자가 아니라 파일 내용이다 — .hwp로 저장된 HWPX를 살리기 위해서다
+        String format = DocFormat.routingKey(file);
         String sourceFile = file.getFileName().toString();
         Path imagesDir = outputDir.resolve("images");
 
         if (forcedExtractor == null && scanned) {
-            return extractScanned(file, ext, sourceFile, imagesDir, saveImages, scanRunner);
+            ExtractResult result = extractScanned(
+                    file, format, sourceFile, imagesDir, saveImages, scanRunner);
+            return new ExtractResult(tagFormats(result.raw(), file, format), result.engine());
         }
 
-        Extractor extractor = forcedExtractor != null ? forcedExtractor : ExtractorRegistry.forExtension(ext);
+        Extractor extractor = forcedExtractor != null
+                ? forcedExtractor : ExtractorRegistry.forExtension(format);
         RawDocument raw = extractor.extractRaw(file);
         if (saveImages && !raw.getImages().isEmpty()) {
             bindImagePaths(raw, extractor.saveImages(file, imagesDir));
         }
-        return new ExtractResult(raw, extractor.engineName());
+        return new ExtractResult(tagFormats(raw, file, format), extractor.engineName());
+    }
+
+    /**
+     * 형식 두 축을 확정한다 — {@code file_type}은 <b>파일명 확장자</b>,
+     * {@code detected_format}은 <b>내용으로 판정한 실제 형식</b>.
+     *
+     * <p>엔진은 자기가 아는 형식 이름을 {@code fileType}에 박아 넣는다(예: {@code OwpmlExtractor}는
+     * 항상 {@code "hwpx"}). 그대로 두면 {@code .hwp}로 저장된 HWPX가 {@code file_type=hwpx}로
+     * 적재돼 기존 집계 쿼리와 값이 어긋난다. 두 축을 여기서 한 번에 정리해, 엔진은 형식 판정
+     * 정책을 몰라도 되게 한다.
+     */
+    private static RawDocument tagFormats(RawDocument raw, Path file, String format) {
+        raw.setFileType(extensionOf(file));
+        raw.setDetectedFormat(format);
+        return raw;
     }
 
     /**
@@ -105,15 +125,15 @@ final class PipelineSupport {
      * PaddleOCR-VL 서브프로세스로 넘긴다(§1, §7). 결과의 images 메타는 우리가 로컬에 저장한
      * 파일 목록으로 재구성한다 — 결과가 입력 이미지와 다른 목록/순서를 돌려줄 수 있어서다.
      */
-    private static ExtractResult extractScanned(Path file, String ext, String sourceFile,
+    private static ExtractResult extractScanned(Path file, String format, String sourceFile,
                                                 Path imagesDir, boolean saveImages,
                                                 ScanOcrRunner scanRunner) throws IOException {
-        if ("pdf".equals(ext)) {
+        if ("pdf".equals(format)) {
             RawDocument raw = scanRunner.parsePdf(file, sourceFile);
             return new ExtractResult(raw, "paddleocr-vl");
         }
 
-        Extractor nativeExtractor = ExtractorRegistry.forExtension(ext);
+        Extractor nativeExtractor = ExtractorRegistry.forExtension(format);
         // --no-images일 때 쓰는 임시 폴더는 이 파일 처리가 끝나면 지운다. 남겨 두면 배치 한 번에
         // 스캔본 수만큼 폴더가 /tmp에 쌓여 디스크를 먹는다(OCR에 넘긴 뒤에는 쓸 일이 없다).
         Path tempDir = saveImages ? null : Files.createTempDirectory("extract-scan-");
@@ -121,7 +141,7 @@ final class PipelineSupport {
         try {
             List<Path> saved = nativeExtractor.saveImages(file, targetDir);
 
-            RawDocument raw = scanRunner.parseImages(saved, sourceFile, ext);
+            RawDocument raw = scanRunner.parseImages(saved, sourceFile, format);
             raw.setImages(new ArrayList<>());
             for (Path p : saved) {
                 RawImage image = new RawImage(p.getFileName().toString(), Files.size(p));

@@ -13,8 +13,10 @@ import com.onnara.extract.common.table.TableKind;
 import com.onnara.extract.common.table.TableRecord;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -73,7 +75,7 @@ public final class Mapper {
 
         NoticeRecord.Builder base = new NoticeRecord.Builder();
 
-        applyDocumentMeta(base, metaLines(paragraphs, tables), tables);
+        applyDocumentMeta(base, metaLines(paragraphs, tables), tables, mappedFields(interpreted));
         applyParagraphLabels(base, paragraphs);
 
         List<NoticeRecord.Builder> tableRecords = new ArrayList<>();
@@ -93,6 +95,7 @@ public final class Mapper {
 
         SchemaResult result = new SchemaResult(
                 raw.getSourceFile(), raw.getFileType(), raw.isScanned(), engine);
+        result.setDetectedFormat(raw.getDetectedFormat());
         if (tableRecords.isEmpty()) {
             result.getRecords().add(base.build());
         } else {
@@ -137,6 +140,32 @@ public final class Mapper {
         return lines;
     }
 
+    /**
+     * 표 해석이 <b>사전으로 매핑해 낸</b> 표준 필드 이름들 — 추측성 휴리스틱이 양보해야 할 목록이다.
+     *
+     * <p>표에 {@code 제목:} 라벨이 또렷이 있는데도 "고시번호 다음 줄"이라는 위치 추측이
+     * 먼저 채워 버리면, 사전을 갖춰 둔 의미가 없어진다. 값이 아니라 <b>이름만</b> 모으는 이유는
+     * 순서를 바꾸지 않기 위해서다 — 실제 값 반영은 지금처럼 뒤에서 하고, 여기서는
+     * "이 필드는 표가 책임진다"는 사실만 앞당겨 알려 준다.
+     */
+    private static Set<String> mappedFields(List<InterpretedTable> interpreted) {
+        Set<String> fields = new HashSet<>();
+        for (InterpretedTable table : interpreted) {
+            // 다건 목록 표는 행마다 레코드가 갈라져 문서 단위 메타가 되지 않는다
+            if (table.kind() == TableKind.HEADER_LIST) {
+                continue;
+            }
+            for (TableRecord record : table.records()) {
+                for (TableFact fact : record.fields()) {
+                    if (fact.canonical() != null) {
+                        fields.add(fact.canonical());
+                    }
+                }
+            }
+        }
+        return fields;
+    }
+
     /** 표 해석 결과의 라벨:값들을 레코드에 반영한다(매핑된 것은 필드로, 나머지는 extras로). */
     private static void applyFacts(NoticeRecord.Builder builder, List<TableFact> facts) {
         for (TableFact fact : facts) {
@@ -154,10 +183,14 @@ public final class Mapper {
      * 문서 단위 메타(기관·고시번호·고시일·고시자·제목)를 추출해 base에 채운다.
      * "OO청 고시 제2026-88호" 문단에서 기관/번호를 분리하고, 그 이후 줄에서
      * 날짜·고시자를 찾으며, 제목은 고시문 표 또는 번호 다음 문단에서 추정한다.
+     *
+     * @param mappedByTables 표 해석이 사전으로 매핑해 낸 표준 필드 이름들 — 여기 든 필드는
+     *                       추측하지 않고 표에 맡긴다
      */
     private static void applyDocumentMeta(NoticeRecord.Builder base,
                                           List<String> paragraphs,
-                                          List<RawTable> tables) {
+                                          List<RawTable> tables,
+                                          Set<String> mappedByTables) {
         int noticeNoIdx = -1;
         for (int i = 0; i < paragraphs.size(); i++) {
             Optional<String[]> hit = Heuristics.agencyAndNoticeNo(paragraphs.get(i));
@@ -180,6 +213,12 @@ public final class Mapper {
             }
         }
 
+        // 표가 제목 라벨을 갖고 있으면 추측하지 않는다. "고시번호 다음 줄"은 어디까지나 위치
+        // 추측이라, 그 자리에 다른 라벨이 오는 서식(예: 신문공고 게재 언론기관)에서 엉뚱한 값을
+        // 제목으로 굳혀 버린다. set()이 선착순이라 여기서 채우면 표 값이 들어올 자리가 없어진다.
+        if (mappedByTables.contains("title")) {
+            return;
+        }
         String title = Heuristics.guessTitleFromTables(tables);
         if (title == null && noticeNoIdx >= 0 && noticeNoIdx + 1 < paragraphs.size()) {
             String next = paragraphs.get(noticeNoIdx + 1);
