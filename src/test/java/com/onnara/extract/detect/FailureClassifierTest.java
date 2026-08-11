@@ -81,7 +81,12 @@ class FailureClassifierTest {
         assertEquals(FailureKind.HWP3_LEGACY, result.kind());
     }
 
-    /** ZIP은 맞는데 항목이 암호화됐다면 손상이 아니라 암호다 — 원본을 다시 받아야 한다. */
+    /**
+     * ZIP은 맞는데 항목이 암호화됐다면 손상이 아니라 암호다.
+     *
+     * <p>매니페스트를 읽을 수 없는 조각 파일이라 보호 플래그는 못 얻지만, 라이브러리가 암호라고
+     * 말하는 것 자체는 근거가 된다 — 이럴 때도 "손상"이 아니라 암호 갈래로 세야 대응이 맞는다.
+     */
     @Test
     void detectsEncryptedZipEntry(@TempDir Path dir) throws IOException {
         Path file = writeBytes(dir, "암호.hwpx", new byte[]{'P', 'K', 0x03, 0x04, 0x14, 0x00});
@@ -90,7 +95,7 @@ class FailureClassifierTest {
                 new UncheckedIOException("HWPX 스캔 판별 실패: " + file,
                         new ZipException("encrypted ZIP entry not supported")));
 
-        assertEquals(FailureKind.ENCRYPTED, result.kind());
+        assertEquals(FailureKind.PASSWORD_PROTECTED, result.kind());
     }
 
     /**

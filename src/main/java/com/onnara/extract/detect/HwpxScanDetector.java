@@ -7,6 +7,7 @@ import javax.xml.stream.XMLStreamReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Enumeration;
 import java.util.zip.ZipEntry;
@@ -35,6 +36,11 @@ public class HwpxScanDetector implements ScanDetector {
     @Override
     public boolean isScanned(Path file) {
         try (ZipFile zip = new ZipFile(file.toFile())) {
+            // 본문을 파싱하기 전에 잠겨 있는지부터 본다. 암호화된 바이트를 XML 파서에 먹이면
+            // 사유가 "Invalid byte 2 of 2-byte UTF-8 sequence"로 남아 대응할 수 없고,
+            // 파서가 stderr에 [Fatal Error]까지 흩뿌린다. 매니페스트는 몇 KB라 비용도 없다.
+            failIfEncrypted(zip, file);
+
             int textLen = 0;
             int imageCount = 0;
             Enumeration<? extends ZipEntry> entries = zip.entries();
@@ -52,6 +58,33 @@ public class HwpxScanDetector implements ScanDetector {
             return textLen < MIN_TEXT_CHARS && imageCount > 0;
         } catch (IOException e) {
             throw new UncheckedIOException("HWPX 스캔 판별 실패: " + file, e);
+        }
+    }
+
+    /**
+     * 매니페스트가 암호화를 선언했으면 그 자리에서 실패시킨다.
+     *
+     * <p>HWPX의 암호화는 ODF 표준(AES + PBKDF2)이라 <b>사용자 암호에서 키가 나온다</b> —
+     * 파일만 갖고는 본문은 물론 미리보기까지 아무것도 열 수 없다. 그러니 계속 읽어 볼 이유가
+     * 없고, 사유를 정확히 남기는 편이 낫다({@link FailureClassifier}가 이걸
+     * {@link FailureKind#PASSWORD_PROTECTED}로 센다).
+     */
+    private static void failIfEncrypted(ZipFile zip, Path file) throws IOException {
+        ZipEntry manifest = zip.getEntry("META-INF/manifest.xml");
+        if (manifest == null) {
+            return;
+        }
+        DocProtection protection;
+        try (InputStream in = zip.getInputStream(manifest)) {
+            protection = DocProtection.ofHwpxManifest(
+                    new String(in.readAllBytes(), StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            return;                 // 매니페스트를 해석하지 못한 것은 보호의 근거가 아니다
+        }
+        if (protection.kind() != DocProtection.Kind.NONE) {
+            throw new IOException(protection.detail());
         }
     }
 

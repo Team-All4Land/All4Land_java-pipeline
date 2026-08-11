@@ -67,9 +67,12 @@ public final class FailureClassifier {
             return result(FailureKind.UNSUPPORTED_EXT, error);
         }
 
-        // 2) 암호는 형식을 가리지 않는다 — 컨테이너 판정보다 먼저 본다
-        if (mentionsEncryption(message) || isPasswordException(root)) {
-            return result(FailureKind.ENCRYPTED, error);
+        // 2) 보호 상태는 컨테이너 판정보다 먼저 본다. 암호화된 HWPX를 뒤에 두면 암호화된 바이트를
+        //    XML 파서에 먹인 결과인 XML_PARSE로 새어 나가, 사유가 "Invalid byte 2 of 2-byte UTF-8
+        //    sequence"처럼 대응할 수 없는 문장이 된다.
+        Result byProtection = classifyProtection(file, format, root, error);
+        if (byProtection != null) {
+            return byProtection;
         }
 
         // 3) 컨테이너 판정 — 매직바이트가 예외 메시지보다 확실하다
@@ -99,6 +102,41 @@ public final class FailureClassifier {
             return result(FailureKind.IO, error);
         }
         return result(FailureKind.OTHER, error);
+    }
+
+    /**
+     * 보호된 문서인지, 보호라면 어느 갈래인지 — 아니면 null(다음 판정으로 넘긴다).
+     *
+     * <p>근거는 <b>파일이 선언한 보호 플래그</b>({@link DocProtection})다. 예전에는 예외 메시지에
+     * "password"·"암호"가 들어 있는지로 갈랐는데, 그건 라이브러리가 무슨 문장을 쓰느냐에 달린
+     * 것이지 문서의 성질이 아니다. 실제로 배포용 문서는 잘 읽히는데도 메시지 매칭 탓에 암호
+     * 문서와 한 갈래로 세어졌다.
+     *
+     * <p>{@link DocProtection.Kind#DISTRIBUTION}은 "배포용이라서 실패"가 아니라 <b>배포용인데도
+     * 실패</b>라는 뜻이다 — 복호화는 지원되므로 암호 해제본을 받아도 소용없고, 구조 해석 문제다.
+     */
+    private static Result classifyProtection(Path file, DocFormat format,
+                                             Throwable root, Throwable error) {
+        DocProtection protection = DocProtection.of(file, format);
+        FailureKind kind = switch (protection.kind()) {
+            case PASSWORD -> FailureKind.PASSWORD_PROTECTED;
+            case DRM -> FailureKind.DRM_PROTECTED;
+            case DISTRIBUTION -> FailureKind.DISTRIBUTION_UNSUPPORTED;
+            case NONE -> null;
+        };
+        if (kind != null) {
+            // 사유는 원인 체인이 아니라 대응을 알려 주는 문장이다. 원인 체인은 뭔가를 더해 줄
+            // 때만 덧붙인다 — 판별기가 이미 같은 문장을 던졌으면 두 번 적어 봐야 읽기만 나빠진다.
+            String chain = Errors.describe(error);
+            String detail = chain.contains(protection.detail())
+                    ? protection.detail() : protection.detail() + " [" + chain + "]";
+            return new Result(kind, detail);
+        }
+        // 플래그를 못 읽었어도 라이브러리가 암호라고 말하면 그건 근거가 된다(PDF 등)
+        if (isPasswordException(root) || mentionsEncryption(messageOf(error))) {
+            return result(FailureKind.PASSWORD_PROTECTED, error);
+        }
+        return null;
     }
 
     /** ZIP 컨테이너(HWPX) — 압축 해제에서 깨졌는지, 본문 XML에서 깨졌는지로 가른다. */
@@ -138,11 +176,15 @@ public final class FailureClassifier {
         return root != null && root.getClass().getSimpleName().contains("InvalidPassword");
     }
 
-    /** 메시지가 암호·유통 문서를 가리키는지. */
+    /**
+     * 메시지가 <b>열기 암호</b>를 가리키는지 — 보호 플래그를 읽지 못했을 때만 쓰는 보조 근거다.
+     *
+     * <p>"배포용"은 일부러 뺐다. 배포용 문서는 열쇠가 파일 안에 있어 우리가 읽을 수 있으므로,
+     * 그 단어가 보인다고 암호 갈래로 세면 "암호 해제본을 받아라"라는 틀린 대응을 안내하게 된다.
+     */
     private static boolean mentionsEncryption(String message) {
         String lower = message.toLowerCase(Locale.ROOT);
-        return lower.contains("encrypt") || lower.contains("password")
-                || lower.contains("암호") || lower.contains("배포용");
+        return lower.contains("encrypt") || lower.contains("password") || lower.contains("암호");
     }
 
     /** 예외와 그 원인 체인 전체의 메시지 — 어느 계층이 단서를 갖고 있을지 모른다. */
