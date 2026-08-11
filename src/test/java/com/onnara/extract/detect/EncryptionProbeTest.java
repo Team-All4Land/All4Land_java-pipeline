@@ -72,15 +72,26 @@ class EncryptionProbeTest {
         assertEquals(EncryptionProbe.Lock.NONE, EncryptionProbe.probe(dir.resolve("없는파일.hwp")));
     }
 
-    /** 잠긴 문서는 안내문이 담긴 예외로 즉시 걸러진다 — 원인 체인 첫 문장이 읽혀야 한다. */
+    /** 암호가 걸린 문서는 안내문이 담긴 예외로 즉시 걸러진다 — 원인 체인 첫 문장이 읽혀야 한다. */
     @Test
     void requireUnlockedExplainsHowToFixIt() {
-        Path file = TestFixtures.sample("배포용 공유수면 점용 고시.hwpx");
+        Path file = TestFixtures.sample("암호화 - 공유수면 고시.hwpx");
 
         IOException e = assertThrows(IOException.class, () -> EncryptionProbe.requireUnlocked(file));
 
-        assertTrue(e.getMessage().contains("배포용 문서"), e.getMessage());
-        assertTrue(e.getMessage().contains("일반 문서로 저장"), e.getMessage());
+        assertTrue(e.getMessage().contains("암호화"), e.getMessage());
+        assertTrue(e.getMessage().contains("aes256-cbc"), e.getMessage());
+    }
+
+    /**
+     * <b>배포용은 통과시킨다.</b> 열쇠가 파일 안에 있어 hwplib이 복호화하므로 그대로 읽힌다 —
+     * 여기서 막으면 정상 추출되던 문서가 통째로 실패로 돌아선다.
+     */
+    @Test
+    void requireUnlockedPassesDistributionDocuments() {
+        Path file = TestFixtures.sample("배포용 공유수면 점용사용허가 고시(광양시).hwp");
+
+        assertDoesNotThrow(() -> EncryptionProbe.requireUnlocked(file));
     }
 
     /** 잠기지 않은 문서는 그냥 통과시킨다. */

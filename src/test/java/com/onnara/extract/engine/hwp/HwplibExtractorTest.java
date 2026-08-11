@@ -4,6 +4,8 @@ import com.onnara.extract.TestFixtures;
 import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.model.RawParagraph;
 import com.onnara.extract.common.model.RawTable;
+import com.onnara.extract.detect.FailureClassifier;
+import com.onnara.extract.detect.FailureKind;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,20 +25,22 @@ class HwplibExtractorTest {
     private final HwplibExtractor extractor = new HwplibExtractor();
 
     /**
-     * 배포용 문서는 라이브러리에 넘기기 전에 걸러 낸다.
+     * <b>배포용을 진입점에서 통째로 막지는 않는다</b> — 막으면 읽히던 배포용 문서까지 실패로
+     * 돌아선다(영광군 2건은 실제로 읽힌다 → {@code ProtectedDocumentTest}).
      *
-     * <p>그냥 넘기면 hwplib이 암호문을 구조로 읽으려다 {@code "This is not paragraph."}로
-     * 죽어, 원인 체인 어디에도 암호 얘기가 남지 않는다. 그러면 실패 목록에서 진짜 손상과
-     * 구분되지 않아 재저장하면 살아날 문서가 그대로 버려진다.
+     * <p>이 광양시 건은 복호화 이후의 구조 해석에서 hwplib이 {@code "This is not paragraph."}로
+     * 죽는다. 그때 남길 답은 "암호 해제본을 받아 오라"가 아니라 <b>"배포용은 지원하는데 이 건은
+     * 우리가 못 읽었다"</b>여야 한다 — 암호 문제가 아니므로 해제본을 받아도 소용이 없다.
      */
     @Test
-    void refusesDistributionDocumentWithAnActionableMessage() {
+    void failingDistributionDocumentIsBlamedOnUsNotOnAPassword() {
         Path file = TestFixtures.sample("배포용 공유수면 점용사용허가 고시(광양시).hwp");
 
         IOException e = assertThrows(IOException.class, () -> extractor.extractRaw(file));
+        FailureClassifier.Result result = FailureClassifier.classify(file, e);
 
-        assertTrue(e.getMessage().contains("배포용 문서"), e.getMessage());
-        assertTrue(e.getMessage().contains("일반 문서로 저장"), e.getMessage());
+        assertEquals(FailureKind.DISTRIBUTION_UNSUPPORTED, result.kind());
+        assertTrue(result.detail().contains("배포용"), result.detail());
     }
 
     /** 문단·표가 등장 순서로 추출되고 표 span이 유효한지 검증한다. */

@@ -26,9 +26,9 @@ import java.util.zip.ZipFile;
  * <p>가려내야 할 잠금이 두 갈래이고, 둘은 대응이 전혀 다르다.
  *
  * <ul>
- *   <li><b>배포용 문서</b>({@link Lock#DISTRIBUTION}) — 한글이 열쇠를 갖고 있어 한글에서는
- *       그냥 열린다. 그래서 사용자 눈에는 멀쩡한 파일이다. 한글에서 열어 일반 문서로 다시
- *       저장하면 그대로 쓸 수 있다.</li>
+ *   <li><b>배포용 문서</b>({@link Lock#DISTRIBUTION}) — 열쇠가 파일 안에 있어 <b>우리도 읽을 수
+ *       있다</b>(hwplib이 ViewText를 복호화한다). 그래서 {@link #requireUnlocked}는 이 갈래를
+ *       막지 않는다. 판정 결과는 실패했을 때 사유를 가르는 데만 쓴다.</li>
  *   <li><b>사용자 암호</b>({@link Lock#PASSWORD}) — 암호를 아는 사람에게 해제본을 받아야 한다.
  *       우리 쪽에서 할 수 있는 일이 없다.</li>
  * </ul>
@@ -90,22 +90,31 @@ public final class EncryptionProbe {
     }
 
     /**
-     * 잠긴 문서면 곧바로 사람이 읽을 수 있는 예외를 던진다 — 판별기·추출기의 진입점에서 쓴다.
+     * <b>우리가 열 수 없는</b> 문서면 곧바로 사람이 읽을 수 있는 예외를 던진다 —
+     * 판별기·추출기의 진입점에서 쓴다.
      *
      * <p>분류는 {@link FailureClassifier}가 하지만, 로그와 원인 체인에 남는 <b>첫 문장</b>도
      * 읽을 수 있어야 한다. 잠긴 파일을 라이브러리에 그대로 넘기면 원인 체인 맨 끝에
      * {@code "Invalid byte 1 of 1-byte UTF-8 sequence"} 같은 무의미한 문장이 남는다.
      *
-     * <p>안내 문구는 {@link FailureKind}의 설명을 그대로 쓴다 — 두 군데로 갈라지면 반드시 어긋난다.
+     * <p>막는 기준은 "잠겼는가"가 아니라 <b>"우리 손으로 열 수 있는가"</b>다. 그래서 근거도 판정
+     * 문구도 {@link DocProtection} 하나에서만 가져온다 — 여기와 {@link FailureClassifier}가 서로
+     * 다른 근거를 보면 "판별은 막았는데 실패 갈래는 딴소리를 한다"가 된다.
+     *
+     * <ul>
+     *   <li><b>암호·DRM</b> — 키가 파일 밖에 있다. 넘겨 봐야 암호문을 파싱하다 죽으므로 막는다.</li>
+     *   <li><b>HWP 5.0 배포용</b> — 열쇠가 파일 안에 있어 hwplib이 ViewText를 복호화한다.
+     *       <b>통과시킨다</b> — 여기서 걸러 내면 정상 추출되던 문서가 통째로 실패로 돌아선다
+     *       (→ {@code ProtectedDocumentTest}).</li>
+     *   <li><b>HWPX 배포용</b> — hwpxlib에는 복호화 코드가 아예 없어 우리는 못 읽는다. 매니페스트가
+     *       암호화를 선언하므로 암호 갈래로 잡혀 막힌다.</li>
+     * </ul>
      */
     public static void requireUnlocked(Path file) throws IOException {
-        FailureKind kind = switch (probe(file)) {
-            case DISTRIBUTION -> FailureKind.DISTRIBUTION_LOCKED;
-            case PASSWORD -> FailureKind.ENCRYPTED;
-            case NONE -> null;
-        };
-        if (kind != null) {
-            throw new IOException(kind.description() + ": " + file);
+        DocProtection protection = DocProtection.of(file, DocFormat.of(file));
+        if (protection.kind() == DocProtection.Kind.PASSWORD
+                || protection.kind() == DocProtection.Kind.DRM) {
+            throw new IOException(protection.detail() + ": " + file);
         }
     }
 

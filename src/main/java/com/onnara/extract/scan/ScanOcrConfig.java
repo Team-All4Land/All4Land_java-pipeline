@@ -24,7 +24,7 @@ public record ScanOcrConfig(String command, Path script, Duration timeout) {
         Path script = Path.of(
                 props.getWithEnv("ocr.cli.script", "ocr-cli/paddleocr_vl_cli.py", "OCR_CLI_SCRIPT"));
         int timeoutSec = Integer.parseInt(
-                props.getWithEnv("ocr.cli.timeout-sec", "300", "OCR_CLI_TIMEOUT_SEC"));
+                props.getWithEnv("ocr.cli.timeout-sec", "3600", "OCR_CLI_TIMEOUT_SEC"));
         return new ScanOcrConfig(command, script, Duration.ofSeconds(timeoutSec));
     }
 }

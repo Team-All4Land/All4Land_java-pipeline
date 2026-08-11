@@ -21,13 +21,13 @@ buildNumber.properties
 *.iws
 *.iml
 *.ipr
-out/
 
 # IDE 관련 (Eclipse)
 .classpath
 .project
 .settings/
 bin/
+.metadata
 
 # IDE 관련 (VS Code)
 .vscode/
@@ -58,3 +58,5 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+samples

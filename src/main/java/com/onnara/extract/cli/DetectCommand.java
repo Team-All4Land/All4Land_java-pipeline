@@ -35,6 +35,10 @@ public class DetectCommand implements Callable<Integer> {
     @Option(names = "--summary", description = "파일별 결과 없이 집계만 출력")
     boolean summaryOnly;
 
+    /** true면 파일별 결과에서 판별 실패 건만 남긴다(성공 건은 생략) — --summary와는 함께 쓰지 않는다. */
+    @Option(names = {"-f", "--failed-only"}, description = "파일별 결과 중 판별 실패 건만 출력")
+    boolean failedOnly;
+
     /** 지정하면 판별 실패 건만 따로 JSON으로 저장 — 수백 건을 오프라인에서 분류·재처리할 때. */
     @Option(names = "--failures", paramLabel = "FILE",
             description = "판별 실패 건만 JSON으로 저장 (갈래·사유·원인 체인 포함)")
@@ -70,7 +74,7 @@ public class DetectCommand implements Callable<Integer> {
             for (ScanSurvey.Entry entry : survey.entries()) {
                 if (entry.status() == ScanSurvey.Status.FAILED) {
                     System.out.println("[실패] " + entry.file() + ": " + entry.error());
-                } else {
+                } else if (!failedOnly) {
                     System.out.println(entry.file() + ": " + entry.status().label());
                 }
             }
@@ -154,6 +158,9 @@ public class DetectCommand implements Callable<Integer> {
         if (!summaryOnly) {
             List<Map<String, Object>> rows = new ArrayList<>();
             for (ScanSurvey.Entry entry : survey.entries()) {
+                if (failedOnly && entry.status() != ScanSurvey.Status.FAILED) {
+                    continue;
+                }
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("file", entry.file().toString());
                 row.put("ext", entry.ext());

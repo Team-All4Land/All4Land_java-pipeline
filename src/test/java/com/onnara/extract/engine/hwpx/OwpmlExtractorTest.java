@@ -21,20 +21,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OwpmlExtractorTest {
 
     /**
-     * 배포용 HWPX는 열기 전에 걸러 낸다.
+     * 암호화된 HWPX는 열기 전에 걸러 낸다 — 배포용이라도 마찬가지다.
      *
-     * <p>본문 XML이 암호문이라 그냥 넘기면 hwpxlib이 {@code "Invalid byte 1 of 1-byte UTF-8
-     * sequence"}로 죽는다. 그 문장은 "파일이 깨졌다"로 읽혀, 멀쩡한 문서를 손상으로 오진하게 만든다.
+     * <p>HWP 5.0 배포용은 hwplib이 ViewText를 복호화해 그대로 읽히지만, HWPX는 <b>hwpxlib에
+     * 복호화 코드가 아예 없다</b>. 그냥 넘기면 암호문을 먹은 파서가 {@code "Invalid byte 1 of
+     * 1-byte UTF-8 sequence"}로 죽고, 그 문장은 "파일이 깨졌다"로 읽혀 오진을 만든다.
      */
     @Test
-    void refusesDistributionDocumentWithAnActionableMessage() {
+    void refusesEncryptedDocumentWithAnActionableMessage() {
         Path file = TestFixtures.sample("배포용 공유수면 점용 고시.hwpx");
 
         IOException e = assertThrows(IOException.class,
                 () -> new OwpmlExtractor().extractRaw(file));
 
-        assertTrue(e.getMessage().contains("배포용 문서"), e.getMessage());
-        assertTrue(e.getMessage().contains("일반 문서로 저장"), e.getMessage());
+        assertTrue(e.getMessage().contains("암호화"), e.getMessage());
+        assertFalse(e.getMessage().contains("Invalid byte"),
+                "파서까지 흘러갔습니다: " + e.getMessage());
     }
 
     private final OwpmlExtractor extractor = new OwpmlExtractor();
