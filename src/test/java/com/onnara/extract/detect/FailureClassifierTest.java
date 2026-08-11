@@ -81,6 +81,37 @@ class FailureClassifierTest {
         assertEquals(FailureKind.HWP3_LEGACY, result.kind());
     }
 
+    /**
+     * 배포용 문서는 손상이 아니다 — 재저장 한 번이면 살아난다.
+     *
+     * <p>라이브러리는 암호 얘기를 하지 않고 "문단이 아니다"·"UTF-8이 아니다"라고만 한다.
+     * 예외 메시지만 보고 분류하던 시절엔 이 두 건이 각각 {@code DOCUMENT_PARSE}·
+     * {@code XML_PARSE}로 묻혀, 손대야 소용없는 진짜 손상과 구분되지 않았다.
+     */
+    @Test
+    void classifiesDistributionHwpAsRecoverable() {
+        Path file = com.onnara.extract.TestFixtures
+                .sample("배포용 공유수면 점용사용허가 고시(광양시).hwp");
+
+        FailureClassifier.Result result = FailureClassifier.classify(file,
+                new UncheckedIOException("HWP 스캔 판별 실패: " + file,
+                        new IOException("java.lang.Exception: This is not paragraph.")));
+
+        assertEquals(FailureKind.DISTRIBUTION_LOCKED, result.kind());
+    }
+
+    /** HWPX 배포용도 같은 갈래로 간다 — 컨테이너가 달라도 사용자가 할 일은 똑같다. */
+    @Test
+    void classifiesDistributionHwpxAsRecoverable() {
+        Path file = com.onnara.extract.TestFixtures.sample("배포용 공유수면 점용 고시.hwpx");
+
+        FailureClassifier.Result result = FailureClassifier.classify(file,
+                new UncheckedIOException("HWPX 스캔 판별 실패: " + file,
+                        new IOException("Invalid byte 1 of 1-byte UTF-8 sequence.")));
+
+        assertEquals(FailureKind.DISTRIBUTION_LOCKED, result.kind());
+    }
+
     /** ZIP은 맞는데 항목이 암호화됐다면 손상이 아니라 암호다 — 원본을 다시 받아야 한다. */
     @Test
     void detectsEncryptedZipEntry(@TempDir Path dir) throws IOException {

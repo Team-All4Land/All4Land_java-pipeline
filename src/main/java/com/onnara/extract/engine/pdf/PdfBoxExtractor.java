@@ -1,9 +1,11 @@
 package com.onnara.extract.engine.pdf;
 
+import com.onnara.extract.common.Heuristics;
 import com.onnara.extract.common.model.RawContent;
 import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.RawParagraph;
+import com.onnara.extract.common.model.RawTable;
 import com.onnara.extract.engine.Extractor;
 import com.onnara.extract.engine.image.ImageSieve;
 import com.onnara.extract.engine.image.PdfImageTiles;
@@ -94,6 +96,7 @@ public class PdfBoxExtractor implements Extractor {
                 }
                 // 문단·표 혼재 순서 유지: top 좌표 기준 안정 정렬
                 items.sort(null);
+                attachCaptions(items);
                 for (Item item : items) {
                     raw.getContent().add(item.content);
                 }
@@ -104,6 +107,32 @@ public class PdfBoxExtractor implements Extractor {
             }
         }
         return raw;
+    }
+
+    /**
+     * 한 페이지의 표에 캡션을 붙인다 — PDF에는 캡션이라는 구조가 없어 <b>추정</b>이다.
+     *
+     * <p>PDF는 표도 선분 뭉치에서 복원한 것이고 캡션도 그냥 문단이라, 다른 형식처럼
+     * "이 표의 캡션"이라고 적힌 자리가 없다. 대신 표 바로 앞뒤 문단 중 캡션 형태
+     * ("&lt;표 1&gt;", "[그림 2]" 등)인 것을 고른다 —
+     * {@link Heuristics#nearestCaption}이 이 용도로 만들어져 있다.
+     *
+     * <p>표 자리에는 빈 문자열을 넣어 색인을 맞춘다. 빈 문자열은 캡션 패턴에 걸리지 않으므로
+     * 표가 연달아 나와도 앞 표를 캡션으로 집어 가지 않는다.
+     *
+     * <p>추정이므로 PDF에만 적용한다. HWP·HWPX·HML은 캡션이 컨트롤에 직접 달려 있어
+     * 굳이 추측할 이유가 없다.
+     */
+    private static void attachCaptions(List<Item> items) {
+        List<String> texts = new ArrayList<>(items.size());
+        for (Item item : items) {
+            texts.add(item.content instanceof RawParagraph p ? p.getText() : "");
+        }
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i).content instanceof RawTable table) {
+                table.setCaption(Heuristics.nearestCaption(texts, i));
+            }
+        }
     }
 
     /** 저장 대상으로 판정된 이미지를 outDir에 쓰고 저장 경로 목록을 반환한다. */

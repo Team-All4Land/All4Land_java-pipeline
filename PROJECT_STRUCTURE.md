@@ -79,8 +79,9 @@ extract-java/
 │   │   ├── ScanDetector.java    #   인터페이스: boolean isScanned(Path)
 │   │   ├── DetectorRegistry.java#   확장자 → 판별기 매핑 (§3)
 │   │   ├── ScanSurvey.java      #   문서 집합 스캔 판별 집계 (추출·OCR 없이 1차 분기만)
-│   │   ├── FailureKind.java     #   판별 실패의 갈래 (구버전/암호/개명/손상/OOM…) (§3.1)
+│   │   ├── FailureKind.java     #   판별 실패의 갈래 (구버전/배포용/암호/손상/OOM…) (§3.1)
 │   │   ├── FailureClassifier.java#  매직바이트 + 원인 체인으로 갈래 판정 (§3.1)
+│   │   ├── EncryptionProbe.java #   배포용·암호 문서 판정 (컨테이너 직접 확인, §3.1)
 │   │   ├── PdfScanDetector.java #   첫 페이지 텍스트 레이어·이미지 유무 (PDFBox)
 │   │   ├── HwpScanDetector.java #   네이티브 텍스트량 vs 임베디드 이미지 비중 (hwplib)
 │   │   ├── HwpxScanDetector.java#   ZIP 내 본문 XML 텍스트 검사
@@ -231,6 +232,30 @@ PDF에서 첫 페이지만 보는 이유는 이 절의 원칙 자체다. 예전�
 못했다"까지만 말하지만, 파일 앞 64바이트를 직접 보면 한글 3.0(`HWP Document File`)·
 CFB(`D0CF11E0…`)·ZIP(`PK\x03\x04`)·PDF(`%PDF`)가 갈린다. 전량 배치에서도 비용이 없다.
 
+#### 배포용 문서 (`DISTRIBUTION_LOCKED`) — `detect/EncryptionProbe`
+
+**"한글에서는 열리는데 파이프라인은 못 읽는다"의 정체다.** 배포용 문서는 본문이 디스크
+상에서 실제로 암호화돼 있다. 한글은 열쇠를 갖고 있어 아무것도 묻지 않고 열어 주므로
+사용자 눈에는 멀쩡한 파일이고, 그래서 "정상 파일인데 왜 실패하냐"가 반복해서 올라온다.
+
+라이브러리는 이 상황을 암호라고 말하지 않는다 — hwplib은 `"This is not paragraph."`,
+hwpxlib은 `"Invalid byte 1 of 1-byte UTF-8 sequence"`를 던진다. 예외 메시지로 분류하던
+동안 이 문서들은 각각 `DOCUMENT_PARSE`·`XML_PARSE`로 묻혔다. **재저장 한 번이면 살아날
+문서가 고칠 수 없는 손상과 같은 칸에 세어진 것이다.**
+
+그래서 `EncryptionProbe`가 컨테이너를 직접 본다.
+
+| 형식 | 판정 근거 |
+|---|---|
+| HWP 5.0 | `FileHeader` offset 36 속성 비트 — bit2 배포용, bit1 사용자 암호 |
+| HWPX | `META-INF/manifest.xml`의 `<odf:encryption-data>` + `Contents/content.hpf`의 `hpf:distribution="1"` |
+
+`DISTRIBUTION_LOCKED`(재저장하면 살아난다)와 `ENCRYPTED`(암호를 아는 사람에게 해제본을
+받아야 한다)는 **대응이 다르므로 갈래를 나눈다.** 판별기·추출기 진입점은
+`EncryptionProbe.requireUnlocked(Path)`로 먼저 걸러, 원인 체인 첫 문장부터 읽을 수 있게 한다.
+
+자동 복호화는 하지 않는다 — 배포용 해제는 수동으로(한글에서 일반 문서로 다시 저장) 처리한다.
+
 `ScanSurvey.of`는 `Exception`이 아니라 **`Throwable`**을 잡는다 — 파일 하나의
 `OutOfMemoryError`가 수만 건 배치를 통째로 죽이면 안 된다.
 
@@ -250,18 +275,22 @@ Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 �
   "content": [
     {"type": "paragraph", "text": "문단 텍스트"},
     {"type": "table", "n_rows": 2, "n_cols": 8,
+     "caption": "<표 1> 공유수면 점용·사용허가 내역",
      "grid": [["행", "별"], ["셀", "텍스트"]],
      "cells": [{"row": 0, "col": 0, "row_span": 1, "col_span": 1, "text": "행"}]}
   ],
   "images": [
     {"name": "고시문_img0.png", "path": "/srv/extract/out/images/고시문_img0.png",
-     "size": 1234, "ocr_text": null}
+     "size": 1234, "caption": "[그림 2] 현장 위치도", "ocr_text": null}
   ]
 }
 ```
 
 - `content`는 문서 등장 순서 유지 (문단·표 혼재).
 - 표는 `grid` 필수, `cells`(병합 셀 span)는 선택 — HmlExtractor·OwpmlExtractor가 채운다.
+- `caption`(표·이미지)은 선택 필드다. **캡션이 없으면 키 자체가 나오지 않는다**
+  (`@JsonInclude(NON_NULL)`) — 그래야 캡션 없는 문서의 산출물이 이 필드가 생기기 전과
+  바이트 단위로 같아 Python 호환이 유지된다(§4.2).
 - 이미지 `path`(저장된 이미지의 절대경로)는 DB 적재(`ref_files.file_path`)에 필요하므로 필수.
   `ocr_text`는 선택 필드 — 현재 Java 파이프라인은 채우지 않지만 계약 호환을 위해 유지.
 - 이미지 추출 대상 판정(§4.1): 정보가 없는 이미지·도장은 저장하지 않는다.
@@ -366,6 +395,36 @@ HML의 `<BINDATA Compress="true">`는 풀어서 저장한다 — 압축된 채�
 
 둘 다 실패하면 `.bin`을 유지하되 `[경고]`에 매직바이트와 힌트를 적는다 — 남은 사례를
 특정해 서명을 추가할 수 있어야 한다.
+
+## 4.2. 표·그림 캡션
+
+캡션은 "이 표가 무엇인가"를 담은 유일한 정보인데 계약에 자리가 없어 지금까지 버려졌다.
+hwp3 엔진만 읽고 있었고, 담을 곳이 없어 일반 문단으로 흘려보냈다 — 그러면 **어느 표의
+캡션인지 알 수 없어** 검수에서도 매핑에서도 쓸 수 없다. `RawTable.caption`·
+`RawImage.caption`을 두고, 캡션은 **문단이 아니라 전용 필드에만** 담는다.
+
+| 엔진 | 표 캡션 | 그림 캡션 |
+|---|---|---|
+| `HwplibExtractor` | `ControlTable.getCaption()` | `ControlPicture.getCaption()` → `binItemID`로 BinData와 연결 |
+| `OwpmlExtractor` | `Table.caption()` | `Picture.caption()` |
+| `HmlExtractor` | `TABLE/SHAPEOBJECT/CAPTION` | `PICTURE/SHAPEOBJECT/CAPTION` |
+| `Hwp3Extractor` | `Hwp3Document.Table.caption()` | — (아래) |
+| `PdfBoxExtractor` | `Heuristics.nearestCaption` (추정) | — |
+
+두 군데는 **일부러 붙이지 않는다.**
+
+- **hwp3 그림** — 임베디드 이미지가 본문과 떨어진 파일 태그 영역에 있고 이어 줄 식별자가
+  없다. 등장 순서로 짝지으면 `ImageSieve`가 걸러 낸 이미지 때문에 색인이 어긋난다.
+  **엉뚱한 사진에 캡션이 붙는 것은 캡션이 없는 것보다 나쁘다.** 지금처럼 문단으로 남긴다.
+- **PDF 그림** — PDF에는 캡션이라는 구조가 아예 없다. 표에만 위치 기반 추정을 적용한다.
+
+`HwplibExtractor`의 그림 캡션은 본문 순회로 `binItemID → 캡션` 맵을 먼저 만든다. **표 셀·
+묶음 안까지 재귀해야 한다** — 고시류는 현장사진이 표 안에 들어가는 일이 흔해, 최상위
+문단만 보면 정작 캡션이 붙은 사진을 전부 놓친다. BinData 스트림명(`BIN0001.jpg`)의 번호는
+**16진수**다(10진수로 읽으면 항목이 16개를 넘는 순간 캡션이 엉뚱한 그림에 붙는다).
+
+캡션은 `DocumentSize.bodyChars`가 본문으로 세고(안 그러면 문단에서 뺀 만큼 분량이 줄어
+적재 판정이 소리 없이 달라진다), `TableRenderer`가 `<caption>`으로 낸다.
 
 ## 5. 표준 스키마 (common/model/NoticeRecord.java)
 

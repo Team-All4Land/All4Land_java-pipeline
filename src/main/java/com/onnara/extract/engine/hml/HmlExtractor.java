@@ -143,7 +143,9 @@ public class HmlExtractor implements Extractor {
         }
 
         for (ImageEntry entry : images) {
-            raw.getImages().add(new RawImage(entry.name, entry.data.length));
+            RawImage image = new RawImage(entry.name, entry.data.length);
+            image.setCaption(entry.caption);
+            raw.getImages().add(image);
         }
         return new ParseResult(raw, images);
     }
@@ -192,7 +194,7 @@ public class HmlExtractor implements Extractor {
             System.err.println("[경고] 알 수 없는 이미지 형식이라 " + name + "으로 저장합니다"
                     + " (매직 " + ImageFormats.magicOf(data) + ", 힌트 " + hint + ")");
         }
-        images.add(new ImageEntry(name, data));
+        images.add(new ImageEntry(name, data, captionTextOf(pic)));
     }
 
     /**
@@ -321,7 +323,44 @@ public class HmlExtractor implements Extractor {
                 }
             }
         }
-        return new RawTable(rowCount, colCount, cells, grid);
+        RawTable raw = new RawTable(rowCount, colCount, cells, grid);
+        raw.setCaption(captionTextOf(tbl));
+        return raw;
+    }
+
+    /**
+     * 표·그림의 캡션 텍스트 — {@code SHAPEOBJECT/CAPTION} 하위 문단을 이어붙인다.
+     *
+     * <p>{@code getText}는 TABLE/PICTURE 하위를 건너뛰고, {@code parseTable}은 ROW/CELL만
+     * 훑는다. 그래서 지금까지 HML 캡션은 <b>어느 경로에도 걸리지 않고 통째로 버려졌다.</b>
+     *
+     * <p>{@code CAPTION}은 직계가 아니라 {@code SHAPEOBJECT} 밑에 있으므로 하위 탐색으로
+     * 찾되, <b>직계 SHAPEOBJECT만</b> 본다 — 중첩 표의 캡션을 바깥 표가 가져가면 안 된다.
+     */
+    private static String captionTextOf(Element shape) {
+        StringBuilder sb = new StringBuilder();
+        for (Element shapeObject : directChildElements(shape, "SHAPEOBJECT")) {
+            for (Element caption : directChildElements(shapeObject, "CAPTION")) {
+                appendCaptionParagraphs(caption, sb);
+            }
+        }
+        return sb.length() == 0 ? null : sb.toString();
+    }
+
+    /** CAPTION 안의 PARALIST/P 문단 텍스트를 줄바꿈으로 이어 붙인다. */
+    private static void appendCaptionParagraphs(Element caption, StringBuilder sb) {
+        for (Element paralist : directChildElements(caption, "PARALIST")) {
+            for (Element p : directChildElements(paralist, "P")) {
+                String text = getText(p).trim();
+                if (text.isEmpty()) {
+                    continue;
+                }
+                if (sb.length() > 0) {
+                    sb.append("\n");
+                }
+                sb.append(text);
+            }
+        }
     }
 
     // ── XML 헬퍼 ────────────────────────────────────────────────
@@ -396,7 +435,7 @@ public class HmlExtractor implements Extractor {
     }
 
     /** 수집된 이미지 1건: 저장 파일명과 원본 바이트. */
-    private record ImageEntry(String name, byte[] data) {
+    private record ImageEntry(String name, byte[] data, String caption) {
     }
 
     /** 단일 파싱 패스 결과: raw 문서 + 순서가 고정된 이미지 목록. */

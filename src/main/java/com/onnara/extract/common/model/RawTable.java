@@ -1,5 +1,6 @@
 package com.onnara.extract.common.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
@@ -7,11 +8,16 @@ import java.util.List;
 
 /**
  * raw JSON 계약의 표 항목:
- * {"type": "table", "n_rows", "n_cols", "cells", "grid"}.
+ * {"type": "table", "n_rows", "n_cols", "caption", "cells", "grid"}.
  *
  * <p>매퍼는 grid(행×열 2차원 배열)만 사용한다. cells는 병합 셀 span 보존용 선택 필드.
+ *
+ * <p>{@code caption}은 표에 달린 설명("&lt;표 1&gt; 허가 내역" 등)이다. 없으면
+ * {@link JsonInclude.Include#NON_NULL} 때문에 키 자체가 빠지므로, 캡션이 없는 문서의
+ * 산출물은 이 필드가 생기기 전과 바이트 단위로 같다(§4의 Python 호환 요구).
  */
-@JsonPropertyOrder({"type", "n_rows", "n_cols", "cells", "grid"})
+@JsonPropertyOrder({"type", "n_rows", "n_cols", "caption", "cells", "grid"})
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class RawTable extends RawContent {
 
     /** 행 수. */
@@ -22,6 +28,8 @@ public class RawTable extends RawContent {
     private List<RawCell> cells;
     /** 행×열 텍스트 2차원 배열 — 매퍼가 사용하는 주 표현. */
     private List<List<String>> grid;
+    /** 표에 달린 캡션(없으면 null). */
+    private String caption;
 
     /** Jackson 역직렬화용 기본 생성자. */
     public RawTable() {
@@ -83,5 +91,16 @@ public class RawTable extends RawContent {
     /** 행×열 텍스트 격자를 설정한다. */
     public void setGrid(List<List<String>> grid) {
         this.grid = grid;
+    }
+
+    /** 표 캡션을 반환한다(없으면 null). */
+    @JsonProperty("caption")
+    public String getCaption() {
+        return caption;
+    }
+
+    /** 표 캡션을 설정한다. 빈 문자열은 null로 눕혀 JSON에서 빠지게 한다. */
+    public void setCaption(String caption) {
+        this.caption = caption == null || caption.isBlank() ? null : caption.trim();
     }
 }

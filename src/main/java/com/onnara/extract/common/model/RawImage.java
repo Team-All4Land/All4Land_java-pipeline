@@ -6,15 +6,16 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 /**
  * raw JSON 계약의 이미지 메타데이터:
- * {"name", "path", "size", "ocr_text"}.
+ * {"name", "path", "size", "caption", "ocr_text"}.
  *
  * <ul>
  *   <li>{@code path}: 저장 절대경로 — DB 적재(ref_files)에 필요. saveImages 실행 시 채워진다.</li>
+ *   <li>{@code caption}: 그림에 달린 설명("[그림 2] 위치도" 등). 없으면 키가 빠진다.</li>
  *   <li>{@code ocr_text}: 선택 필드 — 현재 Java 파이프라인은 채우지 않지만
  *       raw JSON 계약(Python 산출물 호환) 유지를 위해 남겨둔다.</li>
  * </ul>
  */
-@JsonPropertyOrder({"name", "path", "size", "ocr_text"})
+@JsonPropertyOrder({"name", "path", "size", "caption", "ocr_text"})
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class RawImage {
 
@@ -24,6 +25,8 @@ public class RawImage {
     private String path;
     /** 이미지 바이트 크기. */
     private long size;
+    /** 그림에 달린 캡션(없으면 null). */
+    private String caption;
     /** OCR 텍스트(선택) — 계약 호환용, 현재 미사용. */
     private String ocrText;
 
@@ -68,6 +71,17 @@ public class RawImage {
     /** 바이트 크기를 설정한다. */
     public void setSize(long size) {
         this.size = size;
+    }
+
+    /** 그림 캡션을 반환한다(없으면 null). */
+    @JsonProperty("caption")
+    public String getCaption() {
+        return caption;
+    }
+
+    /** 그림 캡션을 설정한다. 빈 문자열은 null로 눕혀 JSON에서 빠지게 한다. */
+    public void setCaption(String caption) {
+        this.caption = caption == null || caption.isBlank() ? null : caption.trim();
     }
 
     /** OCR 텍스트를 반환한다(현재 항상 null). */

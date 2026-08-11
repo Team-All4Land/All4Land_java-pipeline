@@ -67,7 +67,22 @@ public final class FailureClassifier {
             return result(FailureKind.UNSUPPORTED_EXT, error);
         }
 
-        // 2) 암호는 형식을 가리지 않는다 — 컨테이너 판정보다 먼저 본다
+        // 2) 잠금은 형식을 가리지 않는다 — 컨테이너 판정보다 먼저 본다.
+        //    근거는 예외 메시지가 아니라 컨테이너다: 라이브러리는 암호 얘기를 하지 않고
+        //    "문단이 아니다"·"UTF-8이 아니다"라고만 하므로, 그것만 보면 배포용 문서가
+        //    통째로 손상 갈래에 묻힌다.
+        Result byLock = switch (EncryptionProbe.probe(file)) {
+            case DISTRIBUTION -> result(FailureKind.DISTRIBUTION_LOCKED, error);
+            case PASSWORD -> result(FailureKind.ENCRYPTED, error);
+            case NONE -> null;
+        };
+        if (byLock != null) {
+            return byLock;
+        }
+        // 프로브가 열지 못한 경우와 PDF(컨테이너에 암호 비트가 없다)를 위한 폴백
+        if (message.contains("배포용")) {
+            return result(FailureKind.DISTRIBUTION_LOCKED, error);
+        }
         if (mentionsEncryption(message) || isPasswordException(root)) {
             return result(FailureKind.ENCRYPTED, error);
         }
@@ -138,11 +153,10 @@ public final class FailureClassifier {
         return root != null && root.getClass().getSimpleName().contains("InvalidPassword");
     }
 
-    /** 메시지가 암호·유통 문서를 가리키는지. */
+    /** 메시지가 암호를 가리키는지 — 배포용은 {@link EncryptionProbe}와 위의 폴백이 먼저 잡는다. */
     private static boolean mentionsEncryption(String message) {
         String lower = message.toLowerCase(Locale.ROOT);
-        return lower.contains("encrypt") || lower.contains("password")
-                || lower.contains("암호") || lower.contains("배포용");
+        return lower.contains("encrypt") || lower.contains("password") || lower.contains("암호");
     }
 
     /** 예외와 그 원인 체인 전체의 메시지 — 어느 계층이 단서를 갖고 있을지 모른다. */
