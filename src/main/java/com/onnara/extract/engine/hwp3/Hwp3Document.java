@@ -20,23 +20,16 @@ public record Hwp3Document(List<Item> items, List<Image> images) {
     }
 
     /**
-     * 문단 텍스트 한 덩어리.
-     *
-     * <p><b>그림</b>의 캡션도 이 형태로 담긴다. 한글 3.0은 임베디드 이미지를 본문과 떨어진
-     * 파일 태그 영역에 두고 그림 컨트롤과 이어 줄 식별자를 남기지 않는다. 게다가
-     * {@code ImageSieve}가 정보 없는 이미지를 걸러 내므로 등장 순서로 짝지으면 색인이
-     * 어긋난다 — <b>엉뚱한 사진에 캡션이 붙는 것은 캡션이 없는 것보다 나쁘다.</b>
-     * 표 캡션은 컨트롤에 직접 달려 있어 {@link Table#caption()}에 담는다.
+     * 문단 텍스트 한 덩어리. 표·그림의 캡션도 이 형태로 담긴다 —
+     * {@code RawTable}에 캡션 필드가 없어 계약을 바꾸지 않고 흘려 보내기 위해서다.
      */
     public record Text(String text) implements Item {
     }
 
     /**
      * 표 하나. 행·열 수와 셀 목록을 담으며, 셀 좌표는 이미 격자 색인으로 환산돼 있다.
-     *
-     * @param caption 표에 달린 캡션(없으면 null)
      */
-    public record Table(int rows, int cols, List<Cell> cells, String caption) implements Item {
+    public record Table(int rows, int cols, List<Cell> cells) implements Item {
     }
 
     /**
@@ -67,11 +60,6 @@ public record Hwp3Document(List<Item> items, List<Image> images) {
             } else if (item instanceof Table table) {
                 for (Cell cell : table.cells()) {
                     total += cell.text().trim().length();
-                }
-                // 캡션이 문단 항목에서 빠졌으므로 여기서 세지 않으면 본문 분량이 줄어
-                // 캡션만 있는 문서가 스캔본으로 뒤집힌다
-                if (table.caption() != null) {
-                    total += table.caption().trim().length();
                 }
             }
         }

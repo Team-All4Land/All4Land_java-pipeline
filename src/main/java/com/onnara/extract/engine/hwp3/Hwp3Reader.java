@@ -422,16 +422,14 @@ public final class Hwp3Reader {
         List<Hwp3Document.Item> caption = readParaList(depth + 1);
 
         if (type == 0) {
-            // 표 캡션은 표가 들고 간다 — 문단으로 흘려 보내면 어느 표의 것인지 알 수 없다
-            collected.add(toTable(geometry, cellTexts, flatten(caption)));
-            return;
-        }
-        for (String text : cellTexts) {
-            if (!text.isEmpty()) {
-                collected.add(new Hwp3Document.Text(text));
+            collected.add(toTable(geometry, cellTexts));
+        } else {
+            for (String text : cellTexts) {
+                if (!text.isEmpty()) {
+                    collected.add(new Hwp3Document.Text(text));
+                }
             }
         }
-        // 글상자 캡션은 붙일 대상이 raw 계약에 없으므로 지금까지처럼 문단으로 남긴다
         collected.addAll(caption);
     }
 
@@ -442,7 +440,7 @@ public final class Hwp3Reader {
      * 모든 셀의 경계값을 모아 정렬하면 그 목록에서의 색인이 곧 행·열 번호이고,
      * 끝 경계와의 색인 차가 병합 span이다(LibreOffice가 쓰는 방식과 같다).
      */
-    private static Hwp3Document.Table toTable(int[][] geometry, List<String> texts, String caption) {
+    private static Hwp3Document.Table toTable(int[][] geometry, List<String> texts) {
         TreeSet<Integer> xs = new TreeSet<>();
         TreeSet<Integer> ys = new TreeSet<>();
         for (int[] g : geometry) {
@@ -464,8 +462,7 @@ public final class Hwp3Reader {
             cells.add(new Hwp3Document.Cell(row, col, rowSpan, colSpan, texts.get(i)));
         }
         return new Hwp3Document.Table(
-                Math.max(1, rows.size() - 1), Math.max(1, columns.size() - 1), cells,
-                caption == null || caption.isBlank() ? null : caption.trim());
+                Math.max(1, rows.size() - 1), Math.max(1, columns.size() - 1), cells);
     }
 
     /** 그림 — 본체 데이터는 건너뛰고(임베디드 이미지는 파일 태그에 있다) 캡션만 살린다. */

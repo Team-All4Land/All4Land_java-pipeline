@@ -120,7 +120,7 @@ ocr-cli/             스캔본 OCR용 PaddleOCR-VL Python CLI (ScanOcrRunner가 
 `common/`에는 계층을 가로지르는 공용 유틸도 있습니다: `Errors`(예외 → 원인 체인 사유 문장 —
 모든 `[실패]` 로그의 출처), `ImageFormats`(저장 확장자 판별), `DocumentSize`·`LoadPolicy`
 (적재 여부 판정), `table/TableRenderer`(표 → HTML 복원). `detect/`에는 실패 갈래 분류
-`FailureKind`·`FailureClassifier`가 있습니다.
+`FailureKind`·`FailureClassifier`와 보호 상태 판별 `DocProtection`이 있습니다.
 
 ## 요구 사항
 
@@ -335,7 +335,7 @@ java -jar target/extract-pipeline-1.0.0.jar detect input/ --summary
 ### 판별 실패
 
 전량 배치에서 나오는 수백 건의 실패는 "판별 실패 203개"라는 총계만으로는 손쓸 수 없습니다.
-**원본을 다시 받아야 하는 것**(암호 문서)과 **포기할 것**(손상 파일)은 대응이 전혀 다릅니다.
+**암호만 있으면 되는 것**과 **사용자도 못 여는 DRM**과 **포기할 것**(손상 파일)은 대응이 전혀 다릅니다.
 그래서 갈래별로 나눠 셉니다(`--summary`에서도 나옵니다).
 
 > 예전에 가장 큰 갈래였던 **한글 3.0 구버전**과 **확장자 개명**은 더 이상 실패가 아닙니다.
@@ -344,11 +344,32 @@ java -jar target/extract-pipeline-1.0.0.jar detect input/ --summary
 
 ```
 [실패 사유] 총 54개
-       ENCRYPTED            38개  암호가 걸려 있습니다(배포용 문서 포함) — 암호 해제본이 필요합니다
+       PASSWORD_PROTECTED   38개  열기 암호가 설정돼 있습니다 — 암호 해제본이 필요합니다
                           예) input/2015_고시_001.hwp
        ZIP_CORRUPT          10개  ZIP 구조가 손상돼 항목을 읽을 수 없습니다
-       DOCUMENT_PARSE        6개  컨테이너는 정상이나 내부 문서 구조를 읽지 못했습니다
+       DRM_PROTECTED         6개  DRM 보안 문서입니다 — DRM이 해제된 사본이 필요합니다
        …
+```
+
+### 잠긴 문서는 "왜 못 여는지"까지 갈라 셉니다
+
+열리지 않는다는 사실은 같아도 대응이 전혀 다릅니다. 그래서 `DocProtection`이 파일이 선언한
+**보호 플래그**를 근거로 갈래를 가릅니다(HWP는 FileHeader 속성 비트, HWPX는
+`META-INF/manifest.xml`의 ODF 암호화 선언). 예외 메시지에 "password"가 들어 있는지로 가르지
+않습니다 — 그건 라이브러리가 무슨 문장을 쓰느냐일 뿐 문서의 성질이 아닙니다.
+
+- **배포용 문서(HWP)는 실패가 아닙니다.** 열쇠가 파일 안에 있어 hwplib이 `ViewText`를
+  복호화하며, 본문·표·이미지가 정상 추출됩니다. 그래도 실패했다면 암호 문제가 아니라
+  구조 해석 문제이므로 `DISTRIBUTION_UNSUPPORTED`로 따로 셉니다 — 암호 해제본을 받아 봐야
+  소용없다는 뜻입니다.
+- **암호화된 HWPX는 손쓸 방법이 없습니다.** ODF 표준 AES + PBKDF2라 키가 사용자 암호에서
+  나오고, `Preview/PrvText.txt`까지 잠겨 미리보기조차 건질 수 없습니다. 사유에 알고리즘과
+  잠긴 항목 목록을 실어, 다시 열어 보지 않고도 판단할 수 있게 합니다.
+
+```
+[실패] …고시.hwpx: (판별) HWPX 항목이 암호화돼 있습니다(aes256-cbc / pbkdf2)
+       — 암호를 알아야 열 수 있습니다. 암호화 항목: Contents/header.xml,
+         Contents/section0.xml, Preview/PrvText.txt, settings.xml
 ```
 
 | 갈래 | 뜻 | 대응 |
@@ -356,7 +377,10 @@ java -jar target/extract-pipeline-1.0.0.jar detect input/ --summary
 | `HWP3_LEGACY` | 한글 3.0인데 자체 파서가 못 읽음 | 손상 여부 확인(구버전이라서가 아님) |
 | `NOT_COMPOUND_FILE` | `.hwp`인데 아는 서명이 하나도 없음 | 헤더 손상 또는 지원 대상 아닌 형식 |
 | `NOT_ZIP` | `.hwpx`인데 아는 서명이 하나도 없음 | 헤더 손상 또는 지원 대상 아닌 형식 |
-| `ENCRYPTED` | 암호·배포용 문서 | 암호 해제본 확보 |
+| `PASSWORD_PROTECTED` | 열기 암호(HWP 암호설정 비트 / HWPX PBKDF2) | 암호 해제본 확보 — **한글에서도 안 열림** |
+| `DRM_PROTECTED` | DRM 보안 문서 | **사용자도 못 엶** — DRM 해제본 확보 |
+| `DISTRIBUTION_UNSUPPORTED` | 배포용인데 본문 해석 실패 | 개별 확인 — 암호 문제가 아님 |
+| `ENCRYPTED` | 암호화는 분명한데 갈래 미상 | 원본 상태 확인 |
 | `ZIP_CORRUPT` / `XML_PARSE` | 컨테이너·본문 XML 손상 | 원본 재수집 |
 | `DOCUMENT_PARSE` | 컨테이너는 정상, 내부 구조에서 깨짐 | 개별 확인(라이브러리 미지원 레코드일 수 있음) |
 | `PDF_LOAD` | PDF를 열지 못함 | 서명 유무를 상세에서 확인 |
@@ -376,9 +400,9 @@ java -jar target/extract-pipeline-1.0.0.jar detect input/ --summary --failures o
 
 ```json
 {"total": 23702, "failed": 54, "failures": [
-  {"file": "input/2015_고시_001.hwp", "ext": "hwp", "kind": "ENCRYPTED",
-   "description": "암호가 걸려 있습니다(배포용 문서 포함) — 암호 해제본이 필요합니다",
-   "error": "UncheckedIOException: HWP 스캔 판별 실패: … [원인: IOException: Cannot process encrypted document]"}
+  {"file": "input/2015_고시_001.hwp", "ext": "hwp", "kind": "PASSWORD_PROTECTED",
+   "description": "열기 암호가 설정돼 있습니다 — 암호 해제본이 필요합니다(한글에서도 암호 없이는 열리지 않습니다)",
+   "error": "열기 암호가 설정된 문서입니다 — 암호 없이는 한글에서도 열리지 않습니다"}
 ]}
 ```
 

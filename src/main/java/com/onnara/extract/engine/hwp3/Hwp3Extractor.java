@@ -21,10 +21,9 @@ import java.util.List;
  * <p>hwplib이 읽는 HWP 5.0과 컨테이너부터 다른 구버전이다. 확장자는 똑같이 {@code .hwp}라
  * 라우팅은 {@link com.onnara.extract.detect.DocFormat}이 매직바이트로 갈라 준다.
  *
- * <p>문단·표를 문서 등장 순서대로 {@code content}에 담는다. <b>표 캡션은 표가 들고 가고</b>
- * ({@code RawTable.caption}), 그림 캡션은 붙일 대상을 특정할 수 없어 지금까지처럼 뒤따르는
- * 문단으로 남긴다({@link Hwp3Document.Text}의 설명 참고). 임베디드 이미지는 파일 태그
- * 영역에서 읽어 메타로 남긴다 — "어느 문단에 붙어 있었는지"는 복원하지 않는다.
+ * <p>문단·표를 문서 등장 순서대로 {@code content}에 담고, 표·그림의 <b>캡션은 뒤따르는
+ * 문단</b>으로 넣는다({@link Hwp3Document.Text}). 임베디드 이미지는 파일 태그 영역에서
+ * 읽어 메타로 남긴다 — hwplib 경로와 마찬가지로 "어느 문단에 붙어 있었는지"는 복원하지 않는다.
  */
 public class Hwp3Extractor implements Extractor {
 
@@ -100,9 +99,7 @@ public class Hwp3Extractor implements Extractor {
                 }
             }
         }
-        RawTable raw = new RawTable(rowCount, colCount, cells, grid);
-        raw.setCaption(table.caption());
-        return raw;
+        return new RawTable(rowCount, colCount, cells, grid);
     }
 
     /**
