@@ -34,6 +34,32 @@ class TableRendererTest {
         assertEquals(2, countCells(html), html);
     }
 
+    /**
+     * 캡션은 격자 바로 위에 붙어야 한다 — 검수 화면에서 "이게 무슨 표인지"를 보고
+     * 표를 제대로 읽었는지 가릴 수 있어야 하기 때문이다.
+     */
+    @Test
+    void showsCaptionAboveTheGrid() {
+        RawTable table = new RawTable(1, 1, List.of(new RawCell(0, 0, 1, 1, "값")),
+                List.of(List.of("값")));
+        table.setCaption("<표 1> 공유수면 점용·사용허가 내역");
+
+        String html = TableRenderer.toHtml(table);
+
+        assertTrue(html.contains("<caption>&lt;표 1&gt; 공유수면 점용·사용허가 내역</caption>"), html);
+        // 캡션은 table의 첫 자식이어야 한다(HTML 규격)
+        assertTrue(html.indexOf("<caption>") < html.indexOf("<tr>"), html);
+    }
+
+    /** 캡션이 없으면 빈 caption 요소를 만들지 않는다 — 없던 구조를 보여 주지 않는다. */
+    @Test
+    void omitsCaptionElementWhenThereIsNone() {
+        RawTable table = new RawTable(1, 1, List.of(new RawCell(0, 0, 1, 1, "값")),
+                List.of(List.of("값")));
+
+        assertFalse(TableRenderer.toHtml(table).contains("<caption>"));
+    }
+
     /** 세로 병합은 아래 행에서 칸 자체가 사라져야 한다(rowspan이 그 자리를 채운다). */
     @Test
     void restoresVerticalMergeAsRowspan() {

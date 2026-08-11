@@ -7,18 +7,37 @@ import com.onnara.extract.common.model.RawTable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link HwplibExtractor} HWP 추출의 samples/ 기반 회귀 테스트. */
 class HwplibExtractorTest {
 
     private final HwplibExtractor extractor = new HwplibExtractor();
+
+    /**
+     * 배포용 문서는 라이브러리에 넘기기 전에 걸러 낸다.
+     *
+     * <p>그냥 넘기면 hwplib이 암호문을 구조로 읽으려다 {@code "This is not paragraph."}로
+     * 죽어, 원인 체인 어디에도 암호 얘기가 남지 않는다. 그러면 실패 목록에서 진짜 손상과
+     * 구분되지 않아 재저장하면 살아날 문서가 그대로 버려진다.
+     */
+    @Test
+    void refusesDistributionDocumentWithAnActionableMessage() {
+        Path file = TestFixtures.sample("배포용 공유수면 점용사용허가 고시(광양시).hwp");
+
+        IOException e = assertThrows(IOException.class, () -> extractor.extractRaw(file));
+
+        assertTrue(e.getMessage().contains("배포용 문서"), e.getMessage());
+        assertTrue(e.getMessage().contains("일반 문서로 저장"), e.getMessage());
+    }
 
     /** 문단·표가 등장 순서로 추출되고 표 span이 유효한지 검증한다. */
     @Test

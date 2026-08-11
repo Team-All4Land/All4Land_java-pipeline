@@ -7,16 +7,35 @@ import com.onnara.extract.common.model.RawTable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link OwpmlExtractor} HWPX 추출(인라인 태그 잘림·병합 셀·이미지)의 samples/ 기반 회귀 테스트. */
 class OwpmlExtractorTest {
+
+    /**
+     * 배포용 HWPX는 열기 전에 걸러 낸다.
+     *
+     * <p>본문 XML이 암호문이라 그냥 넘기면 hwpxlib이 {@code "Invalid byte 1 of 1-byte UTF-8
+     * sequence"}로 죽는다. 그 문장은 "파일이 깨졌다"로 읽혀, 멀쩡한 문서를 손상으로 오진하게 만든다.
+     */
+    @Test
+    void refusesDistributionDocumentWithAnActionableMessage() {
+        Path file = TestFixtures.sample("배포용 공유수면 점용 고시.hwpx");
+
+        IOException e = assertThrows(IOException.class,
+                () -> new OwpmlExtractor().extractRaw(file));
+
+        assertTrue(e.getMessage().contains("배포용 문서"), e.getMessage());
+        assertTrue(e.getMessage().contains("일반 문서로 저장"), e.getMessage());
+    }
 
     private final OwpmlExtractor extractor = new OwpmlExtractor();
 

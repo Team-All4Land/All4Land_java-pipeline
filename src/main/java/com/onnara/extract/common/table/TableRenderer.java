@@ -80,6 +80,11 @@ public final class TableRenderer {
         RawCell[][] anchors = anchorMap(table, grid.size(), width);
 
         StringBuilder out = new StringBuilder("<table class=\"raw\">\n");
+        // 캡션은 표의 첫 자식이어야 한다(HTML 규격) — 검수 화면에서 "이 표가 무엇인지"가
+        // 격자 바로 위에 붙어야 표를 제대로 읽었는지 눈으로 가릴 수 있다
+        if (table.getCaption() != null) {
+            out.append("<caption>").append(escape(table.getCaption())).append("</caption>\n");
+        }
         for (int r = 0; r < grid.size(); r++) {
             out.append("<tr>");
             List<String> row = grid.get(r);
@@ -206,6 +211,8 @@ public final class TableRenderer {
                 table.raw { border-collapse: collapse; margin-bottom: 1rem; max-width: 100%; }
                 table.raw td { border: 1px solid #999; padding: 4px 8px;
                                vertical-align: top; font-size: 0.9rem; }
+                table.raw caption { caption-side: top; text-align: left; font-weight: 600;
+                                    font-size: 0.9rem; padding-bottom: 0.35rem; }
                 """;
     }
 }

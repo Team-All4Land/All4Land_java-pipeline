@@ -2,6 +2,7 @@ package com.onnara.extract.common;
 
 import com.onnara.extract.common.model.RawContent;
 import com.onnara.extract.common.model.RawDocument;
+import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.RawParagraph;
 import com.onnara.extract.common.model.RawTable;
 
@@ -24,7 +25,7 @@ public final class DocumentSize {
     }
 
     /**
-     * 본문 글자 수 — 문단 텍스트와 표 셀 텍스트를 합쳐 공백을 뺀 길이다.
+     * 본문 글자 수 — 문단 텍스트·표 셀 텍스트·표와 그림의 캡션을 합쳐 공백을 뺀 길이다.
      *
      * <p>표 셀은 {@code grid}로 센다. 병합 셀이 덮인 칸마다 반복돼 실제보다 부풀지만,
      * 임계치가 만 단위라 판정이 뒤집힐 정도는 아니고 {@code cells}가 없는 엔진(PDF·OCR)에서도
@@ -40,6 +41,14 @@ public final class DocumentSize {
                 total += lengthOf(p.getText());
             } else if (item instanceof RawTable t) {
                 total += gridChars(t.getGrid());
+                total += lengthOf(t.getCaption());
+            }
+        }
+        // 그림 캡션도 본문이다. 캡션이 content 문단에서 빠졌으므로 여기서 세지 않으면
+        // 사진 위주 고시문의 분량이 실제보다 줄어 적재 판정(LoadPolicy)이 달라진다
+        if (raw.getImages() != null) {
+            for (RawImage image : raw.getImages()) {
+                total += lengthOf(image.getCaption());
             }
         }
         return total;
