@@ -183,6 +183,35 @@ class MapperTest {
     }
 
     /**
+     * 전수 분석 우선 표본 미러: 번호·일자 복합 라벨과 성명·주소 복합 라벨,
+     * 가운뎃점 생략 라벨이 표준 필드로 승격되는지 검증한다.
+     */
+    @Test
+    void mapsFullCorpusAliasesEndToEnd() {
+        RawDocument raw = new RawDocument("우선표본.hwp", "hwp", false);
+        raw.getContent().add(Tables.gridToTable(List.of(
+                List.of("허가번호 및 허가년월일", "창마회원-2023-32호(2024.2.20.)"),
+                List.of("점용 사용의 장소", "여수시 소라면 사곡리 1291"),
+                List.of("점용 사용의 면적", "5㎡"),
+                List.of("점용 사용의 기간", "2023-12-22 ~ 2027-12-20"),
+                List.of("점용 사용의 목적", "우수관로 매설"),
+                List.of("피허가자의 성명․주소",
+                        "현대중공업(주) 대표이사 한영석 / 울산광역시 동구 방어진순환도로 1000"))));
+
+        NoticeRecord record = Mapper.mapToSchema(raw).getRecords().get(0);
+        assertEquals("창마회원-2023-32호", record.approvalNo());
+        assertEquals("2024-02-20", record.approvalDate());
+        assertEquals("여수시 소라면 사곡리 1291", record.location());
+        assertEquals("5㎡", record.area());
+        assertEquals("2023-12-22", record.workPeriodStart());
+        assertEquals("2027-12-20", record.workPeriodEnd());
+        assertEquals("우수관로 매설", record.workDescription());
+        assertEquals("현대중공업(주) 대표이사 한영석 / 울산광역시 동구 방어진순환도로 1000",
+                record.applicantName());
+        assertEquals("울산광역시 동구 방어진순환도로 1000", record.applicantAddress());
+    }
+
+    /**
      * 실제 방치선박 제거공고 미러: 셀 안 "…(좌표: …" / "(담당자 : …" 같은
      * 문장 조각이 extras 라벨로 오탐되면 안 되고(괄호 불균형 가드), 병합 셀이
      * 반복된 서식 라벨:값은 extras에 보존돼야 한다.

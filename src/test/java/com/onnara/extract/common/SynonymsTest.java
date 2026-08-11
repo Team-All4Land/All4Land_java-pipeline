@@ -20,6 +20,9 @@ class SynonymsTest {
         assertEquals("주소", Synonyms.normalizeLabel("가. 주    소"));
         assertEquals("위치", Synonyms.normalizeLabel("- 위  치 ："));
         assertEquals("면적", Synonyms.normalizeLabel("① 면적"));
+        assertEquals("변경허가일자", Synonyms.normalizeLabel("□ 변경허가일자"));
+        assertEquals("허가번호", Synonyms.normalizeLabel("❍ 허가번호"));
+        assertEquals("공사기간", Synonyms.normalizeLabel("** 공사기간"));
     }
 
     /** 다양한 가운뎃점(ㆍ ․ ‧ 등)이 하나(·)로 통일되는지 검증한다. */
@@ -72,6 +75,30 @@ class SynonymsTest {
         assertEquals(Optional.of("applicant_address"), Synonyms.canonicalFor("피허가자 주소"));
         // 방치선박 제거공고 서식
         assertEquals(Optional.of("location"), Synonyms.canonicalFor("발견장소"));
+    }
+
+    /** 전수 분석에서 반복 확인된 기관별 라벨이 기존 표준 필드로 매핑되는지 검증한다. */
+    @Test
+    void canonicalForResolvesFullCorpusAliases() {
+        assertEquals(Optional.of("approval_no"), Synonyms.canonicalFor("협의번호"));
+        assertEquals(Optional.of("approval_no"), Synonyms.canonicalFor("허가번호 및 허가년월일"));
+        assertEquals(Optional.of("approval_no"), Synonyms.canonicalFor("승인(신고)번호"));
+
+        assertEquals(Optional.of("approval_date"), Synonyms.canonicalFor("허가년월일"));
+        assertEquals(Optional.of("approval_date"), Synonyms.canonicalFor("□ 변경허가일자"));
+        assertEquals(Optional.of("approval_date"), Synonyms.canonicalFor("실시계획 신고 수리일"));
+
+        assertEquals(Optional.of("location"), Synonyms.canonicalFor("점․사용 장소"));
+        assertEquals(Optional.of("location"), Synonyms.canonicalFor("점용 사용의 장소"));
+        assertEquals(Optional.of("location"), Synonyms.canonicalFor("수면위치"));
+        assertEquals(Optional.of("area"), Synonyms.canonicalFor("점용 사용의 면적"));
+        assertEquals(Optional.of("work_description"), Synonyms.canonicalFor("점용사용 목적"));
+        assertEquals(Optional.of(Synonyms.WORK_PERIOD), Synonyms.canonicalFor("점용허가의 유효기간"));
+
+        assertEquals(Optional.of("applicant_name"), Synonyms.canonicalFor("협의를 받은 자"));
+        assertEquals(Optional.of("applicant_name"), Synonyms.canonicalFor("수허가자"));
+        assertEquals(Optional.of("applicant_name"), Synonyms.canonicalFor("피허가자의 성명·주소"));
+        assertEquals(Optional.of("applicant_address"), Synonyms.canonicalFor("허가자 주소"));
     }
 
     /** 사전에 없는 라벨·빈값·null은 empty로 처리되는지 검증한다. */
