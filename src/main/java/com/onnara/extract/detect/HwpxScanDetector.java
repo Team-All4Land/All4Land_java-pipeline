@@ -35,6 +35,13 @@ public class HwpxScanDetector implements ScanDetector {
      */
     @Override
     public boolean isScanned(Path file) {
+        try {
+            // 잠긴 문서는 먼저 걸러 낸다 — 본문 XML이 암호문이라 StAX가
+            // "Invalid byte 1 of 1-byte UTF-8 sequence"로 죽고, 그러면 손상으로 오진된다
+            EncryptionProbe.requireUnlocked(file);
+        } catch (IOException e) {
+            throw new UncheckedIOException("HWPX 스캔 판별 실패: " + file, e);
+        }
         try (ZipFile zip = new ZipFile(file.toFile())) {
             // 본문을 파싱하기 전에 잠겨 있는지부터 본다. 암호화된 바이트를 XML 파서에 먹이면
             // 사유가 "Invalid byte 2 of 2-byte UTF-8 sequence"로 남아 대응할 수 없고,

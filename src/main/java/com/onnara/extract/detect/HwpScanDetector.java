@@ -52,6 +52,9 @@ public class HwpScanDetector implements ScanDetector {
     @Override
     public boolean isScanned(Path file) {
         try {
+            // 잠긴 문서는 먼저 걸러 낸다 — 그대로 넘기면 hwplib이 암호문을 구조로 읽으려다
+            // "This is not paragraph."로 죽어, 원인 체인에 암호 얘기가 남지 않는다
+            EncryptionProbe.requireUnlocked(file);
             HWPFile hwpFile = HWPReader.fromFile(file.toString());
             int textLen = 0;
             for (Section section : hwpFile.getBodyText().getSectionList()) {

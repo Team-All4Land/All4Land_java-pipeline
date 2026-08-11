@@ -1,6 +1,7 @@
 package com.onnara.extract.engine.hwpx;
 
 import com.onnara.extract.common.ImageFormats;
+import com.onnara.extract.detect.EncryptionProbe;
 import com.onnara.extract.common.model.RawCell;
 import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.model.RawImage;
@@ -20,6 +21,7 @@ import kr.dogfoot.hwpxlib.object.content.section_xml.paragraph.T;
 import kr.dogfoot.hwpxlib.object.content.section_xml.paragraph.TItem;
 import kr.dogfoot.hwpxlib.object.content.section_xml.paragraph.object.Picture;
 import kr.dogfoot.hwpxlib.object.content.section_xml.paragraph.object.Table;
+import kr.dogfoot.hwpxlib.object.content.section_xml.paragraph.object.shapeobject.Caption;
 import kr.dogfoot.hwpxlib.object.content.section_xml.paragraph.object.table.Tc;
 import kr.dogfoot.hwpxlib.object.content.section_xml.paragraph.object.table.Tr;
 import kr.dogfoot.hwpxlib.object.content.section_xml.paragraph.t.FWSpace;
@@ -81,6 +83,9 @@ public class OwpmlExtractor implements Extractor {
 
     /** 단일 파싱 패스 — extractRaw/saveImages의 이미지 순서·이름 일치를 보장한다. */
     private ParseResult parse(Path file) throws IOException {
+        // 잠긴 문서는 먼저 걸러 낸다 — 본문 XML이 암호문이라 hwpxlib은
+        // "Invalid byte 1 of 1-byte UTF-8 sequence"로 죽고, 그러면 손상으로 오진된다
+        EncryptionProbe.requireUnlocked(file);
         HWPXFile hwpxFile;
         try {
             hwpxFile = HWPXReader.fromFilepath(file.toString());
@@ -137,7 +142,9 @@ public class OwpmlExtractor implements Extractor {
         }
 
         for (ImageEntry entry : images) {
-            raw.getImages().add(new RawImage(entry.name, entry.data.length));
+            RawImage image = new RawImage(entry.name, entry.data.length);
+            image.setCaption(entry.caption);
+            raw.getImages().add(image);
         }
         return new ParseResult(raw, images);
     }
@@ -168,7 +175,7 @@ public class OwpmlExtractor implements Extractor {
             System.err.println("[경고] 알 수 없는 이미지 형식이라 " + name + "으로 저장합니다"
                     + " (매직 " + ImageFormats.magicOf(data) + ", 힌트 " + hintMap.get(id) + ")");
         }
-        images.add(new ImageEntry(name, data));
+        images.add(new ImageEntry(name, data, captionTextOf(pic.caption())));
     }
 
     /** 셀 하위 문단 구조(ParaListCore)에서 Picture RunItem을 모두 찾아 반환한다. */
@@ -240,7 +247,33 @@ public class OwpmlExtractor implements Extractor {
                 }
             }
         }
-        return new RawTable(rowCount, colCount, cells, grid);
+        RawTable raw = new RawTable(rowCount, colCount, cells, grid);
+        raw.setCaption(captionTextOf(table.caption()));
+        return raw;
+    }
+
+    /**
+     * 캡션의 문단들을 한 줄 텍스트로 — 비어 있으면 null.
+     *
+     * <p>본문 문단과 같은 {@link #extractParaText}를 쓴다. 캡션에도 인라인 태그가 섞이므로,
+     * 여기서만 다른 경로를 쓰면 "관리청 → 관" 잘림이 캡션에서 되살아난다.
+     */
+    private static String captionTextOf(Caption caption) {
+        if (caption == null || caption.subList() == null) {
+            return null;
+        }
+        SubList subList = caption.subList();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < subList.countOfPara(); i++) {
+            String text = extractParaText(subList.getPara(i));
+            if (text != null && !text.trim().isEmpty()) {
+                if (sb.length() > 0) {
+                    sb.append("\n");
+                }
+                sb.append(text.trim());
+            }
+        }
+        return sb.length() == 0 ? null : sb.toString();
     }
 
     /** 문단 하나의 전체 텍스트 (표/그림 RunItem은 건너뛰고 T만 처리). */
@@ -300,8 +333,8 @@ public class OwpmlExtractor implements Extractor {
         return dot < 0 ? name : name.substring(0, dot);
     }
 
-    /** 수집된 이미지 1건: 저장 파일명과 원본 바이트. */
-    private record ImageEntry(String name, byte[] data) {
+    /** 수집된 이미지 1건: 저장 파일명·원본 바이트·그림에 달린 캡션(없으면 null). */
+    private record ImageEntry(String name, byte[] data, String caption) {
     }
 
     /** 단일 파싱 패스 결과: raw 문서 + 순서가 고정된 이미지 목록. */
