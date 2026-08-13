@@ -119,4 +119,34 @@ class ProtectedDocumentTest {
         assertEquals(FailureKind.DISTRIBUTION_UNSUPPORTED, result.kind());
         assertTrue(result.detail().contains("배포용"), result.detail());
     }
+
+    /**
+     * 끝부분이 잘려 실패한 배포용 문서는 <b>할 일까지</b> 말해 준다.
+     *
+     * <p>이 광양시 건은 파일도 우리 파서도 멀쩡하다 — hwplib이 복호화 마지막 블록을 잃어 본문 끝이
+     * 잘릴 뿐이라, 한글에서 다시 저장하면 그대로 읽힌다. "개별 확인이 필요합니다"로 뭉뚱그리면
+     * 받는 사람이 원인을 처음부터 다시 파야 한다.
+     */
+    @Test
+    void truncatedDistributionDocumentTellsHowToFixIt() {
+        Path file = TestFixtures.sample("배포용 공유수면 점용사용허가 고시(광양시).hwp");
+
+        FailureClassifier.Result result = FailureClassifier.classify(
+                file, new IOException("java.lang.Exception: This is not paragraph."));
+
+        assertEquals(FailureKind.DISTRIBUTION_TRUNCATED, result.kind());
+        assertTrue(result.detail().contains("다른 이름으로 저장"), result.detail());
+    }
+
+    /**
+     * <b>잘리지 않는 배포용은 이 갈래로 새지 않는다.</b> 영광군 2건은 마지막 블록을 잃어도 본문이
+     * 온전해 실제로 잘 읽힌다 — 이들까지 "다시 저장하세요"라고 하면, 고칠 것도 없는 문서를 붙들고
+     * 재저장을 반복하게 만든다.
+     */
+    @Test
+    void intactDistributionDocumentsAreNotReportedAsTruncated() {
+        for (Path file : distributionSamples()) {
+            assertFalse(DistributionTail.truncatesBody(file), file.toString());
+        }
+    }
 }

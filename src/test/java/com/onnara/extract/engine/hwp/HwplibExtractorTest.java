@@ -28,9 +28,9 @@ class HwplibExtractorTest {
      * <b>배포용을 진입점에서 통째로 막지는 않는다</b> — 막으면 읽히던 배포용 문서까지 실패로
      * 돌아선다(영광군 2건은 실제로 읽힌다 → {@code ProtectedDocumentTest}).
      *
-     * <p>이 광양시 건은 복호화 이후의 구조 해석에서 hwplib이 {@code "This is not paragraph."}로
-     * 죽는다. 그때 남길 답은 "암호 해제본을 받아 오라"가 아니라 <b>"배포용은 지원하는데 이 건은
-     * 우리가 못 읽었다"</b>여야 한다 — 암호 문제가 아니므로 해제본을 받아도 소용이 없다.
+     * <p>이 광양시 건은 hwplib이 복호화 마지막 블록을 잃어 본문 끝이 잘리고
+     * {@code "This is not paragraph."}로 죽는다. 그때 남길 답은 "암호 해제본을 받아 오라"가 아니라
+     * <b>"다시 저장하면 읽힌다"</b>여야 한다 — 암호 문제가 아니라 파일도 우리 파서도 멀쩡하다.
      */
     @Test
     void failingDistributionDocumentIsBlamedOnUsNotOnAPassword() {
@@ -39,7 +39,7 @@ class HwplibExtractorTest {
         IOException e = assertThrows(IOException.class, () -> extractor.extractRaw(file));
         FailureClassifier.Result result = FailureClassifier.classify(file, e);
 
-        assertEquals(FailureKind.DISTRIBUTION_UNSUPPORTED, result.kind());
+        assertEquals(FailureKind.DISTRIBUTION_TRUNCATED, result.kind());
         assertTrue(result.detail().contains("배포용"), result.detail());
     }
 

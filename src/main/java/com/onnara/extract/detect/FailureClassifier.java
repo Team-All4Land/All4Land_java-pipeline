@@ -121,15 +121,23 @@ public final class FailureClassifier {
         FailureKind kind = switch (protection.kind()) {
             case PASSWORD -> FailureKind.PASSWORD_PROTECTED;
             case DRM -> FailureKind.DRM_PROTECTED;
-            case DISTRIBUTION -> FailureKind.DISTRIBUTION_UNSUPPORTED;
+            // 배포용은 한 갈래 더 들어간다 — 끝부분이 잘린 것으로 확인되면 "개별 확인"이 아니라
+            // "다시 저장하세요"라고 말할 수 있다. 확인되지 않으면 원인 미상 갈래로 남는다.
+            case DISTRIBUTION -> DistributionTail.truncatesBody(file)
+                    ? FailureKind.DISTRIBUTION_TRUNCATED
+                    : FailureKind.DISTRIBUTION_UNSUPPORTED;
             case NONE -> null;
         };
         if (kind != null) {
             // 사유는 원인 체인이 아니라 대응을 알려 주는 문장이다. 원인 체인은 뭔가를 더해 줄
             // 때만 덧붙인다 — 판별기가 이미 같은 문장을 던졌으면 두 번 적어 봐야 읽기만 나빠진다.
+            // 잘림이 확인된 건은 안내 문구를 갈래에서 가져온다. DocProtection은 아직 원인을 모르는
+            // 단계라 "개별 확인이 필요합니다"라고 하는데, 그걸 쓰면 방금 짚어낸 원인이 도로 묻힌다.
+            String base = kind == FailureKind.DISTRIBUTION_TRUNCATED
+                    ? kind.description()
+                    : protection.detail();
             String chain = Errors.describe(error);
-            String detail = chain.contains(protection.detail())
-                    ? protection.detail() : protection.detail() + " [" + chain + "]";
+            String detail = chain.contains(base) ? base : base + " [" + chain + "]";
             return new Result(kind, detail);
         }
         // 플래그를 못 읽었어도 라이브러리가 암호라고 말하면 그건 근거가 된다(PDF 등)

@@ -7,6 +7,7 @@ import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.detect.DetectorRegistry;
 import com.onnara.extract.detect.DocFormat;
 import com.onnara.extract.detect.FailureClassifier;
+import com.onnara.extract.detect.FailureKind;
 import com.onnara.extract.engine.Extractor;
 import com.onnara.extract.engine.ExtractorRegistry;
 import com.onnara.extract.scan.ScanOcrRunner;
@@ -201,9 +202,22 @@ final class PipelineSupport {
         if (stacktrace) {
             t.printStackTrace(System.err);
         }
-        Map<String, Object> row = reportFailure(file, stage, Errors.describe(t),
-                FailureClassifier.classify(file, t).kind().name());
+        FailureKind kind = FailureClassifier.classify(file, t).kind();
+        String chain = Errors.describe(t);
+        Map<String, Object> row = reportFailure(file, stage, chain, kind.name());
+        // 원인 체인과 안내문은 쓰임이 다르다 — 체인은 "라이브러리가 무슨 말을 하며 죽었나"이고,
+        // 안내문은 "받는 사람이 무엇을 하면 되나"다. 체인만 남기면 This is not paragraph. 같은
+        // 문장을 받아 든 담당자가 원인을 처음부터 다시 파야 한다.
+        //
+        // 갈래의 설명을 쓴다. Result.detail()은 갈래마다 구성이 달라(원인 체인만인 것도 있고
+        // 안내문에 체인을 덧댄 것도 있다) 여기서 쓰면 message와 같은 문장이 두 번 실린다.
+        row.put("reason", kind.description());
         row.put("exception", t.getClass().getName());
+        // 콘솔에도 한 줄 붙인다 — 배치를 돌린 사람이 실제로 보는 것은 여기다.
+        // 이미 같은 문장이 체인에 있으면(판별기가 안내문을 그대로 던진 경우) 적지 않는다.
+        if (!chain.contains(kind.description())) {
+            System.out.println("         └ " + kind.description());
+        }
         return row;
     }
 
