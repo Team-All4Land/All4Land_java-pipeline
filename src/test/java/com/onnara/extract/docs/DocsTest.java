@@ -22,9 +22,13 @@ class DocsTest {
     private static void writeSchema(Path dir, String name, Map<String, String> extras,
                                     String location) throws IOException {
         SchemaResult schema = new SchemaResult(name, "hml", false, "hml-dom");
-        schema.getRecords().add(new NoticeRecord(
-                "군산지방해양수산청", null, null, null, null, null, null,
-                location, null, null, null, null, null, null, null, extras));
+        NoticeRecord.Builder record = new NoticeRecord.Builder()
+                .set("agency", "군산지방해양수산청")
+                .set("location", location);
+        if (extras != null) {
+            extras.forEach(record::extra);
+        }
+        schema.getRecords().add(record.build());
         Json.PRETTY.writeValue(dir.resolve(name + ".schema.json").toFile(), schema);
     }
 

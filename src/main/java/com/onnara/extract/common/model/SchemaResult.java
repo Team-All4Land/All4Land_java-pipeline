@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import com.onnara.extract.common.SourceFileName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,12 +19,16 @@ import java.util.List;
  * 두고 결과를 스키마 JSON에 남겨야, {@code pipeline}으로 한 번에 돌리든 {@code map} → {@code load}로
  * 나눠 돌리든 같은 파일이 같은 결정을 받는다.
  */
-@JsonPropertyOrder({"source_file", "file_type", "detected_format", "is_scanned", "engine",
-        "body_chars", "db_skip_reason", "records", "images"})
+@JsonPropertyOrder({"source_file", "notice_no", "attach_no", "file_type", "detected_format",
+        "is_scanned", "engine", "body_chars", "db_skip_reason", "records", "images"})
 public class SchemaResult {
 
     /** 원본 파일명 — 파일 단위 레코드 묶음의 키. */
     private String sourceFile;
+    /** 게시물 순번 — 파일명 앞자리. 크롤 산출물이 아니면 음수(0이면 아직 미확정). */
+    private int noticeNo;
+    /** 첨부 순번 — 파일명 두 번째 자리. 크롤 산출물이 아니면 1. */
+    private int attachNo;
     /** 형식 식별자: hwp / hwpx / hml / pdf — <b>파일명 확장자</b>가 기준이다. */
     private String fileType;
     /**
@@ -66,6 +71,48 @@ public class SchemaResult {
     /** 원본 파일명을 설정한다. */
     public void setSourceFile(String sourceFile) {
         this.sourceFile = sourceFile;
+    }
+
+    /** 게시물 순번(파일명 앞자리). */
+    @JsonProperty("notice_no")
+    public int getNoticeNo() {
+        return noticeNo;
+    }
+
+    /** 게시물 순번을 설정한다. */
+    public void setNoticeNo(int noticeNo) {
+        this.noticeNo = noticeNo;
+    }
+
+    /** 첨부 순번(파일명 두 번째 자리). */
+    @JsonProperty("attach_no")
+    public int getAttachNo() {
+        return attachNo;
+    }
+
+    /** 첨부 순번을 설정한다. */
+    public void setAttachNo(int attachNo) {
+        this.attachNo = attachNo;
+    }
+
+    /**
+     * 적재 키 — 게시물 순번과 첨부 순번.
+     *
+     * <p>매핑 단계에서 한 번 확정해 스키마 JSON에 실어 두므로, {@code pipeline}으로 한 번에
+     * 도는 경로와 {@code map} → {@code load}로 나눠 도는 경로가 같은 순번을 받는다.
+     * 폴백 순번은 호출마다 새로 발급되기 때문에, 적재 시점에 다시 파싱하면 두 경로가
+     * 서로 다른 게시물로 갈린다.
+     */
+    @JsonIgnore
+    public SourceFileName.Parsed attachmentKey() {
+        if (noticeNo == 0) {
+            // 구버전 스키마 JSON을 되읽는 경우 — 파일명에서 그때 확정한다
+            SourceFileName.Parsed parsed = SourceFileName.parse(sourceFile);
+            noticeNo = parsed.noticeNo();
+            attachNo = parsed.attachNo();
+            return parsed;
+        }
+        return new SourceFileName.Parsed(noticeNo, attachNo, noticeNo > 0);
     }
 
     /** 형식 식별자를 반환한다. */

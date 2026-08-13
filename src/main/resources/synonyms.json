@@ -1,170 +1,792 @@
 {
-  "version": "2026-07-27",
-  "description": "고시문 라벨 → 표준 필드 동의어 사전. 이 파일이 단일 정의처이며, Synonyms 클래스가 기동 시 읽어들인다.",
+  "version": "2026-08-13",
+  "description": "고시문 라벨 → 표준 항목 동의어 사전. 이 파일이 단일 정의처이며, Synonyms 클래스가 기동 시 읽고 ReferenceSync가 attribute_defs 테이블로 동기화한다.",
   "conventions": {
-    "synonym_form": "동의어는 사람이 읽는 형태(띄어쓰기·가운뎃점 포함)로 적는다. 적재 시 normalizeLabel()로 정규화되므로 '점용·사용의 장소'처럼 원문 그대로 써도 된다.",
-    "normalization": "정규화 = NFC → 선행 번호 제거 → 공백 제거 → 가운뎃점 통일(·) → 후행 콜론 제거.",
-    "uniqueness": "정규화 결과가 두 필드에 중복 등록되면 기동 시 오류로 중단된다(사전 충돌 방지).",
-    "how_to_add": "extras 검토 리포트(docs/EXTRAS_REVIEW.md)에서 빈도 높은 미매핑 라벨을 확인하고, 해당 필드의 synonyms 배열에 추가한 뒤 재적재하면 컬럼으로 승격된다."
+    "scope": "attachment = 문서 단위 메타(attachments 컬럼). attribute = 처분 단위 값(document_attributes 행). attribute_defs 테이블에는 scope=attribute만 동기화된다.",
+    "series": "같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음. 누락 검증을 항목이 아니라 계열 단위로 해야 '준공·완료 수리 문서에 점용·사용 면적이 없다' 같은 오탐이 없다.",
+    "value_type": "text는 원문 보존, date는 ISO 정규화, date_range는 daterange로 적재한다.",
+    "synonym_form": "동의어는 사람이 읽는 형태로 적는다. 적재 시 normalizeLabel()이 선행 기호·공백·가운뎃점 변형을 흡수하므로 □·※·○ 같은 머리기호나 \"성 명\" 같은 자간 벌림은 적지 않아도 된다. 전수 표본에서 기계로 뽑은 라벨은 공백을 접은 형태로 실려 있고, 손으로 보탠 어구만 자연스러운 띄어쓰기를 유지한다.",
+    "uniqueness": "정규화 결과가 두 필드에 중복 등록되면 기동 시 오류로 중단된다.",
+    "how_to_add": "docs/EXTRAS_REVIEW.md에서 빈도 높은 미매핑 라벨을 확인하고 해당 필드의 synonyms 배열에 추가한 뒤 재적재한다."
   },
   "fields": [
     {
       "canonical": "agency",
       "display": "고시기관",
-      "db_column": "agency",
-      "type": "text",
-      "description": "고시·공고를 발령한 행정기관명. 문단 '○○청 고시 제2026-47호' 형태에서도 자동 분리된다.",
-      "synonyms": ["기관", "고시기관", "관리청", "처분청"],
-      "examples": ["군산지방해양수산청", "부산광역시 강서구"],
+      "scope": "attachment",
+      "value_type": "text",
+      "synonyms": [
+        "기관",
+        "고시기관",
+        "관리청",
+        "처분청"
+      ],
+      "description": "고시·공고를 발령한 행정기관명.",
+      "examples": [
+        "군산지방해양수산청",
+        "부산광역시 강서구"
+      ],
       "notes": "'관리청'은 방치선박 제거공고 서식에서 관측된다."
     },
     {
       "canonical": "notice_no",
       "display": "고시번호",
-      "db_column": "notice_no",
-      "type": "text",
+      "scope": "attachment",
+      "value_type": "text",
+      "synonyms": [
+        "고시번호",
+        "공고번호"
+      ],
       "description": "고시·공고의 문서번호.",
-      "synonyms": ["고시번호", "공고번호"],
-      "examples": ["고시 제2026-47호", "고시 제2018–82호"],
-      "notes": "'관리번호'는 방치선박 서식의 별개 필드이므로 등재하지 않는다(extras로 보존)."
+      "examples": [
+        "고시 제2026-47호"
+      ],
+      "notes": "'관리번호'는 방치선박 서식의 별개 필드이므로 등재하지 않는다."
     },
     {
       "canonical": "notice_date",
       "display": "고시일자",
-      "db_column": "notice_date",
-      "type": "date",
-      "description": "고시·공고가 공표된 날짜. ISO(yyyy-MM-dd)로 정규화해 DATE 컬럼에 적재한다.",
-      "synonyms": ["고시일", "고시일자", "고시연월일", "공고일", "공고일자", "공고연월일"],
-      "examples": ["2026. 6. 17.", "2026년 06월 17일"],
-      "notes": "지자체별 표기 차이(고시일자/공고일자)가 가장 큰 필드. 파싱 실패 시 원문을 extras에 남긴다."
+      "scope": "attachment",
+      "value_type": "date",
+      "synonyms": [
+        "고시일",
+        "고시일자",
+        "고시연월일",
+        "공고일",
+        "공고일자",
+        "공고연월일"
+      ],
+      "description": "고시·공고가 공표된 날짜.",
+      "examples": [
+        "2026. 6. 17."
+      ],
+      "notes": "지자체별 표기 차이가 가장 큰 필드다."
     },
     {
       "canonical": "title",
       "display": "제목",
-      "db_column": "title",
-      "type": "text",
-      "description": "고시문 제목. 라벨이 없으면 고시번호 다음 문단 또는 고시문 표에서 추정한다.",
-      "synonyms": ["제목", "고시명", "공고명"],
-      "examples": ["공유수면 점용·사용 변경허가 고시"]
+      "scope": "attachment",
+      "value_type": "text",
+      "synonyms": [
+        "제목",
+        "고시명",
+        "공고명"
+      ],
+      "description": "고시문 제목. 라벨이 없으면 고시번호 다음 문단에서 추정한다.",
+      "examples": [
+        "공유수면 점용·사용 변경허가 고시"
+      ],
+      "notes": "공고종류 분류기의 입력값이므로 비면 분류가 불가능하다."
     },
     {
       "canonical": "signer",
       "display": "고시자",
-      "db_column": "signer",
-      "type": "text",
-      "description": "고시문 말미의 발령권자 직함.",
-      "synonyms": ["고시자", "공고자"],
-      "examples": ["군산지방해양수산청장", "부산광역시 강서구청장"]
-    },
-    {
-      "canonical": "approval_no",
-      "display": "허가·승인번호",
-      "db_column": "approval_no",
-      "type": "text",
-      "description": "처분(허가/승인/신고수리) 번호. '제2026-26호(2026. 6. 11.)'처럼 일자가 병기되면 approval_date로 분리한다.",
-      "synonyms": ["승인번호", "허가번호", "신고번호", "수리번호", "허가증번호"],
-      "examples": ["제2026-26호", "2018-1"]
-    },
-    {
-      "canonical": "approval_date",
-      "display": "허가·승인일자",
-      "db_column": "approval_date",
-      "type": "date",
-      "description": "처분일자. ISO로 정규화해 DATE 컬럼에 적재한다.",
+      "scope": "attachment",
+      "value_type": "text",
       "synonyms": [
-        "승인일", "승인일자", "승인연월일",
-        "허가일", "허가일자", "허가연월일",
-        "신고일", "수리일", "점용·사용허가일", "준공검사일"
+        "고시자",
+        "공고자"
       ],
-      "examples": ["2026. 6. 5."],
-      "notes": "고시일(notice_date)과 다른 날짜다 — 처분한 날이지 공표한 날이 아니다."
+      "description": "고시문 말미의 발령권자 직함.",
+      "examples": [
+        "군산지방해양수산청장"
+      ]
     },
     {
       "canonical": "location",
       "display": "점용·사용 장소",
-      "db_column": "location",
-      "type": "text",
-      "description": "점용·사용 대상 공유수면의 위치.",
+      "scope": "attribute",
+      "series": "위치",
+      "value_type": "text",
+      "is_core": true,
       "synonyms": [
-        "위치", "소재지", "장소",
-        "점용·사용장소", "점용·사용의 장소", "점용장소", "사용장소", "점용·사용위치",
-        "사업위치", "공사위치", "점용지번", "발견장소"
+        "장소",
+        "점용·사용장소",
+        "위치",
+        "점·사용의장소",
+        "점용장소",
+        "점용·사용의장소",
+        "점·사용위치",
+        "점용위치",
+        "장소(번지선)",
+        "점·사용장소",
+        "점용·사용위치",
+        "점사용의장소",
+        "점사용장소",
+        "소재지",
+        "점용지번",
+        "사업위치",
+        "발견장소"
       ],
-      "examples": ["군산시 비응로 107 인근 공유수면", "가덕도 인근 해역"],
+      "description": "점용·사용 대상 공유수면의 위치.",
+      "examples": [
+        "군산시 비응로 107 인근 공유수면",
+        "가덕도 인근 해역"
+      ],
       "notes": "'발견장소'는 방치선박 제거공고, '점용지번'은 부산 강서구 허가고시 서식에서 관측."
     },
     {
       "canonical": "area",
       "display": "점용·사용 면적",
-      "db_column": "area",
-      "type": "text",
-      "description": "점용·사용 면적. 단위(㎡)와 자릿수 구분기호를 포함한 원문을 그대로 보존한다.",
+      "scope": "attribute",
+      "series": "면적",
+      "value_type": "text",
+      "is_core": true,
       "synonyms": [
-        "면적", "점용·사용면적", "점용·사용의 면적", "점용면적",
-        "사용면적", "허가면적", "준공면적"
+        "면적(㎡)",
+        "면적",
+        "점·사용의면적",
+        "점용면적",
+        "점용·사용면적",
+        "점용·사용의면적",
+        "점·사용면적",
+        "허가면적",
+        "점용·사용면적(㎡)",
+        "점용면적(㎡)",
+        "허가면적(㎡)",
+        "사용면적"
       ],
-      "examples": ["367,120.2㎡", "6,060.34㎡"],
+      "description": "점용·사용 면적. 단위(㎡)와 자릿수 구분기호를 포함한 원문을 그대로 보존한다.",
+      "examples": [
+        "367,120.2㎡",
+        "6,060.34㎡"
+      ],
       "notes": "수치 정규화는 하지 않는다 — 원문 표기가 근거자료로서 의미가 있어 TEXT로 둔다."
     },
     {
-      "canonical": "work_description",
-      "display": "점용·사용 목적/공사내용",
-      "db_column": "work_description",
-      "type": "text",
-      "description": "점용·사용의 목적 또는 공사·사업의 내용.",
+      "canonical": "purpose",
+      "display": "점용·사용 목적",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": true,
       "synonyms": [
-        "공사내용", "사업내용", "공사명칭", "공사명", "사업명", "공사의 종류",
-        "목적", "점용·사용목적", "점용·사용의 목적", "점용목적", "사용목적",
-        "공사의 목적 및 개요", "사업개요", "준공시설"
+        "목적",
+        "점·사용의목적",
+        "점용·사용목적",
+        "점용목적",
+        "점용·사용의목적",
+        "점·사용목적",
+        "점사용의목적",
+        "사용목적"
       ],
-      "examples": ["청소년 해양종합레포츠 교육 및 조종면허실기시험장 운영", "관측장비 1개소 설치"]
-    },
-    {
-      "canonical": "work_period",
-      "display": "점용·사용 기간",
-      "db_column": "work_period_start, work_period_end",
-      "type": "date_range",
-      "virtual": true,
-      "description": "점용·사용 기간. 가상 필드로, 매핑 후 시작/종료 두 DATE 컬럼으로 분리된다. 분리에 실패하면 원문을 extras에 보존한다.",
-      "synonyms": [
-        "기간", "공사기간", "점용·사용기간", "점용·사용의 기간", "점용기간",
-        "사용기간", "허가기간", "공사시행기간", "사업기간"
+      "description": "점용·사용의 목적. 공사명칭·사업내용과 값의 역할이 달라 합치지 않는다.",
+      "examples": [
+        "청소년 해양종합레포츠 교육",
+        "관측장비 1개소 설치"
       ],
-      "examples": ["2025. 9. 1. ～ 2028. 8. 31.", "2026.7.1 ~ 2028.6.30(2년)"],
-      "notes": "NoticeRecord에 대응 필드가 없는 유일한 가상 필드 — Mapper가 start/end로 분리한다."
+      "notes": "워크북 기준 별개 표준항목이다 — 예전 work_description으로 뭉쳐 두던 것을 분리했다."
     },
     {
       "canonical": "applicant_name",
       "display": "허가·승인 대상자 성명",
-      "db_column": "applicant_name",
-      "type": "text",
-      "description": "점용·사용 허가(승인)를 받은 자의 성명 또는 상호.",
+      "scope": "attribute",
+      "series": "인적",
+      "value_type": "text",
+      "is_core": true,
       "synonyms": [
-        "성명", "상호", "명칭", "대표자", "신고자", "신고인", "점용·사용자",
-        "허가를 받은 자", "점용·사용 허가를 받은 자",
-        "피허가자", "피허가자 성명", "피승인자", "피승인자 성명",
-        "대상자", "공사시행자", "공사시행자의 성명", "사업시행자"
+        "성명",
+        "피허가자",
+        "신청인",
+        "피허가자성명",
+        "피승인자",
+        "허가를 받은 자",
+        "피협의자",
+        "허가대상자",
+        "피승인자성명",
+        "성명(상호)",
+        "점용·사용 허가를 받은 자",
+        "신고자",
+        "피협의자성명",
+        "성명(명칭)",
+        "신고인",
+        "신청자",
+        "대상자",
+        "허가 받은 자",
+        "수허가자",
+        "승인 받은 자",
+        "상호",
+        "명칭",
+        "대표자",
+        "점용·사용자"
       ],
-      "examples": ["한국해양소년단 전북연맹", "태항조선㈜ 대표이사"],
+      "description": "점용·사용 허가(승인)를 받은 자의 성명 또는 상호.",
+      "examples": [
+        "한국해양소년단 전북연맹",
+        "태항조선㈜ 대표이사"
+      ],
       "notes": "'성명(상호)' 같은 괄호 병기 라벨은 괄호 분리 후 양쪽 모두로 매핑을 시도한다."
+    },
+    {
+      "canonical": "work_period",
+      "display": "점용·사용 기간",
+      "scope": "attribute",
+      "series": "기간",
+      "value_type": "date_range",
+      "is_core": true,
+      "synonyms": [
+        "기간",
+        "허가기간",
+        "점·사용의기간",
+        "점용기간",
+        "점용·사용기간",
+        "점용허가의유효기간",
+        "점용·사용의기간",
+        "점·사용기간",
+        "사용기간"
+      ],
+      "description": "점용·사용 기간. 매핑 후 시작/종료로 분리해 daterange로 적재하며, 분리에 실패하면 원문을 보존한다.",
+      "examples": [
+        "2025. 9. 1. ～ 2028. 8. 31.",
+        "2026.7.1 ~ 2028.6.30(2년)"
+      ],
+      "virtual": true,
+      "notes": "Mapper가 start/end로 분리하는 유일한 가상 필드다."
     },
     {
       "canonical": "applicant_address",
       "display": "허가·승인 대상자 주소",
-      "db_column": "applicant_address",
-      "type": "text",
+      "scope": "attribute",
+      "series": "주소",
+      "value_type": "text",
+      "is_core": true,
+      "synonyms": [
+        "주소",
+        "피허가자주소",
+        "피승인자주소",
+        "피협의자주소",
+        "신고자 주소",
+        "사업자 주소"
+      ],
       "description": "허가(승인)를 받은 자의 주소. 비어 있으면 성명 블록에서 주소 패턴을 보충 추출한다.",
-      "synonyms": ["주소", "신고자 주소", "사업자 주소", "피허가자 주소", "피승인자 주소"],
-      "examples": ["군산시 비응로 107", "인천광역시 동구 보세로 62(만석동)"]
+      "examples": [
+        "군산시 비응로 107",
+        "인천광역시 동구 보세로 62(만석동)"
+      ]
+    },
+    {
+      "canonical": "approval_no",
+      "display": "허가·승인번호",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "허가번호",
+        "승인번호",
+        "협의번호",
+        "신고번호",
+        "허가(협의)번호",
+        "수리번호",
+        "허가증번호"
+      ],
+      "description": "처분(허가/승인/신고수리/협의) 번호.",
+      "examples": [
+        "제2026-26호",
+        "2018-1"
+      ]
+    },
+    {
+      "canonical": "approval_date",
+      "display": "허가·승인일자",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "date",
+      "is_core": false,
+      "synonyms": [
+        "허가연월일",
+        "허가일자",
+        "허가일",
+        "승인연월일",
+        "실시계획승인일",
+        "승인일자",
+        "실시계획신고수리일",
+        "승인일",
+        "실시계획승인일자",
+        "수리일",
+        "협의연월일",
+        "수리일자",
+        "수리연월일",
+        "협의일자",
+        "협의일",
+        "실시계획신고수리일자",
+        "처분일자",
+        "점용·사용허가일"
+      ],
+      "description": "처분일자. ISO(yyyy-MM-dd)로 정규화한다.",
+      "examples": [
+        "2026. 6. 5."
+      ],
+      "notes": "고시일(notice_date)과 다른 날짜다 — 처분한 날이지 공표한 날이 아니다."
     },
     {
       "canonical": "remarks",
       "display": "비고",
-      "db_column": "remarks",
-      "type": "text",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "비고",
+        "기타",
+        "참고사항"
+      ],
       "description": "비고·기타 참고사항.",
-      "synonyms": ["비고", "기타", "참고사항"],
-      "examples": ["없음"]
+      "examples": [
+        "없음"
+      ]
+    },
+    {
+      "canonical": "subject_address",
+      "display": "공고·처분 대상자 주소",
+      "scope": "attribute",
+      "series": "주소",
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [],
+      "description": "공고·처분의 대상이 된 자의 주소. 허가를 받은 자와 구분한다.",
+      "examples": [],
+      "notes": "동의어가 비어 있다 — 관측된 라벨이 머리기호 붙은 \"주소\"뿐이라 정규화하면 applicant_address와 구별되지 않는다. 전수 표본에서도 52/19,216건(0.27%)이고 워크북조차 라벨이 아니라 처분 문맥으로 갈랐다. 없는 라벨을 지어내면 오매핑이 되므로 정의만 두고 매핑 규칙은 비워 둔다."
+    },
+    {
+      "canonical": "business_content",
+      "display": "사업내용",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "공사내용",
+        "공사개요",
+        "사업내용",
+        "사업개요",
+        "준공시설"
+      ],
+      "description": "공사·사업의 내용. 점용·사용 목적이나 공사명칭으로 합치지 않는다.",
+      "examples": [
+        "호안 축조 및 부지 조성"
+      ]
+    },
+    {
+      "canonical": "construction_period",
+      "display": "공사시행 기간",
+      "scope": "attribute",
+      "series": "기간",
+      "value_type": "date_range",
+      "is_core": false,
+      "synonyms": [
+        "공사기간",
+        "공사시행기간",
+        "착수및준공예정일"
+      ],
+      "description": "공사를 시행하는 기간. 점용·사용 기간과 효력 범위가 달라 구분한다.",
+      "examples": []
+    },
+    {
+      "canonical": "changed_to",
+      "display": "변경 후 값",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "변경",
+        "변경후"
+      ],
+      "description": "당초/변경 대비표에서 변경 후에 해당하는 값.",
+      "examples": []
+    },
+    {
+      "canonical": "change_summary",
+      "display": "변경사항",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "변경사항",
+        "변경내용"
+      ],
+      "description": "변경의 요지. 같은 표에 변경 전 값이 있으면 그쪽이 우선한다.",
+      "examples": []
+    },
+    {
+      "canonical": "subject_name",
+      "display": "공고·처분 대상자 성명",
+      "scope": "attribute",
+      "series": "인적",
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "처분대상자"
+      ],
+      "description": "공고·처분의 대상이 된 자의 성명. 허가를 받은 자와 구분한다.",
+      "examples": []
+    },
+    {
+      "canonical": "changed_from",
+      "display": "변경 전 값",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "당초",
+        "변경전"
+      ],
+      "description": "당초/변경 대비표에서 변경 전에 해당하는 값.",
+      "examples": []
+    },
+    {
+      "canonical": "water_type",
+      "display": "수면 종류",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "수면의종류",
+        "수면 종류"
+      ],
+      "description": "공유수면의 종류.",
+      "examples": [
+        "공유수면(인천북항 내)"
+      ],
+      "notes": "인천지방해양수산청 서식에서 주로 관측된다."
+    },
+    {
+      "canonical": "structure_type",
+      "display": "공작물 종류",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "공작물의종류",
+        "공작물 종류"
+      ],
+      "description": "설치하는 공작물의 종류.",
+      "examples": [
+        "선가대(6기)"
+      ],
+      "notes": "인천지방해양수산청 서식에서 주로 관측된다."
+    },
+    {
+      "canonical": "completion_date",
+      "display": "준공·완료 처리일자",
+      "scope": "attribute",
+      "series": "날짜",
+      "value_type": "date",
+      "is_core": false,
+      "synonyms": [
+        "준공검사확인증발급일자",
+        "공사완료신고수리일",
+        "준공검사일",
+        "준공검사확인증발급일"
+      ],
+      "description": "준공검사확인증 발급일 또는 공사완료신고 수리일.",
+      "examples": []
+    },
+    {
+      "canonical": "operator_name",
+      "display": "사업 시행자 성명",
+      "scope": "attribute",
+      "series": "인적",
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "시행자",
+        "공사시행자",
+        "공사시행자의 성명",
+        "사업시행자"
+      ],
+      "description": "사업·공사를 시행하는 자. 허가를 받은 자와 다를 수 있다.",
+      "examples": []
+    },
+    {
+      "canonical": "purpose_content_combined",
+      "display": "점용·사용 목적·사업내용(복합)",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "점용의목적및개요",
+        "목적및사유",
+        "공사의 목적 및 개요"
+      ],
+      "description": "목적과 사업내용이 원문 한 항목에 합쳐진 경우. 어느 쪽으로도 단정할 수 없어 별도 항목으로 둔다.",
+      "examples": [
+        "목적 및 사유"
+      ]
+    },
+    {
+      "canonical": "contact_point",
+      "display": "문의처",
+      "scope": "attribute",
+      "series": "연락",
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "문의처",
+        "문의"
+      ],
+      "description": "공고 문의처(부서·담당).",
+      "examples": []
+    },
+    {
+      "canonical": "approval_no_date_combined",
+      "display": "허가·승인번호·일자(복합)",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [],
+      "description": "번호와 일자가 한 셀에 병기된 경우.",
+      "examples": [
+        "제2026-26호(2026. 6. 11.)"
+      ],
+      "notes": "동의어가 비어 있다 — 워크북은 \"허가번호(연월일)\" 같은 라벨을 이 복합 항목으로 묶지만, 우리 파이프라인은 Mapper.splitApprovalNoDate가 값을 번호와 일자로 실제로 쪼갤 수 있다. 그래서 그 라벨들은 approval_no로 매핑해 분리를 태우고, 이 항목은 정의만 남겨 둔다. 워크북이 복합으로 둔 것은 그쪽 분석이 쪼갤 수 없었기 때문이지 쪼개면 안 되기 때문이 아니다."
+    },
+    {
+      "canonical": "construction_name",
+      "display": "공사명칭",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "공사명",
+        "공사명칭",
+        "사업명"
+      ],
+      "description": "공사·사업의 명칭. 공사종류·사업내용과 분리한다.",
+      "examples": []
+    },
+    {
+      "canonical": "construction_location",
+      "display": "공사시행 장소",
+      "scope": "attribute",
+      "series": "위치",
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "공사장소",
+        "공사위치",
+        "공사시행 장소"
+      ],
+      "description": "공사를 시행하는 장소. 점용·사용 장소와 역할이 다를 수 있다.",
+      "examples": []
+    },
+    {
+      "canonical": "contact_number",
+      "display": "연락처",
+      "scope": "attribute",
+      "series": "연락",
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "전화번호",
+        "연락처",
+        "팩스번호"
+      ],
+      "description": "대상자 또는 담당자의 연락처.",
+      "examples": []
+    },
+    {
+      "canonical": "project_cost",
+      "display": "사업비",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "총사업비",
+        "사업비"
+      ],
+      "description": "사업비. 금액 단위는 원문을 보존한다.",
+      "examples": [
+        "198백만원"
+      ]
+    },
+    {
+      "canonical": "approval_content",
+      "display": "허가내용",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "허가내용"
+      ],
+      "description": "허가의 내용을 통째로 적은 항목. 개별 목적·장소·면적과 함께 나타날 수 있다.",
+      "examples": []
+    },
+    {
+      "canonical": "construction_area",
+      "display": "공사시행 면적",
+      "scope": "attribute",
+      "series": "면적",
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "공사면적",
+        "공사시행 면적"
+      ],
+      "description": "공사를 시행하는 면적.",
+      "examples": []
+    },
+    {
+      "canonical": "construction_type",
+      "display": "공사종류",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "공사의 종류",
+        "공사종류"
+      ],
+      "description": "공사의 종류. 공사명칭·사업내용과 분리한다.",
+      "examples": []
+    },
+    {
+      "canonical": "land_use_plan",
+      "display": "토지이용계획",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "토지이용",
+        "토지이용계획"
+      ],
+      "description": "매립지 등의 토지이용계획.",
+      "examples": []
+    },
+    {
+      "canonical": "cancel_date",
+      "display": "취소일자",
+      "scope": "attribute",
+      "series": "날짜",
+      "value_type": "date",
+      "is_core": false,
+      "synonyms": [
+        "허가취소일",
+        "취소일자",
+        "취소일"
+      ],
+      "description": "취소 처분일자.",
+      "examples": []
+    },
+    {
+      "canonical": "completion_area",
+      "display": "준공면적",
+      "scope": "attribute",
+      "series": "면적",
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "준공면적"
+      ],
+      "description": "준공 확인된 면적. 허가받은 점용·사용 면적과 다를 수 있다.",
+      "examples": []
+    },
+    {
+      "canonical": "cancel_reason",
+      "display": "취소사유",
+      "scope": "attribute",
+      "series": "사유",
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "처분사유",
+        "취소사유"
+      ],
+      "description": "취소 처분의 사유.",
+      "examples": []
+    },
+    {
+      "canonical": "notice_period",
+      "display": "공고기간",
+      "scope": "attribute",
+      "series": "기간",
+      "value_type": "date_range",
+      "is_core": false,
+      "synonyms": [
+        "공고기간"
+      ],
+      "description": "공고·열람 기간. 점용·사용 기간과 효력 범위가 다르다.",
+      "examples": []
+    },
+    {
+      "canonical": "disposition_content",
+      "display": "처분내용",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "처분내용"
+      ],
+      "description": "처분의 내용. 처분사유·근거법령과 분리한다.",
+      "examples": []
+    },
+    {
+      "canonical": "notice_subject",
+      "display": "공고대상",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "공고사항",
+        "공고대상"
+      ],
+      "description": "공고의 대상. 허가·승인 대상자와 구분한다.",
+      "examples": []
+    },
+    {
+      "canonical": "disposition_reason",
+      "display": "처분사유",
+      "scope": "attribute",
+      "series": "사유",
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "처분의원인이되는사실"
+      ],
+      "description": "처분의 원인이 되는 사실.",
+      "examples": []
+    },
+    {
+      "canonical": "opinion_submission",
+      "display": "의견제출 기간·방법",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "의견제출",
+        "제출방법",
+        "의견제출 기간",
+        "의견제출 방법"
+      ],
+      "description": "의견제출 기간과 방법. 원문에서 별도 라벨이어도 한 항목군으로 본다.",
+      "examples": []
+    },
+    {
+      "canonical": "legal_basis",
+      "display": "근거법령",
+      "scope": "attribute",
+      "series": null,
+      "value_type": "text",
+      "is_core": false,
+      "synonyms": [
+        "근거법령"
+      ],
+      "description": "처분의 근거 법령. 조문 값은 원문을 보존한다.",
+      "examples": []
     }
   ]
 }

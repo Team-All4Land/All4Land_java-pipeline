@@ -40,18 +40,20 @@ public final class SynonymsDoc {
         return md.toString();
     }
 
-    /** 필드 한 줄 요약표 — 어떤 필드가 있고 어느 컬럼으로 가는지 한눈에 본다. */
+    /** 필드 한 줄 요약표 — 어떤 필드가 있고 어느 계층·계열로 가는지 한눈에 본다. */
     private static String overview(List<Synonyms.FieldSpec> fields) {
         StringBuilder md = new StringBuilder("## 한눈에 보기\n\n");
-        md.append("| # | 표준 필드 | 표시명 | DB 컬럼 | 값 형식 | 동의어 수 |\n");
-        md.append("|---:|---|---|---|---|---:|\n");
+        md.append("| # | 표준 필드 | 표시명 | 저장 계층 | 계열 | 값 형식 | 주요 | 동의어 수 |\n");
+        md.append("|---:|---|---|---|---|---|:-:|---:|\n");
         int i = 1;
         for (Synonyms.FieldSpec f : fields) {
             md.append("| ").append(i++)
                     .append(" | `").append(f.canonical()).append('`')
                     .append(" | ").append(Markdown.cell(f.display()))
-                    .append(" | ").append(Markdown.code(f.dbColumn()))
+                    .append(" | ").append(scopeLabel(f))
+                    .append(" | ").append(f.series() == null ? "—" : Markdown.cell(f.series()))
                     .append(" | ").append(typeLabel(f))
+                    .append(" | ").append(f.core() ? "●" : "")
                     .append(" | ").append(f.synonyms().size())
                     .append(" |\n");
         }
@@ -59,13 +61,25 @@ public final class SynonymsDoc {
         return md.toString();
     }
 
+    /** 저장 계층 표기 — 이 필드가 첨부파일 컬럼인지 처분 단위 항목 행인지. */
+    private static String scopeLabel(Synonyms.FieldSpec f) {
+        return f.isAttribute() ? "`document_attributes` 행" : "`attachments` 컬럼";
+    }
+
     /** 필드별 상세 — 설명·예시·주의사항과 인식하는 라벨 전체 목록. */
     private static String details(List<Synonyms.FieldSpec> fields) {
         StringBuilder md = new StringBuilder("## 필드별 상세\n\n");
         for (Synonyms.FieldSpec f : fields) {
             md.append("### `").append(f.canonical()).append("` — ").append(f.display()).append("\n\n");
-            md.append("- **DB 컬럼**: `").append(f.dbColumn()).append("`\n");
+            md.append("- **저장 계층**: ").append(scopeLabel(f)).append('\n');
+            if (f.series() != null) {
+                md.append("- **계열**: ").append(f.series())
+                        .append(" — 누락 검증은 항목이 아니라 계열 단위로 본다\n");
+            }
             md.append("- **값 형식**: ").append(typeLabel(f)).append('\n');
+            if (f.core()) {
+                md.append("- **주요 항목**: 전수 표본 출현율 60% 이상\n");
+            }
             if (!f.description().isBlank()) {
                 md.append("- **설명**: ").append(f.description()).append('\n');
             }

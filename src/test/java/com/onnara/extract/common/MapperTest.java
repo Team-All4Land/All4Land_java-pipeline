@@ -76,11 +76,13 @@ class MapperTest {
         assertEquals("images/고시문_img0.png", result.getImages().get(0).getPath());
     }
 
-    /** ISO로 분리 못 하는 공사기간 원문이 extras에 보존되는지 검증한다. */
+    /** ISO로 분리 못 하는 기간 원문이 extras에 보존되는지 검증한다. */
     @Test
     void unparseablePeriodGoesToExtras() {
         RawDocument raw = new RawDocument("x.hml", "hml", false);
-        raw.getContent().add(new RawParagraph("6. 공사시행기간 : ’25."));
+        // 가상 필드(work_period)여야 분리를 탄다 — 공사시행기간은 별개 표준항목이라
+        // 분리 없이 원문 그대로 남으므로 이 경로를 검증하지 못한다
+        raw.getContent().add(new RawParagraph("6. 점용·사용의 기간 : ’25."));
         SchemaResult result = Mapper.mapToSchema(raw);
 
         NoticeRecord record = result.getRecords().get(0);
@@ -145,7 +147,7 @@ class MapperTest {
         assertEquals("2018-08-10", record.approvalDate());
         assertEquals("부산광역시 동구 충장대로 351", record.applicantAddress());
         assertEquals("부산항건설사무소", record.applicantName());
-        assertEquals("관측장비 1개소 설치", record.workDescription());
+        assertEquals("관측장비 1개소 설치", record.purpose());
         assertEquals("가덕도 인근 해역", record.location());
         assertEquals("2.89㎡", record.area());
         assertEquals("2018-08-10", record.workPeriodStart());
@@ -178,8 +180,8 @@ class MapperTest {
         assertEquals("2028-06-30", record.workPeriodEnd());
         assertEquals("태항조선㈜ 대표이사", record.applicantName());
         assertEquals("인천광역시 동구 보세로 62(만석동)", record.applicantAddress());
-        assertNotNull(record.extras());
-        assertEquals("선가대(6기)", record.extras().get("공작물의종류"));
+        // 전수 통계 반영으로 표준항목이 된 라벨 — 예전에는 extras로 흘러갔다
+        assertEquals("선가대(6기)", record.get("structure_type"));
     }
 
     /**
