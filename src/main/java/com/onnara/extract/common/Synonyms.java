@@ -36,10 +36,11 @@ public final class Synonyms {
     /** 사전 리소스 경로 — 클래스패스 기준. */
     private static final String RESOURCE = "/synonyms.json";
 
-    // 선행 번호 목록: "1." "1)" "5 "(점 생략) "가." "나)" "①" "-" "·" 등
+    // 선행 번호 목록: "1." "1)" "5 "(점 생략) "가." "나)" "①" "-" "□" "❍" 등
     // 주의: 아래 사전 로드가 normalizeLabel을 호출하므로 이 패턴이 먼저 초기화돼야 한다.
     private static final Pattern LEADING_NUMBERING = Pattern.compile(
-            "^\\s*(?:[-–—·o○]\\s*)?(?:\\d{1,2}\\s*[.)]|\\d{1,2}(?=\\s)|[가-힣]\\s*[.)]|[①-⑳㉮-㉻])?\\s*");
+            "^\\s*(?:[-–—·ㆍ⋅∙•․‧・･o○□■▪▫◆◇▶▷❍●◦※*]+\\s*)?"
+                    + "(?:\\d{1,2}\\s*[.)]|\\d{1,2}(?=\\s)|[가-힣]\\s*[.)]|[①-⑳㉮-㉻])?\\s*");
 
     /** 사전 파일에서 읽은 필드 정의 목록(선언 순서 = 문서 출력 순서). */
     private static final List<FieldSpec> FIELDS;
