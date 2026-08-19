@@ -30,16 +30,32 @@ import java.util.regex.Pattern;
  */
 public final class Synonyms {
 
-    /** 기간 가상 필드명. NoticeRecord에는 없고 Mapper가 분리 처리한다. */
+    /** 기간 가상 필드명 — Mapper가 시작/종료로 분리하므로 레코드에는 그대로 남지 않는다. */
     public static final String WORK_PERIOD = "work_period";
+
+    /** {@link #WORK_PERIOD} 분리 결과 — 시작일(ISO). 사전에는 없는 파생 필드다. */
+    public static final String WORK_PERIOD_START = "work_period_start";
+
+    /** {@link #WORK_PERIOD} 분리 결과 — 종료일(ISO). 사전에는 없는 파생 필드다. */
+    public static final String WORK_PERIOD_END = "work_period_end";
+
+    /** 문서 단위 메타 — attachments 테이블의 컬럼이 된다(고시번호·고시일자·제목·고시자·기관). */
+    public static final String SCOPE_ATTACHMENT = "attachment";
+
+    /** 처분 단위 값 — document_attributes 테이블의 행이 된다(표준항목 40종). */
+    public static final String SCOPE_ATTRIBUTE = "attribute";
 
     /** 사전 리소스 경로 — 클래스패스 기준. */
     private static final String RESOURCE = "/synonyms.json";
 
-    // 선행 번호 목록: "1." "1)" "5 "(점 생략) "가." "나)" "①" "-" "·" 등
+    // 선행 기호·번호: "□" "○" "※" "-" "·" 등 머리기호와 "1." "1)" "5 "(점 생략) "가." "①".
+    // 머리기호는 겹쳐 나오기도 해("□ ○ 면적") 반복 허용한다.
+    // 문자 클래스는 전수 표본에서 실제로 관측된 것만 담았다 — ○ 170건, - 118건, □ 64건,
+    // ※ 8건, ◦ 5건, ▷ 3건. 이들이 빠져 있으면 "□허가면적"이 "허가면적"과 다른 라벨이 된다.
     // 주의: 아래 사전 로드가 normalizeLabel을 호출하므로 이 패턴이 먼저 초기화돼야 한다.
     private static final Pattern LEADING_NUMBERING = Pattern.compile(
-            "^\\s*(?:[-–—·o○]\\s*)?(?:\\d{1,2}\\s*[.)]|\\d{1,2}(?=\\s)|[가-힣]\\s*[.)]|[①-⑳㉮-㉻])?\\s*");
+            "^\\s*(?:[-–—·o○□※◦▷◎▪]\\s*)*"
+                    + "(?:\\d{1,2}\\s*[.)]|\\d{1,2}(?=\\s)|[가-힣]\\s*[.)]|[①-⑳㉮-㉻])?\\s*");
 
     /** 사전 파일에서 읽은 필드 정의 목록(선언 순서 = 문서 출력 순서). */
     private static final List<FieldSpec> FIELDS;
@@ -56,6 +72,9 @@ public final class Synonyms {
     /** canonical 필드 → 정규화된 동의어 라벨 목록. */
     public static final Map<String, List<String>> LABEL_SYNONYMS = createDictionary();
 
+    /** 사전 선언 순서의 canonical 필드명 — 레코드 필드 정렬 기준. */
+    private static final List<String> FIELD_ORDER = FIELDS.stream().map(FieldSpec::canonical).toList();
+
     /** 정규화된 라벨 → canonical 필드 (역인덱스). */
     private static final Map<String, String> LOOKUP = createLookup();
 
@@ -64,18 +83,30 @@ public final class Synonyms {
      *
      * @param canonical   표준 필드명(= NoticeRecord 필드 키)
      * @param display     사람이 읽는 필드 표시명
-     * @param dbColumn    대응하는 documents 테이블 컬럼명
-     * @param type        값의 성격(text / date / date_range) — 정규화 방식을 설명한다
+     * @param scope       저장 계층: {@link #SCOPE_ATTACHMENT}(문서 메타 → attachments 컬럼) 또는
+     *                    {@link #SCOPE_ATTRIBUTE}(처분 단위 값 → document_attributes 행).
+     *                    attribute_defs 테이블로 동기화되는 것은 후자뿐이다
+     * @param series      같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음(면적/기간/위치/인적/주소/
+     *                    날짜/연락/사유). 누락 검증을 항목이 아니라 계열 단위로 하기 위한 축이며,
+     *                    계열이 없는 단독 항목은 null
+     * @param type        값의 성격(text / date / date_range / number) — 정규화 방식을 정한다
+     * @param core        전역 주요 항목(전수 표본 출현율 60% 이상) 여부 — 누락 검증 가중치용
      * @param virtual     NoticeRecord에 대응 필드가 없는 가상 필드 여부(work_period)
      * @param description 필드가 무엇을 담는지에 대한 설명
-     * @param synonyms    정규화된 동의어 라벨 목록
+     * @param synonyms    정규화된 동의어 라벨 목록. 라벨로는 구별할 수 없는 항목은 비어 있을 수 있다
      * @param rawSynonyms 사전 파일에 적힌 원문 동의어 목록(문서 출력용)
      * @param examples    실제 고시문에서 관측된 값 예시
      * @param notes       검토자를 위한 주의사항(없으면 null)
      */
-    public record FieldSpec(String canonical, String display, String dbColumn, String type,
-                            boolean virtual, String description, List<String> synonyms,
-                            List<String> rawSynonyms, List<String> examples, String notes) {
+    public record FieldSpec(String canonical, String display, String scope, String series,
+                            String type, boolean core, boolean virtual, String description,
+                            List<String> synonyms, List<String> rawSynonyms,
+                            List<String> examples, String notes) {
+
+        /** 이 필드가 처분 단위 값인지 — attribute_defs 동기화 대상 판정에 쓴다. */
+        public boolean isAttribute() {
+            return SCOPE_ATTRIBUTE.equals(scope);
+        }
     }
 
     /** 인스턴스화 방지 — 정적 사전·함수만 제공하는 유틸리티 클래스. */
@@ -85,6 +116,16 @@ public final class Synonyms {
     /** 사전에 정의된 필드 목록을 파일 순서대로 반환한다(문서 생성용). */
     public static List<FieldSpec> fields() {
         return FIELDS;
+    }
+
+    /**
+     * canonical 필드명을 사전 선언 순서로 반환한다.
+     *
+     * <p>레코드가 필드를 이 순서로 정렬해 담으므로, 같은 서식을 표 읽는 순서가 달라도
+     * {@code *.schema.json}의 키 순서가 흔들리지 않는다.
+     */
+    public static List<String> fieldOrder() {
+        return FIELD_ORDER;
     }
 
     /** 사전 파일의 버전 문자열. */
@@ -140,8 +181,12 @@ public final class Synonyms {
                 rawSynonyms.add(raw);
                 normalized.add(norm);
             }
-            if (normalized.isEmpty()) {
-                throw new IllegalStateException(RESOURCE + ": 동의어가 하나도 없는 필드 — " + canonical);
+            // 동의어가 비는 것 자체는 허용한다 — 라벨로는 구별할 수 없는 표준항목이 실제로 있다
+            // (subject_address: 관측 라벨이 머리기호 붙은 "주소"뿐이라 applicant_address와 겹친다).
+            // 다만 사유를 notes에 적게 강제해, 실수로 빠뜨린 것과 의도적으로 비운 것을 갈라 놓는다.
+            if (normalized.isEmpty() && node.path("notes").asText("").isBlank()) {
+                throw new IllegalStateException(RESOURCE + ": 동의어가 하나도 없는 필드 — " + canonical
+                        + " (의도한 것이라면 notes에 사유를 적으세요)");
             }
 
             List<String> examples = new ArrayList<>();
@@ -150,11 +195,14 @@ public final class Synonyms {
             }
 
             JsonNode notes = node.path("notes");
+            JsonNode series = node.path("series");
             specs.add(new FieldSpec(
                     canonical,
                     node.path("display").asText(canonical),
-                    node.path("db_column").asText(canonical),
-                    node.path("type").asText("text"),
+                    node.path("scope").asText(SCOPE_ATTRIBUTE),
+                    series.isMissingNode() || series.isNull() ? null : series.asText(),
+                    node.path("value_type").asText("text"),
+                    node.path("is_core").asBoolean(false),
                     node.path("virtual").asBoolean(false),
                     node.path("description").asText(""),
                     List.copyOf(normalized),
@@ -200,19 +248,23 @@ public final class Synonyms {
     }
 
     /**
-     * 라벨 정규화: NFC → 선행 번호 제거 → 공백 제거(전각 포함) →
-     * 가운뎃점 통일(ㆍ⋅→·, 한글 사이 마침표·쉼표 포함) → 후행 콜론 제거 →
+     * 라벨 정규화: NFC → 가운뎃점 통일 → 선행 기호·번호 제거 → 공백 제거(전각 포함) →
+     * 한글 사이 마침표·쉼표를 가운뎃점으로 → 후행 콜론 제거 →
      * 토큰 사이 조사 '의' 제거는 사전 쪽에서 의/무 형태를 모두 등재하는 것으로 대신한다.
+     *
+     * <p><b>가운뎃점 통일이 선행 기호 제거보다 먼저다.</b> 전수 표본에는 U+2219(∙)·U+2024(․)·
+     * U+2027(‧)로 시작하는 라벨이 28건 있는데, 통일을 뒤에 두면 이들이 선행 기호로 인식되지 않아
+     * "∙면적"이 "·면적"으로 남아 "면적"과 다른 라벨이 된다.
      */
     public static String normalizeLabel(String raw) {
         if (raw == null) {
             return "";
         }
         String s = Normalizer.normalize(raw, Normalizer.Form.NFC).trim();
-        s = LEADING_NUMBERING.matcher(s).replaceFirst("");
-        s = s.replaceAll("[\\s\\u00A0\\u3000]+", "");
         s = s.replace('ㆍ', '·').replace('⋅', '·').replace('∙', '·').replace('•', '·')
                 .replace('․', '·').replace('‧', '·').replace('・', '·').replace('･', '·');
+        s = LEADING_NUMBERING.matcher(s).replaceFirst("");
+        s = s.replaceAll("[\\s\\u00A0\\u3000]+", "");
         // OCR이 가운뎃점을 마침표/쉼표로 읽는 경우("점용.사용 장소")를 통일한다.
         // 한글 음절 사이만 바꿔 날짜("2026. 6.")나 번호 표기는 건드리지 않는다.
         s = s.replaceAll("(?<=[가-힣])[.,．，、](?=[가-힣])", "·");

@@ -1,0 +1,286 @@
+{
+  "version": "2026-08-13",
+  "description": "공유수면 고시공고 종류 55종. ReferenceSync가 notice_types 테이블로 동기화한다.",
+  "conventions": {
+    "source": "26.08.07 전수 통계 워크북의 핵심 키워드 55종을 그대로 옮긴 것이다.",
+    "family": "55종을 평면으로 두면 조회 화면과 집계가 감당되지 않아 상위 묶음을 둔다. 워크북 키워드명 접두사에서 유도했다.",
+    "code": "family 접두 + 한글 이름 슬러그. 한글을 그대로 쓰면 종류가 바뀌어도 코드가 안 흔들린다."
+  },
+  "types": [
+    {
+      "code": "occupancy:점용_사용_허가",
+      "name": "점용·사용 허가",
+      "family": "점용·사용"
+    },
+    {
+      "code": "occupancy:점용_사용_승인",
+      "name": "점용·사용 승인",
+      "family": "점용·사용"
+    },
+    {
+      "code": "etc:준공_완료_수리",
+      "name": "준공·완료 수리",
+      "family": "기타"
+    },
+    {
+      "code": "occupancy:변경허가",
+      "name": "변경허가",
+      "family": "점용·사용"
+    },
+    {
+      "code": "occupancy:점용_사용_협의",
+      "name": "점용·사용 협의",
+      "family": "점용·사용"
+    },
+    {
+      "code": "impl_plan:실시계획_승인",
+      "name": "실시계획 승인",
+      "family": "실시계획"
+    },
+    {
+      "code": "impl_plan:실시계획_신고수리",
+      "name": "실시계획 신고수리",
+      "family": "실시계획"
+    },
+    {
+      "code": "impl_plan:실시계획_변경승인",
+      "name": "실시계획 변경승인",
+      "family": "실시계획"
+    },
+    {
+      "code": "occupancy:기간연장_변경허가",
+      "name": "기간연장 변경허가",
+      "family": "점용·사용"
+    },
+    {
+      "code": "mixed:협의_승인_혼합",
+      "name": "협의·승인 혼합",
+      "family": "혼합"
+    },
+    {
+      "code": "occupancy:점용_사용_변경",
+      "name": "점용·사용 변경",
+      "family": "점용·사용"
+    },
+    {
+      "code": "occupancy:변경승인",
+      "name": "변경승인",
+      "family": "점용·사용"
+    },
+    {
+      "code": "impl_plan:실시계획_신고",
+      "name": "실시계획 신고",
+      "family": "실시계획"
+    },
+    {
+      "code": "impl_plan:실시계획_승인_신고_병기",
+      "name": "실시계획 승인·신고 병기",
+      "family": "실시계획"
+    },
+    {
+      "code": "occupancy:허가취소",
+      "name": "허가취소",
+      "family": "점용·사용"
+    },
+    {
+      "code": "occupancy:점용_사용_일반",
+      "name": "점용·사용 일반",
+      "family": "점용·사용"
+    },
+    {
+      "code": "occupancy:변경협의",
+      "name": "변경협의",
+      "family": "점용·사용"
+    },
+    {
+      "code": "etc:방치선박_물건_제거",
+      "name": "방치선박·물건 제거",
+      "family": "기타"
+    },
+    {
+      "code": "impl_plan:실시계획_변경신고",
+      "name": "실시계획 변경신고",
+      "family": "실시계획"
+    },
+    {
+      "code": "impl_plan:실시계획_변경신고수리",
+      "name": "실시계획 변경신고수리",
+      "family": "실시계획"
+    },
+    {
+      "code": "mixed:허가_협의_혼합",
+      "name": "허가·협의 혼합",
+      "family": "혼합"
+    },
+    {
+      "code": "etc:허가_면제기준",
+      "name": "허가 면제기준",
+      "family": "기타"
+    },
+    {
+      "code": "fee:점용료_사용료_감면",
+      "name": "점용료·사용료 감면",
+      "family": "점용료·사용료"
+    },
+    {
+      "code": "reclamation:매립면허",
+      "name": "매립면허",
+      "family": "매립"
+    },
+    {
+      "code": "fee:점용료_사용료_산정",
+      "name": "점용료·사용료 산정",
+      "family": "점용료·사용료"
+    },
+    {
+      "code": "mixed:허가_승인_혼합",
+      "name": "허가·승인 혼합",
+      "family": "혼합"
+    },
+    {
+      "code": "mixed:변경허가_협의_혼합",
+      "name": "변경허가·협의 혼합",
+      "family": "혼합"
+    },
+    {
+      "code": "etc:법령_조례_제_개정",
+      "name": "법령·조례 제·개정",
+      "family": "기타"
+    },
+    {
+      "code": "etc:권리_의무_이전",
+      "name": "권리·의무 이전",
+      "family": "기타"
+    },
+    {
+      "code": "reclamation:매립_준공",
+      "name": "매립 준공",
+      "family": "매립"
+    },
+    {
+      "code": "mixed:변경허가_승인_혼합",
+      "name": "변경허가·승인 혼합",
+      "family": "혼합"
+    },
+    {
+      "code": "mixed:허가_협의_승인_혼합",
+      "name": "허가·협의·승인 혼합",
+      "family": "혼합"
+    },
+    {
+      "code": "etc:도시_군관리계획_결정_변경",
+      "name": "도시·군관리계획 결정·변경",
+      "family": "기타"
+    },
+    {
+      "code": "occupancy:기간연장_변경승인",
+      "name": "기간연장 변경승인",
+      "family": "점용·사용"
+    },
+    {
+      "code": "impl_plan:실시계획_기타",
+      "name": "실시계획 기타",
+      "family": "실시계획"
+    },
+    {
+      "code": "reclamation:매립_실시계획_변경승인",
+      "name": "매립 실시계획 변경승인",
+      "family": "매립"
+    },
+    {
+      "code": "mixed:변경협의_승인_혼합",
+      "name": "변경협의·승인 혼합",
+      "family": "혼합"
+    },
+    {
+      "code": "etc:법_위반_행정처분",
+      "name": "법 위반 행정처분",
+      "family": "기타"
+    },
+    {
+      "code": "etc:개축_철거_명령",
+      "name": "개축·철거 명령",
+      "family": "기타"
+    },
+    {
+      "code": "mixed:변경허가_협의_승인_혼합",
+      "name": "변경허가·협의·승인 혼합",
+      "family": "혼합"
+    },
+    {
+      "code": "reclamation:매립_기본계획",
+      "name": "매립 기본계획",
+      "family": "매립"
+    },
+    {
+      "code": "occupancy:신규허가",
+      "name": "신규허가",
+      "family": "점용·사용"
+    },
+    {
+      "code": "etc:기타_행정공고",
+      "name": "기타 행정공고",
+      "family": "기타"
+    },
+    {
+      "code": "reclamation:매립_기타",
+      "name": "매립 기타",
+      "family": "매립"
+    },
+    {
+      "code": "reclamation:매립_승인",
+      "name": "매립 승인",
+      "family": "매립"
+    },
+    {
+      "code": "occupancy:승인취소",
+      "name": "승인취소",
+      "family": "점용·사용"
+    },
+    {
+      "code": "etc:골재_해사채취",
+      "name": "골재·해사채취",
+      "family": "기타"
+    },
+    {
+      "code": "reclamation:매립_실시계획_승인",
+      "name": "매립 실시계획 승인",
+      "family": "매립"
+    },
+    {
+      "code": "occupancy:신규승인",
+      "name": "신규승인",
+      "family": "점용·사용"
+    },
+    {
+      "code": "reclamation:매립_실시계획_변경인가",
+      "name": "매립 실시계획 변경인가",
+      "family": "매립"
+    },
+    {
+      "code": "occupancy:기간연장_변경협의",
+      "name": "기간연장 변경협의",
+      "family": "점용·사용"
+    },
+    {
+      "code": "fee:점용료_사용료_일반",
+      "name": "점용료·사용료 일반",
+      "family": "점용료·사용료"
+    },
+    {
+      "code": "impl_plan:실시계획_신고취소",
+      "name": "실시계획 신고취소",
+      "family": "실시계획"
+    },
+    {
+      "code": "occupancy:점용_사용_취소_유형불명",
+      "name": "점용·사용 취소(유형불명)",
+      "family": "점용·사용"
+    },
+    {
+      "code": "occupancy:협의취소",
+      "name": "협의취소",
+      "family": "점용·사용"
+    }
+  ]
+}

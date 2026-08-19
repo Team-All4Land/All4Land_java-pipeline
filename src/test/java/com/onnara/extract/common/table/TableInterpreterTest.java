@@ -35,7 +35,7 @@ class TableInterpreterTest {
         RawTable table = Tables.gridToTable(List.of(
                 List.of("점용·사용 장소", "인천광역시 동구 만석동 인근 공유수면"),
                 List.of("점용·사용 면적", "6,060.34㎡"),
-                List.of("공작물의 종류", "선가대(6기)")));
+                List.of("관리번호", "제 - 호")));
 
         InterpretedTable result = TableInterpreter.interpret(List.of(table)).get(0);
 
@@ -53,12 +53,13 @@ class TableInterpreterTest {
         assertEquals(0, location.row());
         assertEquals(1, location.col(), "값이 있던 원본 열이 기록돼야 함");
 
-        // 사전에 없는 라벨도 버리지 않고 미매핑으로 남긴다 (사전 보강 근거)
-        TableFact unmapped = factFor(result, "공작물의종류");
+        // 사전에 없는 라벨도 버리지 않고 미매핑으로 남긴다 (사전 보강 근거).
+        // '관리번호'는 방치선박 서식의 별개 필드라 일부러 등재하지 않은 라벨이다.
+        TableFact unmapped = factFor(result, "관리번호");
         assertNotNull(unmapped);
         assertNull(unmapped.canonical());
         assertFalse(unmapped.mapped());
-        assertEquals("선가대(6기)", unmapped.value());
+        assertEquals("제 - 호", unmapped.value());
     }
 
     /**
@@ -85,7 +86,7 @@ class TableInterpreterTest {
         // 하위 헤더(주소/성명)가 상위 헤더(피승인자)보다 우선 매핑돼야 한다
         assertEquals("applicant_address", result.columns().get(1).canonical());
         assertEquals("applicant_name", result.columns().get(2).canonical());
-        assertEquals("work_description", result.columns().get(3).canonical());
+        assertEquals("purpose", result.columns().get(3).canonical());
 
         TableFact name = factFor(result, "성명");
         assertNotNull(name);
@@ -166,7 +167,7 @@ class TableInterpreterTest {
         // 마침표로 읽힌 가운뎃점이 정규화돼 열별 표준 필드로 매핑돼야 한다
         assertEquals("approval_no", result.columns().get(0).canonical());
         assertEquals("location", result.columns().get(1).canonical());
-        assertEquals("work_description", result.columns().get(2).canonical());
+        assertEquals("purpose", result.columns().get(2).canonical());
         assertEquals("area", result.columns().get(3).canonical());
         assertEquals("work_period", result.columns().get(4).canonical());
         assertEquals("applicant_name", result.columns().get(5).canonical());
@@ -197,21 +198,44 @@ class TableInterpreterTest {
         assertTrue(result.records().isEmpty());
     }
 
-    /** 문서 요약이 미매핑 라벨을 모아 사전 보강 후보로 노출하는지 검증한다. */
+    /**
+     * 문서 요약이 미매핑 라벨을 모아 사전 보강 후보로 노출하는지 검증한다.
+     *
+     * <p>미매핑 예시는 방치선박 제거공고 서식에서 가져왔다 — '공작물의 종류'·'수면의 종류'는
+     * 전수 통계 반영 때 표준항목으로 승격돼 더 이상 미매핑이 아니다.
+     */
     @Test
     void summaryCollectsUnmappedLabelsForDictionaryReview() {
         RawTable table = Tables.gridToTable(List.of(
                 List.of("점용·사용 면적", "6,060.34㎡"),
-                List.of("공작물의 종류", "선가대(6기)"),
-                List.of("수면의 종류", "공유수면(인천북항 내)")));
+                List.of("관리번호", "제 - 호"),
+                List.of("선적항", "불명")));
 
-        TableDoc doc = TableDoc.of("고시양식.hml", "hml", false, "hml-dom",
+        TableDoc doc = TableDoc.of("방치선박 제거공고.hwpx", "hwpx", false, "owpml",
                 TableInterpreter.interpret(List.of(table)));
 
         assertEquals(1, doc.summary().tableCount());
         assertEquals(3, doc.summary().factCount());
         assertEquals(1, doc.summary().mappedCount());
         assertEquals(2, doc.summary().unmappedCount());
-        assertEquals(List.of("공작물의종류", "수면의종류"), doc.summary().unmappedLabels());
+        assertEquals(List.of("관리번호", "선적항"), doc.summary().unmappedLabels());
+    }
+
+    /**
+     * 전수 통계로 승격된 표준항목이 실제로 매핑되는지 확인한다 — 예전에는 extras로
+     * 흘러가던 라벨들이라, 되돌아가면 조용히 회귀한다.
+     */
+    @Test
+    void promotedStandardAttributesAreMappedNotUnmapped() {
+        RawTable table = Tables.gridToTable(List.of(
+                List.of("공작물의 종류", "선가대(6기)"),
+                List.of("수면의 종류", "공유수면(인천북항 내)"),
+                List.of("총사업비", "198백만원")));
+
+        InterpretedTable result = TableInterpreter.interpret(List.of(table)).get(0);
+
+        assertEquals("structure_type", factFor(result, "공작물의종류").canonical());
+        assertEquals("water_type", factFor(result, "수면의종류").canonical());
+        assertEquals("project_cost", factFor(result, "총사업비").canonical());
     }
 }

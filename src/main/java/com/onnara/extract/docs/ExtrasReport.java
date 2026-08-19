@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * 미매핑 라벨 검토 리포트 — 사전 보강(§9)의 근거 자료를 Markdown으로 낸다.
@@ -27,12 +28,20 @@ import java.util.Set;
  */
 public final class ExtrasReport {
 
-    /** 표준 필드 순서(= documents 컬럼 순서) — 채움률 표의 행 순서로 쓴다. */
-    private static final List<String> STANDARD_FIELDS = List.of(
-            "agency", "notice_no", "notice_date", "title", "signer",
-            "approval_no", "approval_date", "location", "area",
-            "work_description", "work_period_start", "work_period_end",
-            "applicant_name", "applicant_address", "remarks");
+    /**
+     * 채움률 표의 행 순서 — 사전 선언 순서를 그대로 따른다.
+     *
+     * <p>예전에는 목록을 여기 손으로 박아 뒀는데, 사전이 14필드에서 45필드로 늘 때
+     * 그 목록이 조용히 낡아 새 표준항목이 리포트에서 통째로 빠진다. 사전을 유일한
+     * 정의처로 두면 항목을 추가해도 리포트가 저절로 따라온다.
+     *
+     * <p>기간은 가상 필드라 사전의 {@code work_period} 자리에 분리된 두 컬럼을 대신 넣는다.
+     */
+    private static final List<String> STANDARD_FIELDS = Synonyms.fields().stream()
+            .flatMap(f -> f.virtual()
+                    ? Stream.of(Synonyms.WORK_PERIOD_START, Synonyms.WORK_PERIOD_END)
+                    : Stream.of(f.canonical()))
+            .toList();
 
     /** 사전 보강 후보로 우선 검토할 최소 반복 건수. */
     private static final int REPEAT_THRESHOLD = 3;
@@ -183,24 +192,12 @@ public final class ExtrasReport {
         });
     }
 
-    /** 레코드의 표준 필드 값을 컬럼 순서대로 펼친다. */
+    /** 레코드의 표준 필드 값을 리포트 행 순서대로 펼친다. */
     private static Map<String, String> fieldValues(NoticeRecord r) {
         Map<String, String> values = new LinkedHashMap<>();
-        values.put("agency", r.agency());
-        values.put("notice_no", r.noticeNo());
-        values.put("notice_date", r.noticeDate());
-        values.put("title", r.title());
-        values.put("signer", r.signer());
-        values.put("approval_no", r.approvalNo());
-        values.put("approval_date", r.approvalDate());
-        values.put("location", r.location());
-        values.put("area", r.area());
-        values.put("work_description", r.workDescription());
-        values.put("work_period_start", r.workPeriodStart());
-        values.put("work_period_end", r.workPeriodEnd());
-        values.put("applicant_name", r.applicantName());
-        values.put("applicant_address", r.applicantAddress());
-        values.put("remarks", r.remarks());
+        for (String field : STANDARD_FIELDS) {
+            values.put(field, r.get(field));
+        }
         return values;
     }
 

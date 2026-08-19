@@ -11,6 +11,7 @@ import com.onnara.extract.db.DataSourceFactory;
 import com.onnara.extract.db.DbLoader;
 import com.onnara.extract.db.DbSchema;
 import com.onnara.extract.db.LoadStats;
+import com.onnara.extract.db.ReferenceSync;
 import com.onnara.extract.detect.ScanSurvey;
 import com.onnara.extract.scan.ScanOcrConfig;
 import com.onnara.extract.scan.ScanOcrRunner;
@@ -140,8 +141,8 @@ public class PipelineCommand implements Callable<Integer> {
             }
         }
 
-        if (!noDb && !schemas.isEmpty()) {
-            loadToDatabase(props, schemas);
+        if (!noDb && !(schemas.isEmpty() && failures.isEmpty())) {
+            loadToDatabase(props, schemas, failures);
         }
         if (failuresFile != null) {
             PipelineSupport.writeFailures(failures, files.size(), failuresFile);
@@ -168,16 +169,48 @@ public class PipelineCommand implements Callable<Integer> {
         return ready;
     }
 
-    /** 커넥션 풀을 열어 스키마를 마이그레이션한 뒤 수집된 스키마 결과들을 documents/ref_files에 적재한다. */
-    private void loadToDatabase(AppProperties props, List<SchemaResult> schemas) throws Exception {
+    /**
+     * 커넥션 풀을 열어 스키마를 최신화하고 3계층으로 적재한다.
+     *
+     * <p>{@link ReferenceSync}는 반드시 적재보다 먼저 돈다 — {@code document_attributes}가
+     * {@code attribute_defs}를 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
+     *
+     * <p>실패 건도 함께 넘긴다. 성공한 파일만 적재하면 "첨부 401건 중 추출 0건"인 기관이
+     * DB에서 아예 보이지 않아, 추출 누락과 애초에 없던 자료를 구분할 수 없다.
+     */
+    private void loadToDatabase(AppProperties props, List<SchemaResult> schemas,
+                                List<Map<String, Object>> failures) throws Exception {
         try (HikariDataSource dataSource = DataSourceFactory.create(props)) {
             DbSchema.migrate(dataSource);
+            ReferenceSync.Counts reference = ReferenceSync.sync(dataSource);
             try (DbLoader loader = new DbLoader(dataSource)) {
-                LoadStats stats = loader.loadAll(schemas);
-                System.out.printf("DB 적재: %d개 파일, documents %d행, ref_files %d행 (적재제외 %d개)%n",
-                        stats.filesOk(), stats.documentsInserted(), stats.refFilesInserted(),
-                        stats.filesSkipped());
+                LoadStats stats = loader.loadAll(schemas, toFailedAttachments(failures));
+                System.out.printf("사전 동기화: 표준항목 %d종, 공고종류 %d종%n",
+                        reference.attributes(), reference.noticeTypes());
+                System.out.printf(
+                        "DB 적재: 첨부 %d건, 항목값 %d행, 이미지 %d행 (적재제외 %d건, 실패기록 %d건)%n",
+                        stats.filesOk(), stats.recordsInserted(), stats.imagesInserted(),
+                        stats.filesSkipped(), failures.size());
             }
         }
+    }
+
+    /** {@code --failures} 산출물과 같은 모양의 실패 행을 적재용 레코드로 옮긴다. */
+    private static List<DbLoader.FailedAttachment> toFailedAttachments(
+            List<Map<String, Object>> failures) {
+        List<DbLoader.FailedAttachment> rows = new ArrayList<>();
+        for (Map<String, Object> failure : failures) {
+            rows.add(new DbLoader.FailedAttachment(
+                    Path.of(String.valueOf(failure.get("file"))).getFileName().toString(),
+                    text(failure.get("stage")),
+                    text(failure.get("kind")),
+                    text(failure.get("message"))));
+        }
+        return rows;
+    }
+
+    /** 실패 행의 값을 문자열로 — 없으면 null(컬럼을 비운다). */
+    private static String text(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 }

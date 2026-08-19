@@ -8,6 +8,7 @@ import com.onnara.extract.db.DataSourceFactory;
 import com.onnara.extract.db.DbLoader;
 import com.onnara.extract.db.DbSchema;
 import com.onnara.extract.db.LoadStats;
+import com.onnara.extract.db.ReferenceSync;
 import com.zaxxer.hikari.HikariDataSource;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -50,12 +51,15 @@ public class LoadCommand implements Callable<Integer> {
 
         try (HikariDataSource dataSource = DataSourceFactory.create(props)) {
             DbSchema.migrate(dataSource);
+            // 사전 동기화가 적재보다 먼저다 — document_attributes가 attribute_defs를 참조한다
+            ReferenceSync.sync(dataSource);
             try (DbLoader loader = new DbLoader(dataSource)) {
-                LoadStats stats = loader.loadAll(schemas);
+                // 이 경로는 이미 만들어진 스키마 JSON만 읽으므로 판별·추출 실패 목록이 없다
+                LoadStats stats = loader.loadAll(schemas, List.of());
                 System.out.printf(
-                        "총 %d개 중 %d개 완료, %d개 실패, %d개 적재제외 (documents %d행, ref_files %d행)%n",
+                        "총 %d개 중 %d개 완료, %d개 실패, %d개 적재제외 (항목값 %d행, 이미지 %d행)%n",
                         schemaFiles.size(), stats.filesOk(), stats.filesFailed() + readFailed,
-                        stats.filesSkipped(), stats.documentsInserted(), stats.refFilesInserted());
+                        stats.filesSkipped(), stats.recordsInserted(), stats.imagesInserted());
                 return (stats.filesFailed() + readFailed) == 0 ? 0 : 1;
             }
         }

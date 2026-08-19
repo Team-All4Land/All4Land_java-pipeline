@@ -110,7 +110,9 @@ src/main/java/com/onnara/extract/
 
 src/main/resources/
 ├── application.properties   DB 접속·OCR CLI 실행 설정 (설정의 단일 출처)
-└── db/migration/            Flyway 마이그레이션 (V1__init.sql ~ V3)
+├── synonyms.json            표준항목 40종 + 문서 메타 5종 사전 (매핑의 단일 출처)
+├── notice_types.json        공고종류 55종 레지스트리
+└── db/migration/            Flyway 마이그레이션 (V1__init.sql)
 
 src/test/java/...   JUnit 5 — detect/engine/common/scan 단위 테스트 + samples/ 기반 회귀 테스트
 samples/             실제 고시문 픽스처 (형식·스캔 여부별)
@@ -130,7 +132,15 @@ ocr-cli/             스캔본 OCR용 PaddleOCR-VL Python CLI (ScanOcrRunner가 
 - (스캔본 처리 시) Python 3 + `ocr-cli/`의 PaddleOCR-VL 스크립트(설치는 `ocr-cli/requirements.txt`).
   없으면 스캔본 파일만 `[실패]` 처리되고 네이티브 파일은 정상 처리됩니다.
 - 한글 파일명 경로를 다루므로 로캘이 UTF-8이어야 합니다(`LANG=C.UTF-8` 등).
-  `mvn test`는 surefire 설정에 이미 반영되어 있어 별도 조치가 필요 없습니다.
+  `mvn test`는 surefire 설정에 이미 반영되어 있어 별도 조치가 필요 없지만,
+  **jar를 직접 실행할 때는 로캘이 필요합니다.** 없으면 한글 파일명을 열지 못해
+  `FileNotFoundException` / `InvalidPathException: Malformed input`으로 **전건 실패**합니다
+  (`-Dfile.encoding=UTF-8`만으로는 부족합니다 — 경로 인코딩은 `sun.jnu.encoding`이 결정하고
+  이 값은 `-D`로 재정의되지 않습니다).
+
+  ```bash
+  LANG=C.UTF-8 java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out
+  ```
 
 ## 빌드
 
@@ -532,20 +542,139 @@ java -jar target/extract-pipeline-1.0.0.jar render out/ -o out/     # out/<이�
 
 ## 데이터베이스 스키마 (PostgreSQL)
 
-Flyway 마이그레이션(`src/main/resources/db/migration/`)이 2테이블을 생성합니다.
+Flyway 마이그레이션(`src/main/resources/db/migration/V1__init.sql`)이 7테이블을 만듭니다.
 
-| 테이블 | 설명 |
+```mermaid
+erDiagram
+    agencies      ||--o{ notices : "발령"
+    notices       ||--o{ attachments : "첨부"
+    attachments   ||--o{ attachment_images : "포함"
+    attachments   ||--o{ document_attributes : "보유"
+    notice_types  ||--o{ attachments : "분류"
+    attribute_defs ||--o{ document_attributes : "정의"
+
+    agencies {
+        int agency_no PK "기관번호"
+        text name "기관명"
+        text kind_code "mof / local / central"
+    }
+    notices {
+        int notice_no PK "게시물번호 = 크롤 순번"
+        int agency_no FK "기관번호"
+        text board_code "게시중 / 게시완료"
+    }
+    notice_types {
+        text type_code PK "공고종류코드"
+        text name "공고종류명 - 55종"
+        text family "상위분류"
+    }
+    attachments {
+        int notice_no PK "게시물번호"
+        int attach_no PK "첨부파일번호"
+        text file_name "첨부파일명"
+        text status_code "ok / failed / skipped"
+        text fail_stage "실패 단계"
+        text fail_kind "실패 갈래"
+        text skip_reason "적재제외 사유"
+        text ext_outer "확장자 기준 형식"
+        text ext_inner "내용 판정 형식"
+        bool is_scanned "스캔 여부"
+        text engine "추출 엔진"
+        text type_code FK "공고종류"
+        text agency_name "본문에서 읽은 기관명"
+        text doc_no "고시번호"
+        date doc_date "고시일자"
+        text title "제목"
+        text signer "고시자"
+        int record_count "산출 레코드 수"
+    }
+    attachment_images {
+        int notice_no PK "게시물번호"
+        int attach_no PK "첨부파일번호"
+        int image_no PK "이미지번호"
+        text caption "이미지 이름"
+        text abs_path "저장 절대경로"
+    }
+    attribute_defs {
+        text attr_code PK "표준항목코드"
+        text name "표준항목명 - 40종"
+        text series "계열"
+        text value_type "text/date/date_range/number"
+        bool is_core "주요 항목 여부"
+    }
+    document_attributes {
+        int notice_no PK "게시물번호"
+        int attach_no PK "첨부파일번호"
+        int record_no PK "레코드번호"
+        text attr_code PK "표준항목코드"
+        int seq PK "반복 순번"
+        text value "정규화 값"
+    }
+```
+
+| 테이블 | 무엇의 단위인가 |
 |---|---|
-| `documents` | 문서 1레코드 = 1행. 15개 표준 필드(`agency`, `notice_no`, `notice_date`, `title`, `approval_no`, `location`, `area`, `work_period_start/end` 등) + `engine`/`is_scanned` + `file_type`/`detected_format` + 매핑 안 된 라벨을 보존하는 `extras JSONB` |
-| `ref_files` | 이미지 1개 = 1행. `documents.seq`를 참조하며 `ON DELETE CASCADE` |
+| `agencies` | 기관. 크롤러가 채운다 — 추출 파이프라인은 어느 게시판을 긁었는지 모른다 |
+| `notices` | 게시물 = 크롤 순번. 같은 게시물의 첨부를 묶는 키로만 쓴다 |
+| `attachments` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목·고시자)와 추출 상태 |
+| `attachment_images` | 첨부에 딸린 이미지 |
+| `notice_types` | 공고종류 55종 (`notice_types.json`이 정의처) |
+| `attribute_defs` | 표준항목 40종 (`synonyms.json`이 정의처) |
+| `document_attributes` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
 
-`file_type`은 **파일명 확장자**, `detected_format`은 **내용으로 판정한 실제 형식**입니다
-(`V3__documents_detected_format.sql`). 기존 적재 데이터·집계 쿼리와의 호환을 위해
-`file_type`의 의미는 그대로 두고 새 컬럼을 더했습니다.
+### 왜 값 컬럼이 아니라 EAV인가
 
-적재 규칙: 같은 `source_file` 재적재 시 기존 행을 삭제 후 재삽입(멱등,
-CASCADE로 `ref_files` 자동 정리). 파일 단위로 세이브포인트를 잡아 한 파일의
-실패가 배치 전체를 막지 않습니다.
+전수 분석(정상 19,216건) 결과 **전역 출현율 60%를 넘는 표준항목은 6개뿐**이고 최하위는
+0.01%입니다. 종류마다 등장하는 집합도 다릅니다 — 같은 인천지방해양수산청 안에서도
+`점용·사용 허가`는 면적·기간이 필수인데 `허가취소`는 취소일자 하나뿐입니다.
+40컬럼으로 펴면 대부분 NULL이 되고, 항목 레지스트리 자체가 분석 회차마다 바뀝니다
+(08.06판 43항목 → 08.07판 40항목). 행으로 담으면 항목이 늘어도 DDL이 그대로입니다.
+
+날짜 범위 질의는 부분 인덱스가 받칩니다. 정규화에 실패한 값은 ISO 형태가 아니라
+자동으로 인덱스에서 빠집니다.
+
+```sql
+-- 2026년에 만료되는 점용·사용 허가
+SELECT a.file_name, d.value
+  FROM document_attributes d
+  JOIN attachments a USING (notice_no, attach_no)
+ WHERE d.attr_code = 'work_period'
+   AND d.value::daterange && '[2026-01-01,2027-01-01)'::daterange;
+```
+
+### 계열(`series`)이 필요한 이유
+
+준공·완료 수리 문서에는 `점용·사용 면적`이 아니라 `준공면적`이 옵니다. 누락 검증을
+항목 단위로 하면 "면적 누락"으로 오탐하므로, **계열 단위로** 봐야 합니다.
+워크북 비고가 명시한 계열이 9개입니다(면적·인적·기간·위치·주소·날짜·연락·사유, 나머지는 단독).
+
+### 적재 규칙
+
+- **멱등 단위는 첨부파일**(`notice_no`, `attach_no`)입니다. 재적재 시 첨부 행을 지우면
+  이미지와 항목값이 CASCADE로 함께 정리됩니다. 게시물 단위로 지우면 파일을 한 건씩
+  처리하는 도중 같은 게시물의 앞선 첨부가 함께 날아갑니다.
+- **실패·적재제외도 행으로 남깁니다**(`status_code`). 성공만 넣으면 "첨부 401건 중
+  추출 0건"인 기관이 DB에서 아예 보이지 않아, 추출 누락과 애초에 없던 자료를 구분할 수 없습니다.
+- 첨부 단위로 세이브포인트를 잡아 한 건의 실패가 배치 전체를 막지 않습니다.
+- 사전 동기화(`ReferenceSync`)가 적재보다 **먼저** 돕니다 — `document_attributes`가
+  `attribute_defs`를 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패합니다.
+
+미수집 첨부는 컬럼이 아니라 **첨부순번 결번**으로 잡습니다:
+
+```sql
+SELECT notice_no, count(*) AS 수집, max(attach_no) AS 최대순번
+  FROM attachments GROUP BY notice_no HAVING count(*) <> max(attach_no);
+```
+
+### 개발 DB 초기화
+
+스키마가 이전 버전(`documents`/`ref_files`)과 호환되지 않습니다. 전건 재적재가 전제이므로
+이관 SQL은 없고, 기존 개발 DB는 스키마를 비우고 다시 만듭니다.
+
+```bash
+psql -U extract -d extract -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out
+```
 
 ## 테스트
 
