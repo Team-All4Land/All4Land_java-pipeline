@@ -25,14 +25,14 @@ class LoadPolicyTest {
         raw.getContent().add(new RawTable(1, 2, null,
                 List.of(List.of("관 리 청", "군산"))));                    // 3 + 2 = 5자
 
-        assertEquals(11, DocumentSize.bodyChars(raw));
+        assertEquals(11, DocumentSize.bodyCharCnt(raw));
     }
 
     /** content가 비어 있어도 0을 돌려주고 터지지 않아야 한다. */
     @Test
     void handlesEmptyAndNullDocuments() {
-        assertEquals(0, DocumentSize.bodyChars(null));
-        assertEquals(0, DocumentSize.bodyChars(new RawDocument("빈.pdf", "pdf", false)));
+        assertEquals(0, DocumentSize.bodyCharCnt(null));
+        assertEquals(0, DocumentSize.bodyCharCnt(new RawDocument("빈.pdf", "pdf", false)));
     }
 
     /**
@@ -47,9 +47,9 @@ class LoadPolicyTest {
             RawDocument raw = document("고시문.hml", chars);
             SchemaResult schema = policy.apply(schemaFor(raw), raw);
 
-            assertEquals(chars, schema.getBodyChars());
-            assertNull(schema.getDbSkipReason(), chars + "자는 적재 대상이어야 함");
-            assertFalse(schema.isDbSkipped());
+            assertEquals(chars, schema.getBodyCharCnt());
+            assertNull(schema.getExclRsn(), chars + "자는 적재 대상이어야 함");
+            assertFalse(schema.isExcluded());
         }
     }
 
@@ -64,9 +64,9 @@ class LoadPolicyTest {
         SchemaResult schema = new LoadPolicy(LoadPolicy.DEFAULT_MAX_BODY_CHARS)
                 .apply(schemaFor(raw), raw);
 
-        assertEquals(8_355, schema.getBodyChars());
-        assertTrue(schema.isDbSkipped());
-        assertEquals("본문 8,355자 (임계 5,000자 초과)", schema.getDbSkipReason());
+        assertEquals(8_355, schema.getBodyCharCnt());
+        assertTrue(schema.isExcluded());
+        assertEquals("본문 8,355자 (임계 5,000자 초과)", schema.getExclRsn());
     }
 
     /** 경계값은 포함(초과일 때만 제외) — 임계치 정의를 애매하게 두면 재현이 안 된다. */
@@ -101,9 +101,9 @@ class LoadPolicyTest {
                 List.of(new RawCell(0, 0, 1, 3, "관리청")),
                 List.of(List.of("관리청", "관리청", "관리청"))));
 
-        assertEquals(9, DocumentSize.bodyChars(raw));
+        assertEquals(9, DocumentSize.bodyCharCnt(raw));
         assertNull(new LoadPolicy(LoadPolicy.DEFAULT_MAX_BODY_CHARS)
-                .skipReasonFor(DocumentSize.bodyChars(raw)));
+                .skipReasonFor(DocumentSize.bodyCharCnt(raw)));
     }
 
     /** 지정한 글자 수만큼 본문을 가진 문서를 만든다. */
@@ -115,6 +115,6 @@ class LoadPolicyTest {
 
     /** 매퍼가 만들었을 법한 빈 스키마. */
     private static SchemaResult schemaFor(RawDocument raw) {
-        return new SchemaResult(raw.getSourceFile(), raw.getFileType(), raw.isScanned(), "pdfbox");
+        return new SchemaResult(raw.getFileNm(), raw.getFileExtn(), raw.isScanYn(), "pdfbox");
     }
 }

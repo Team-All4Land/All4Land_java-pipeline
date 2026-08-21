@@ -23,9 +23,9 @@ import java.util.regex.Pattern;
 /**
  * raw JSON(§4) → 표준 스키마(§5) 매핑.
  *
- * <p>흐름: ① 문단 메타(기관·고시번호·고시일·고시자·제목) → ② 문단 라벨:값 →
- * ③ 표 해석 결과 적용 → ④ 정규화(날짜 ISO, 기간 분리, 주소 폴백).
- * 매핑 안 된 라벨은 extras 보존.
+ * <p>흐름: ① 문단 메타(기관·고시번호·고시일·고시자·제목) → ② 문단 라벨:값
+ * (고시 블록이 반복되는 서식이면 처분별로 가름) → ③ 표 해석 결과 적용 →
+ * ④ 정규화(날짜 ISO, 기간 분리, 주소 폴백). 매핑 안 된 라벨은 extras 보존.
  *
  * <p>표를 읽는 규칙 자체는 {@link TableInterpreter}가 담당한다. 이 클래스는 그
  * 해석 결과(어느 칸에서 무슨 라벨을 읽었고 어느 필드로 매핑됐는지)를 레코드에
@@ -75,7 +75,8 @@ public final class Mapper {
 
         NoticeRecord.Builder base = new NoticeRecord.Builder();
 
-        applyDocumentMeta(base, metaLines(paragraphs, tables), tables, mappedFields(interpreted));
+        List<String> bodyLines = metaLines(paragraphs, tables);
+        applyDocumentMeta(base, bodyLines, tables, mappedFields(interpreted));
         applyParagraphLabels(base, paragraphs);
 
         List<NoticeRecord.Builder> tableRecords = new ArrayList<>();
@@ -90,26 +91,32 @@ public final class Mapper {
                 }
             }
         }
+        // 목록표가 없을 때만 본문 블록을 본다 — 표가 있으면 표가 처분의 단위다
+        List<NoticeRecord.Builder> records =
+                tableRecords.isEmpty() ? dispositionBlocks(bodyLines) : tableRecords;
 
         normalize(base, paragraphs);
 
         SchemaResult result = new SchemaResult(
-                raw.getSourceFile(), raw.getFileType(), raw.isScanned(), engine);
-        result.setDetectedFormat(raw.getDetectedFormat());
+                raw.getFileNm(), raw.getFileExtn(), raw.isScanYn(), engine);
+        result.setRealExtn(raw.getRealExtn());
         // 적재 키는 여기서 한 번만 확정한다 — 폴백 순번이 호출마다 새로 발급되므로,
         // 적재 시점에 다시 파싱하면 pipeline 경로와 map→load 경로가 다른 게시물로 갈린다
-        SourceFileName.Parsed key = SourceFileName.parse(raw.getSourceFile());
-        result.setNoticeNo(key.noticeNo());
-        result.setAttachNo(key.attachNo());
-        if (tableRecords.isEmpty()) {
+        SourceFileName.Parsed key = SourceFileName.parse(raw.getFileNm());
+        result.setNotiSn(key.notiSn());
+        result.setAtchSn(key.atchSn());
+        if (records.isEmpty()) {
             result.getRecords().add(base.build());
         } else {
-            for (NoticeRecord.Builder row : tableRecords) {
+            for (NoticeRecord.Builder row : records) {
                 inheritMeta(row, base);
                 normalize(row, List.of());
                 result.getRecords().add(row.build());
             }
         }
+        // 공고종류도 여기서 확정한다 — 순번과 같은 이유로, 적재 때 다시 분류하면
+        // pipeline 경로와 map→load 경로가 다른 종류를 받을 수 있다
+        result.setNotiKndCd(NoticeTypes.classify(base.get("NOTI_TTL")).orElse(null));
         result.setImages(new ArrayList<>(raw.getImages()));
         return result;
     }
@@ -128,7 +135,7 @@ public final class Mapper {
                 continue;
             }
             for (List<String> row : table.getGrid()) {
-                for (String cell : dedupeConsecutive(trimRow(row))) {
+                for (String cell : Tables.dedupeConsecutive(row)) {
                     if (cell.isEmpty()) {
                         continue;
                     }
@@ -162,8 +169,8 @@ public final class Mapper {
             }
             for (TableRecord record : table.records()) {
                 for (TableFact fact : record.fields()) {
-                    if (fact.canonical() != null) {
-                        fields.add(fact.canonical());
+                    if (fact.itemCd() != null) {
+                        fields.add(fact.itemCd());
                     }
                 }
             }
@@ -174,8 +181,8 @@ public final class Mapper {
     /** 표 해석 결과의 라벨:값들을 레코드에 반영한다(매핑된 것은 필드로, 나머지는 extras로). */
     private static void applyFacts(NoticeRecord.Builder builder, List<TableFact> facts) {
         for (TableFact fact : facts) {
-            if (fact.canonical() != null) {
-                builder.set(fact.canonical(), fact.value());
+            if (fact.itemCd() != null) {
+                builder.set(fact.itemCd(), fact.value());
             } else {
                 builder.extra(fact.label(), fact.value());
             }
@@ -198,30 +205,33 @@ public final class Mapper {
                                           Set<String> mappedByTables) {
         int noticeNoIdx = -1;
         for (int i = 0; i < paragraphs.size(); i++) {
-            Optional<String[]> hit = Heuristics.agencyAndNoticeNo(paragraphs.get(i));
+            // 앞 줄까지 넘기는 이유: "고 시 문" 머리글 아래에 고시·공고 낱말 없이
+            // "평택지방해양수산청 제2018 - 2호"만 오는 서식이 있다
+            Optional<String[]> hit = Heuristics.agencyAndNoticeNo(
+                    i > 0 ? paragraphs.get(i - 1) : null, paragraphs.get(i));
             if (hit.isPresent()) {
-                base.set("agency", hit.get()[0]);
-                base.set("notice_no", hit.get()[1]);
+                base.set("BODY_AGNCY_NM", hit.get()[0]);
+                base.set("NOTI_NO", hit.get()[1]);
                 noticeNoIdx = i;
                 break;
             }
         }
         for (int i = Math.max(0, noticeNoIdx); i < paragraphs.size(); i++) {
             String text = paragraphs.get(i);
-            if (!base.has("notice_date") && !Labels.isLabelLine(text)
+            if (!base.has("NOTI_YMD") && !Labels.isLabelLine(text)
                     && Dates.toIso(text).isPresent()
                     && text.replaceAll("[\\d\\s.년월일:～~’'-]", "").isEmpty()) {
-                base.set("notice_date", text);
+                base.set("NOTI_YMD", text);
             }
-            if (!base.has("signer") && Heuristics.looksLikeSigner(text)) {
-                base.set("signer", Heuristics.cleanSigner(text));
+            if (!base.has("NOTI_PSN") && Heuristics.looksLikeSigner(text)) {
+                base.set("NOTI_PSN", Heuristics.cleanSigner(text));
             }
         }
 
         // 표가 제목 라벨을 갖고 있으면 추측하지 않는다. "고시번호 다음 줄"은 어디까지나 위치
         // 추측이라, 그 자리에 다른 라벨이 오는 서식(예: 신문공고 게재 언론기관)에서 엉뚱한 값을
         // 제목으로 굳혀 버린다. set()이 선착순이라 여기서 채우면 표 값이 들어올 자리가 없어진다.
-        if (mappedByTables.contains("title")) {
+        if (mappedByTables.contains("NOTI_TTL")) {
             return;
         }
         String title = Heuristics.guessTitleFromTables(tables);
@@ -233,7 +243,7 @@ public final class Mapper {
                 title = Heuristics.collapseSpacedText(next);
             }
         }
-        base.set("title", title);
+        base.set("NOTI_TTL", title);
     }
 
     // ── ② 문단 라벨:값 ───────────────────────────────────────────
@@ -246,13 +256,13 @@ public final class Mapper {
     }
 
     /**
-     * 라벨을 canonical 필드로 매핑해 값을 세팅한다. 매핑되지 않으면 정규화 라벨을
+     * 라벨을 itemCd 필드로 매핑해 값을 세팅한다. 매핑되지 않으면 정규화 라벨을
      * extras에 보존한다({@link Labels#acceptableExtra} 오탐 가드 적용).
      */
     private static void applyLabel(NoticeRecord.Builder builder, String label, String value) {
-        Optional<String> canonical = Synonyms.canonicalFor(label);
-        if (canonical.isPresent()) {
-            builder.set(canonical.get(), value);
+        Optional<String> itemCd = Synonyms.canonicalFor(label);
+        if (itemCd.isPresent()) {
+            builder.set(itemCd.get(), value);
             return;
         }
         String normalized = Synonyms.normalizeLabel(label);
@@ -261,30 +271,67 @@ public final class Mapper {
         }
     }
 
-    // ── ③ 표 격자 유틸 ───────────────────────────────────────────
+    // ── ②-2 다건 처분 블록 ───────────────────────────────────────
 
-    /** 행의 각 셀에서 null→"" 치환과 앞뒤 공백 제거를 수행한다. */
-    private static List<String> trimRow(List<String> row) {
-        List<String> trimmed = new ArrayList<>(row.size());
-        for (String cell : row) {
-            trimmed.add(cell == null ? "" : cell.trim());
+    /**
+     * 한 파일에 고시 블록이 통째로 반복되는 서식을 처분별 레코드로 가른다.
+     *
+     * <p>실입력에 이런 문서가 있다 — 군산시 풍황계측기 고시 8건은 "1. 승인연월일 …"부터
+     * "6. 승인을 받은 자"까지가 허가번호만 바꿔 여덟 번 반복되고, 한반도해상풍력 고시는 같은
+     * 블록이 1×1 표 세 칸에 나뉘어 들어 있다. 예전에는 {@code set()}이 선착순이라 첫 블록만
+     * 남고 나머지 처분이 통째로 사라졌다.
+     *
+     * @return 블록이 하나뿐이면 빈 목록 — 호출부가 지금까지처럼 문서 레코드 1건을 쓰게 둔다
+     */
+    private static List<NoticeRecord.Builder> dispositionBlocks(List<String> lines) {
+        List<List<Labels.Numbered>> blocks = splitDispositions(lines);
+        if (blocks.size() < 2) {
+            return List.of();
         }
-        return trimmed;
+        List<NoticeRecord.Builder> rows = new ArrayList<>(blocks.size());
+        for (List<Labels.Numbered> block : blocks) {
+            NoticeRecord.Builder row = new NoticeRecord.Builder();
+            for (Labels.Numbered pair : block) {
+                applyLabel(row, pair.label(), pair.value());
+            }
+            rows.add(row);
+        }
+        return rows;
     }
 
     /**
-     * 연속 중복 셀을 하나로 줄인다 — 병합 셀(col_span)이 같은 내용을 옆 칸으로
-     * 반복 복제한 격자에서 메타 줄을 모을 때 쓴다. 빈 칸은 값 자리 구분자
-     * 역할을 하므로 그대로 남긴다(연속 빈 칸만 하나로).
+     * 처분 블록 경계를 잡는다.
+     *
+     * <p>경계 조건은 셋을 모두 만족해야 한다: <b>열거 번호가 1로 되돌아가고</b>,
+     * 그 줄의 라벨이 <b>처분 단위 표준항목으로 매핑되고</b>, 그 항목이 <b>현재 블록에 이미
+     * 값을 갖고 있다</b>. 셋 중 하나라도 빼면 붙임 목록·중첩 번호까지 물려 멀쩡한 문서가
+     * 갈린다 — 실입력 1,816건에 "번호가 1로 되돌아감"만 걸면 68건이 잘못 갈라지고,
+     * 셋을 다 걸면 실제 다건 처분 문서 9건만 갈라진다.
      */
-    private static List<String> dedupeConsecutive(List<String> row) {
-        List<String> out = new ArrayList<>(row.size());
-        for (String cell : row) {
-            if (out.isEmpty() || !out.get(out.size() - 1).equals(cell)) {
-                out.add(cell);
+    private static List<List<Labels.Numbered>> splitDispositions(List<String> lines) {
+        List<List<Labels.Numbered>> blocks = new ArrayList<>();
+        List<Labels.Numbered> current = new ArrayList<>();
+        Set<String> filled = new HashSet<>();
+        for (Labels.Numbered pair : Labels.scanNumbered(lines)) {
+            String itemCd = Synonyms.canonicalFor(pair.label())
+                    .filter(Mapper::isDispositionField).orElse(null);
+            if (pair.number() == 1 && itemCd != null && filled.contains(itemCd)) {
+                blocks.add(current);
+                current = new ArrayList<>();
+                filled.clear();
+            }
+            current.add(pair);
+            if (itemCd != null) {
+                filled.add(itemCd);
             }
         }
-        return out;
+        blocks.add(current);
+        return blocks;
+    }
+
+    /** 처분 단위 항목인지 — 문서 메타(기관·고시번호·제목 등)는 블록 경계 근거가 될 수 없다. */
+    private static boolean isDispositionField(String itemCd) {
+        return Synonyms.field(itemCd).map(Synonyms.FieldSpec::isAttribute).orElse(false);
     }
 
     // ── ④ 정규화 ─────────────────────────────────────────────────
@@ -295,26 +342,26 @@ public final class Mapper {
      */
     private static void normalize(NoticeRecord.Builder builder, List<String> paragraphs) {
         splitApprovalNoDate(builder);
-        normalizeDate(builder, "notice_date");
-        normalizeDate(builder, "approval_date");
+        normalizeDate(builder, "NOTI_YMD");
+        normalizeDate(builder, "APPROVAL_DATE");
 
         String period = builder.get(Synonyms.WORK_PERIOD);
         if (period != null) {
             builder.overwrite(Synonyms.WORK_PERIOD, null);
             Optional<String[]> halves = Dates.splitRange(period);
             if (halves.isPresent()) {
-                Dates.toIso(halves.get()[0]).ifPresent(v -> builder.set("work_period_start", v));
-                Dates.toIso(halves.get()[1]).ifPresent(v -> builder.set("work_period_end", v));
+                Dates.toIso(halves.get()[0]).ifPresent(v -> builder.set("WORK_PERIOD_START", v));
+                Dates.toIso(halves.get()[1]).ifPresent(v -> builder.set("WORK_PERIOD_END", v));
             }
-            if (!builder.has("work_period_start") && !builder.has("work_period_end")) {
+            if (!builder.has("WORK_PERIOD_START") && !builder.has("WORK_PERIOD_END")) {
                 builder.extra(Synonyms.WORK_PERIOD, period);
             }
         }
 
-        if (!builder.has("applicant_address")) {
-            String name = builder.get("applicant_name");
+        if (!builder.has("APPLICANT_ADDRESS")) {
+            String name = builder.get("APPLICANT_NAME");
             if (name != null) {
-                Address.extract(name).ifPresent(v -> builder.set("applicant_address", v));
+                Address.extract(name).ifPresent(v -> builder.set("APPLICANT_ADDRESS", v));
             }
         }
     }
@@ -325,7 +372,7 @@ public final class Mapper {
      * approval_no에서 떼어 approval_date로 옮긴다.
      */
     private static void splitApprovalNoDate(NoticeRecord.Builder builder) {
-        String approvalNo = builder.get("approval_no");
+        String approvalNo = builder.get("APPROVAL_NO");
         if (approvalNo == null) {
             return;
         }
@@ -337,8 +384,8 @@ public final class Mapper {
         if (number.isEmpty()) {
             return;
         }
-        builder.set("approval_date", m.group(1).trim());
-        builder.overwrite("approval_no", number);
+        builder.set("APPROVAL_DATE", m.group(1).trim());
+        builder.overwrite("APPROVAL_NO", number);
     }
 
     /** 날짜 필드를 ISO로 변환한다. 변환 불가면 필드를 비우고 원문을 extras로 보존한다. */
@@ -358,7 +405,7 @@ public final class Mapper {
 
     /** 헤더형 표 레코드에 문서 메타(기관·번호·일자·제목·고시자)를 상속. */
     private static void inheritMeta(NoticeRecord.Builder row, NoticeRecord.Builder base) {
-        for (String field : List.of("agency", "notice_no", "notice_date", "title", "signer")) {
+        for (String field : List.of("BODY_AGNCY_NM", "NOTI_NO", "NOTI_YMD", "NOTI_TTL", "NOTI_PSN")) {
             String value = base.get(field);
             if (value != null) {
                 row.set(field, value);

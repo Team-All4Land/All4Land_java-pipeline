@@ -93,8 +93,8 @@ class ContentRoutingTest {
             SchemaResult schema = Mapper.mapToSchema(raw, extractor.engineName());
             NoticeRecord record = schema.getRecords().get(0);
 
-            assertEquals("여수지방해양수산청", record.agency(), file.toString());
-            assertNotNull(record.noticeNo(), file.toString());
+            assertEquals("여수지방해양수산청", record.bodyAgncyNm(), file.toString());
+            assertNotNull(record.notiNo(), file.toString());
             assertNotNull(record.applicantName(), file.toString());
         }
     }

@@ -68,10 +68,10 @@ class Hwp3ReaderTest {
     void restoresMergedCellSpans() throws IOException {
         Hwp3Document.Table table = firstTable(read());
 
-        Hwp3Document.Cell noticeNo = cellAt(table, 1, 3);
-        assertEquals(1, noticeNo.rowSpan());
-        assertEquals(2, noticeNo.colSpan());
-        assertEquals("동해시 고시 제2023-74호", noticeNo.text());
+        Hwp3Document.Cell notiSn = cellAt(table, 1, 3);
+        assertEquals(1, notiSn.rowSpan());
+        assertEquals(2, notiSn.colSpan());
+        assertEquals("동해시 고시 제2023-74호", notiSn.text());
 
         Hwp3Document.Cell body = cellAt(table, 4, 0);
         assertEquals(4, body.rowSpan());
@@ -110,7 +110,7 @@ class Hwp3ReaderTest {
      */
     @Test
     void countsTableCellTextAsBody() throws IOException {
-        assertTrue(read().bodyChars() > 300, "본문 글자 수가 너무 적습니다");
+        assertTrue(read().bodyCharCnt() > 300, "본문 글자 수가 너무 적습니다");
     }
 
     /** 서명이 다른 파일은 읽지 않는다 — 라우팅이 어긋났을 때 조용히 쓰레기를 내면 안 된다. */

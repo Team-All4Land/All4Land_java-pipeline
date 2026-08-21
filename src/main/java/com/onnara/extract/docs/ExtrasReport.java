@@ -40,7 +40,7 @@ public final class ExtrasReport {
     private static final List<String> STANDARD_FIELDS = Synonyms.fields().stream()
             .flatMap(f -> f.virtual()
                     ? Stream.of(Synonyms.WORK_PERIOD_START, Synonyms.WORK_PERIOD_END)
-                    : Stream.of(f.canonical()))
+                    : Stream.of(f.itemCd()))
             .toList();
 
     /** 사전 보강 후보로 우선 검토할 최소 반복 건수. */
@@ -79,7 +79,7 @@ public final class ExtrasReport {
                 record.extras().forEach((label, value) -> {
                     counts.merge(label, 1, Integer::sum);
                     documents.computeIfAbsent(label, k -> new LinkedHashSet<>())
-                            .add(schema.getSourceFile());
+                            .add(schema.getFileNm());
                     examples.putIfAbsent(label, value);
                 });
             }
@@ -173,11 +173,11 @@ public final class ExtrasReport {
      * 사전에 그 이름이 없다. 접미사를 떼어 원 필드의 표시명에 방향을 덧붙인다.
      */
     private static String displayFor(String field) {
-        return Synonyms.field(field).map(Synonyms.FieldSpec::display).orElseGet(() -> {
-            if (field.startsWith("work_period")) {
+        return Synonyms.field(field).map(Synonyms.FieldSpec::itemNm).orElseGet(() -> {
+            if (field.startsWith("WORK_PERIOD")) {
                 String suffix = field.endsWith("_start") ? " (시작)" : " (종료)";
                 return Synonyms.field(Synonyms.WORK_PERIOD)
-                        .map(Synonyms.FieldSpec::display).orElse(field) + suffix;
+                        .map(Synonyms.FieldSpec::itemNm).orElse(field) + suffix;
             }
             return field;
         });

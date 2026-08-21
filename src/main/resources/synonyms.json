@@ -2,16 +2,18 @@
   "version": "2026-08-13",
   "description": "고시문 라벨 → 표준 항목 동의어 사전. 이 파일이 단일 정의처이며, Synonyms 클래스가 기동 시 읽고 ReferenceSync가 attribute_defs 테이블로 동기화한다.",
   "conventions": {
-    "scope": "attachment = 문서 단위 메타(attachments 컬럼). attribute = 처분 단위 값(document_attributes 행). attribute_defs 테이블에는 scope=attribute만 동기화된다.",
+    "scope": "attachment = 문서 단위 메타(TB_ATCH_FILE 컬럼). attribute = 처분 단위 값(TB_NOTI_ITEM_VAL 행). TB_NOTI_ITEM 테이블에는 scope=attribute만 동기화된다.",
     "series": "같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음. 누락 검증을 항목이 아니라 계열 단위로 해야 '준공·완료 수리 문서에 점용·사용 면적이 없다' 같은 오탐이 없다.",
     "value_type": "text는 원문 보존, date는 ISO 정규화, date_range는 daterange로 적재한다.",
     "synonym_form": "동의어는 사람이 읽는 형태로 적는다. 적재 시 normalizeLabel()이 선행 기호·공백·가운뎃점 변형을 흡수하므로 □·※·○ 같은 머리기호나 \"성 명\" 같은 자간 벌림은 적지 않아도 된다. 전수 표본에서 기계로 뽑은 라벨은 공백을 접은 형태로 실려 있고, 손으로 보탠 어구만 자연스러운 띄어쓰기를 유지한다.",
     "uniqueness": "정규화 결과가 두 필드에 중복 등록되면 기동 시 오류로 중단된다.",
-    "how_to_add": "docs/EXTRAS_REVIEW.md에서 빈도 높은 미매핑 라벨을 확인하고 해당 필드의 synonyms 배열에 추가한 뒤 재적재한다."
+    "how_to_add": "docs/EXTRAS_REVIEW.md에서 빈도 높은 미매핑 라벨을 확인하고 해당 필드의 synonyms 배열에 추가한 뒤 재적재한다.",
+    "canonical_form": "코드는 대문자다. scope=attribute는 뜻을 그대로 대문자화하고, scope=attachment 5종은 도착 컬럼명을 그대로 쓴다 — 값이 아니라 컬럼으로 직행하므로 코드와 컬럼 이름이 어긋나면 매핑을 읽을 수 없다.",
+    "stored": "false면 추출만 하고 적재하지 않는다. BODY_AGNCY_NM·NOTI_PSN이 그렇다 — 기관 추적은 입력 폴더에서 온 TB_AGNCY로 충분해 컬럼을 뺐지만, 사전에서까지 빼면 매핑이 깨진다. Heuristics.agencyAndNoticeNo가 기관과 고시번호를 한 정규식으로 함께 떼어 내고, looksLikeSigner는 제목이 서명 줄을 삼키는 것을 막는 가드로 쓰인다."
   },
   "fields": [
     {
-      "canonical": "agency",
+      "canonical": "BODY_AGNCY_NM",
       "display": "고시기관",
       "scope": "attachment",
       "value_type": "text",
@@ -26,10 +28,11 @@
         "군산지방해양수산청",
         "부산광역시 강서구"
       ],
-      "notes": "'관리청'은 방치선박 제거공고 서식에서 관측된다."
+      "notes": "'관리청'은 방치선박 제거공고 서식에서 관측된다.",
+      "stored": false
     },
     {
-      "canonical": "notice_no",
+      "canonical": "NOTI_NO",
       "display": "고시번호",
       "scope": "attachment",
       "value_type": "text",
@@ -44,7 +47,7 @@
       "notes": "'관리번호'는 방치선박 서식의 별개 필드이므로 등재하지 않는다."
     },
     {
-      "canonical": "notice_date",
+      "canonical": "NOTI_YMD",
       "display": "고시일자",
       "scope": "attachment",
       "value_type": "date",
@@ -63,7 +66,7 @@
       "notes": "지자체별 표기 차이가 가장 큰 필드다."
     },
     {
-      "canonical": "title",
+      "canonical": "NOTI_TTL",
       "display": "제목",
       "scope": "attachment",
       "value_type": "text",
@@ -79,7 +82,7 @@
       "notes": "공고종류 분류기의 입력값이므로 비면 분류가 불가능하다."
     },
     {
-      "canonical": "signer",
+      "canonical": "NOTI_PSN",
       "display": "고시자",
       "scope": "attachment",
       "value_type": "text",
@@ -90,10 +93,11 @@
       "description": "고시문 말미의 발령권자 직함.",
       "examples": [
         "군산지방해양수산청장"
-      ]
+      ],
+      "stored": false
     },
     {
-      "canonical": "location",
+      "canonical": "LOCATION",
       "display": "점용·사용 장소",
       "scope": "attribute",
       "series": "위치",
@@ -126,7 +130,7 @@
       "notes": "'발견장소'는 방치선박 제거공고, '점용지번'은 부산 강서구 허가고시 서식에서 관측."
     },
     {
-      "canonical": "area",
+      "canonical": "AREA",
       "display": "점용·사용 면적",
       "scope": "attribute",
       "series": "면적",
@@ -154,7 +158,7 @@
       "notes": "수치 정규화는 하지 않는다 — 원문 표기가 근거자료로서 의미가 있어 TEXT로 둔다."
     },
     {
-      "canonical": "purpose",
+      "canonical": "PURPOSE",
       "display": "점용·사용 목적",
       "scope": "attribute",
       "series": null,
@@ -178,7 +182,7 @@
       "notes": "워크북 기준 별개 표준항목이다 — 예전 work_description으로 뭉쳐 두던 것을 분리했다."
     },
     {
-      "canonical": "applicant_name",
+      "canonical": "APPLICANT_NAME",
       "display": "허가·승인 대상자 성명",
       "scope": "attribute",
       "series": "인적",
@@ -218,7 +222,7 @@
       "notes": "'성명(상호)' 같은 괄호 병기 라벨은 괄호 분리 후 양쪽 모두로 매핑을 시도한다."
     },
     {
-      "canonical": "work_period",
+      "canonical": "WORK_PERIOD",
       "display": "점용·사용 기간",
       "scope": "attribute",
       "series": "기간",
@@ -244,7 +248,7 @@
       "notes": "Mapper가 start/end로 분리하는 유일한 가상 필드다."
     },
     {
-      "canonical": "applicant_address",
+      "canonical": "APPLICANT_ADDRESS",
       "display": "허가·승인 대상자 주소",
       "scope": "attribute",
       "series": "주소",
@@ -265,7 +269,7 @@
       ]
     },
     {
-      "canonical": "approval_no",
+      "canonical": "APPROVAL_NO",
       "display": "허가·승인번호",
       "scope": "attribute",
       "series": null,
@@ -287,7 +291,7 @@
       ]
     },
     {
-      "canonical": "approval_date",
+      "canonical": "APPROVAL_DATE",
       "display": "허가·승인일자",
       "scope": "attribute",
       "series": null,
@@ -320,7 +324,7 @@
       "notes": "고시일(notice_date)과 다른 날짜다 — 처분한 날이지 공표한 날이 아니다."
     },
     {
-      "canonical": "remarks",
+      "canonical": "REMARKS",
       "display": "비고",
       "scope": "attribute",
       "series": null,
@@ -337,7 +341,7 @@
       ]
     },
     {
-      "canonical": "subject_address",
+      "canonical": "SUBJECT_ADDRESS",
       "display": "공고·처분 대상자 주소",
       "scope": "attribute",
       "series": "주소",
@@ -349,7 +353,7 @@
       "notes": "동의어가 비어 있다 — 관측된 라벨이 머리기호 붙은 \"주소\"뿐이라 정규화하면 applicant_address와 구별되지 않는다. 전수 표본에서도 52/19,216건(0.27%)이고 워크북조차 라벨이 아니라 처분 문맥으로 갈랐다. 없는 라벨을 지어내면 오매핑이 되므로 정의만 두고 매핑 규칙은 비워 둔다."
     },
     {
-      "canonical": "business_content",
+      "canonical": "BUSINESS_CONTENT",
       "display": "사업내용",
       "scope": "attribute",
       "series": null,
@@ -368,7 +372,7 @@
       ]
     },
     {
-      "canonical": "construction_period",
+      "canonical": "CONSTRUCTION_PERIOD",
       "display": "공사시행 기간",
       "scope": "attribute",
       "series": "기간",
@@ -383,7 +387,7 @@
       "examples": []
     },
     {
-      "canonical": "changed_to",
+      "canonical": "CHANGED_TO",
       "display": "변경 후 값",
       "scope": "attribute",
       "series": null,
@@ -397,7 +401,7 @@
       "examples": []
     },
     {
-      "canonical": "change_summary",
+      "canonical": "CHANGE_SUMMARY",
       "display": "변경사항",
       "scope": "attribute",
       "series": null,
@@ -411,7 +415,7 @@
       "examples": []
     },
     {
-      "canonical": "subject_name",
+      "canonical": "SUBJECT_NAME",
       "display": "공고·처분 대상자 성명",
       "scope": "attribute",
       "series": "인적",
@@ -424,7 +428,7 @@
       "examples": []
     },
     {
-      "canonical": "changed_from",
+      "canonical": "CHANGED_FROM",
       "display": "변경 전 값",
       "scope": "attribute",
       "series": null,
@@ -438,7 +442,7 @@
       "examples": []
     },
     {
-      "canonical": "water_type",
+      "canonical": "WATER_TYPE",
       "display": "수면 종류",
       "scope": "attribute",
       "series": null,
@@ -455,7 +459,7 @@
       "notes": "인천지방해양수산청 서식에서 주로 관측된다."
     },
     {
-      "canonical": "structure_type",
+      "canonical": "STRUCTURE_TYPE",
       "display": "공작물 종류",
       "scope": "attribute",
       "series": null,
@@ -472,7 +476,7 @@
       "notes": "인천지방해양수산청 서식에서 주로 관측된다."
     },
     {
-      "canonical": "completion_date",
+      "canonical": "COMPLETION_DATE",
       "display": "준공·완료 처리일자",
       "scope": "attribute",
       "series": "날짜",
@@ -488,7 +492,7 @@
       "examples": []
     },
     {
-      "canonical": "operator_name",
+      "canonical": "OPERATOR_NAME",
       "display": "사업 시행자 성명",
       "scope": "attribute",
       "series": "인적",
@@ -504,7 +508,7 @@
       "examples": []
     },
     {
-      "canonical": "purpose_content_combined",
+      "canonical": "PURPOSE_CONTENT_COMBINED",
       "display": "점용·사용 목적·사업내용(복합)",
       "scope": "attribute",
       "series": null,
@@ -521,7 +525,7 @@
       ]
     },
     {
-      "canonical": "contact_point",
+      "canonical": "CONTACT_POINT",
       "display": "문의처",
       "scope": "attribute",
       "series": "연락",
@@ -535,7 +539,7 @@
       "examples": []
     },
     {
-      "canonical": "approval_no_date_combined",
+      "canonical": "APPROVAL_NO_DATE_COMBINED",
       "display": "허가·승인번호·일자(복합)",
       "scope": "attribute",
       "series": null,
@@ -549,7 +553,7 @@
       "notes": "동의어가 비어 있다 — 워크북은 \"허가번호(연월일)\" 같은 라벨을 이 복합 항목으로 묶지만, 우리 파이프라인은 Mapper.splitApprovalNoDate가 값을 번호와 일자로 실제로 쪼갤 수 있다. 그래서 그 라벨들은 approval_no로 매핑해 분리를 태우고, 이 항목은 정의만 남겨 둔다. 워크북이 복합으로 둔 것은 그쪽 분석이 쪼갤 수 없었기 때문이지 쪼개면 안 되기 때문이 아니다."
     },
     {
-      "canonical": "construction_name",
+      "canonical": "CONSTRUCTION_NAME",
       "display": "공사명칭",
       "scope": "attribute",
       "series": null,
@@ -564,7 +568,7 @@
       "examples": []
     },
     {
-      "canonical": "construction_location",
+      "canonical": "CONSTRUCTION_LOCATION",
       "display": "공사시행 장소",
       "scope": "attribute",
       "series": "위치",
@@ -579,7 +583,7 @@
       "examples": []
     },
     {
-      "canonical": "contact_number",
+      "canonical": "CONTACT_NUMBER",
       "display": "연락처",
       "scope": "attribute",
       "series": "연락",
@@ -594,7 +598,7 @@
       "examples": []
     },
     {
-      "canonical": "project_cost",
+      "canonical": "PROJECT_COST",
       "display": "사업비",
       "scope": "attribute",
       "series": null,
@@ -610,7 +614,7 @@
       ]
     },
     {
-      "canonical": "approval_content",
+      "canonical": "APPROVAL_CONTENT",
       "display": "허가내용",
       "scope": "attribute",
       "series": null,
@@ -623,7 +627,7 @@
       "examples": []
     },
     {
-      "canonical": "construction_area",
+      "canonical": "CONSTRUCTION_AREA",
       "display": "공사시행 면적",
       "scope": "attribute",
       "series": "면적",
@@ -637,7 +641,7 @@
       "examples": []
     },
     {
-      "canonical": "construction_type",
+      "canonical": "CONSTRUCTION_TYPE",
       "display": "공사종류",
       "scope": "attribute",
       "series": null,
@@ -651,7 +655,7 @@
       "examples": []
     },
     {
-      "canonical": "land_use_plan",
+      "canonical": "LAND_USE_PLAN",
       "display": "토지이용계획",
       "scope": "attribute",
       "series": null,
@@ -665,7 +669,7 @@
       "examples": []
     },
     {
-      "canonical": "cancel_date",
+      "canonical": "CANCEL_DATE",
       "display": "취소일자",
       "scope": "attribute",
       "series": "날짜",
@@ -680,7 +684,7 @@
       "examples": []
     },
     {
-      "canonical": "completion_area",
+      "canonical": "COMPLETION_AREA",
       "display": "준공면적",
       "scope": "attribute",
       "series": "면적",
@@ -693,7 +697,7 @@
       "examples": []
     },
     {
-      "canonical": "cancel_reason",
+      "canonical": "CANCEL_REASON",
       "display": "취소사유",
       "scope": "attribute",
       "series": "사유",
@@ -707,7 +711,7 @@
       "examples": []
     },
     {
-      "canonical": "notice_period",
+      "canonical": "NOTICE_PERIOD",
       "display": "공고기간",
       "scope": "attribute",
       "series": "기간",
@@ -720,7 +724,7 @@
       "examples": []
     },
     {
-      "canonical": "disposition_content",
+      "canonical": "DISPOSITION_CONTENT",
       "display": "처분내용",
       "scope": "attribute",
       "series": null,
@@ -733,7 +737,7 @@
       "examples": []
     },
     {
-      "canonical": "notice_subject",
+      "canonical": "NOTICE_SUBJECT",
       "display": "공고대상",
       "scope": "attribute",
       "series": null,
@@ -747,7 +751,7 @@
       "examples": []
     },
     {
-      "canonical": "disposition_reason",
+      "canonical": "DISPOSITION_REASON",
       "display": "처분사유",
       "scope": "attribute",
       "series": "사유",
@@ -760,7 +764,7 @@
       "examples": []
     },
     {
-      "canonical": "opinion_submission",
+      "canonical": "OPINION_SUBMISSION",
       "display": "의견제출 기간·방법",
       "scope": "attribute",
       "series": null,
@@ -776,7 +780,7 @@
       "examples": []
     },
     {
-      "canonical": "legal_basis",
+      "canonical": "LEGAL_BASIS",
       "display": "근거법령",
       "scope": "attribute",
       "series": null,

@@ -12,7 +12,7 @@ import java.nio.file.Path;
  * {@link #MIN_TEXT_CHARS}자 이상이면 네이티브</b>, 그 미만이면서 임베디드 이미지가 있으면 스캔본.
  *
  * <p>{@link Hwp3Reader}는 문단·표 셀(중첩 포함)·글상자·캡션을 모두 본문으로 담고
- * 머리말·꼬리말·각주는 애초에 담지 않는다. 그래서 여기서는 {@link Hwp3Document#bodyChars()}를
+ * 머리말·꼬리말·각주는 애초에 담지 않는다. 그래서 여기서는 {@link Hwp3Document#bodyCharCnt()}를
  * 그대로 쓰면 {@link ScanDetector}의 "본문만 빠짐없이 센다" 요구가 충족된다.
  *
  * <p>파서를 한 번만 돌려 글자 수와 이미지 개수를 함께 얻는다 — 다른 판별기처럼 임계치를
@@ -26,7 +26,7 @@ public class Hwp3ScanDetector implements ScanDetector {
     public boolean isScanned(Path file) {
         try {
             Hwp3Document doc = Hwp3Reader.read(file);
-            if (doc.bodyChars() >= MIN_TEXT_CHARS) {
+            if (doc.bodyCharCnt() >= MIN_TEXT_CHARS) {
                 return false;
             }
             return !doc.images().isEmpty();

@@ -17,19 +17,19 @@ import java.util.Map;
  * 표를 어떤 서식으로 판정했고, 어느 칸에서 무슨 라벨을 읽었고, 그 라벨이 사전에
  * 있었는지까지 남긴다.
  *
- * @param sourceFile 원본 파일명
- * @param fileType   형식 식별자(hwp / hwpx / hml / pdf)
- * @param scanned    스캔본 여부
- * @param engine     추출 엔진 식별자
+ * @param fileNm 원본 파일명
+ * @param fileExtn   형식 식별자(hwp / hwpx / hml / pdf)
+ * @param scanYn    스캔본 여부
+ * @param engnNm     추출 엔진 식별자
  * @param summary    집계 — 사전 보강 대상을 빠르게 보기 위한 요약
  * @param tables     표별 해석 결과
  */
-@JsonPropertyOrder({"source_file", "file_type", "is_scanned", "engine", "summary", "tables"})
+@JsonPropertyOrder({"file_nm", "file_extn", "scan_yn", "engn_nm", "summary", "tables"})
 public record TableDoc(
-        @JsonProperty("source_file") String sourceFile,
-        @JsonProperty("file_type") String fileType,
-        @JsonProperty("is_scanned") boolean scanned,
-        @JsonProperty("engine") String engine,
+        @JsonProperty("file_nm") String fileNm,
+        @JsonProperty("file_extn") String fileExtn,
+        @JsonProperty("scan_yn") boolean scanYn,
+        @JsonProperty("engn_nm") String engnNm,
         @JsonProperty("summary") Summary summary,
         @JsonProperty("tables") List<InterpretedTable> tables) {
 
@@ -53,7 +53,7 @@ public record TableDoc(
     }
 
     /** 표 해석 결과들을 집계해 문서를 만든다. */
-    public static TableDoc of(String sourceFile, String fileType, boolean scanned, String engine,
+    public static TableDoc of(String fileNm, String fileExtn, boolean scanYn, String engnNm,
                               List<InterpretedTable> tables) {
         int facts = 0;
         int mapped = 0;
@@ -72,6 +72,6 @@ public record TableDoc(
         }
         Summary summary = new Summary(tables.size(), facts, mapped, facts - mapped,
                 new ArrayList<>(unmapped.keySet()));
-        return new TableDoc(sourceFile, fileType, scanned, engine, summary, tables);
+        return new TableDoc(fileNm, fileExtn, scanYn, engnNm, summary, tables);
     }
 }

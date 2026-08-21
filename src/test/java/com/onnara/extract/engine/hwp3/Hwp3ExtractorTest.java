@@ -61,17 +61,17 @@ class Hwp3ExtractorTest {
         // 병합 셀 텍스트는 덮인 칸마다 복제된다(HwplibExtractor와 같은 규칙)
         assertEquals(table.getGrid().get(1).get(3), table.getGrid().get(1).get(4));
 
-        RawCell noticeNo = table.getCells().stream()
+        RawCell notiSn = table.getCells().stream()
                 .filter(c -> c.getRow() == 1 && c.getCol() == 3)
                 .findFirst()
                 .orElseThrow();
-        assertEquals(2, noticeNo.getColSpan());
+        assertEquals(2, notiSn.getColSpan());
     }
 
     /** file_type은 엔진이 아니라 라우팅 계층이 확정하므로, 엔진 자체는 확장자를 그대로 둔다. */
     @Test
     void reportsHwpAsFileType() throws IOException {
-        assertEquals("hwp", new Hwp3Extractor().extractRaw(sample()).getFileType());
+        assertEquals("hwp", new Hwp3Extractor().extractRaw(sample()).getFileExtn());
     }
 
     /** 이미지가 없는 문서는 빈 목록을 낸다 — saveImages도 같은 순서 계약을 지킨다. */
@@ -99,9 +99,9 @@ class Hwp3ExtractorTest {
         SchemaResult schema = Mapper.mapToSchema(raw, "hwp3");
         NoticeRecord record = schema.getRecords().get(0);
 
-        assertEquals("동해시", record.agency());
-        assertEquals("고시 제2023-74호", record.noticeNo());
-        assertTrue(record.title().startsWith("공유수면 점용사용 허가"), record.title());
+        assertEquals("동해시", record.bodyAgncyNm());
+        assertEquals("고시 제2023-74호", record.notiNo());
+        assertTrue(record.notiTtl().startsWith("공유수면 점용사용 허가"), record.notiTtl());
         assertTrue(record.extras().get("내용").contains("「공유수면 관리 및 매립에 관한 법률」"),
                 record.extras().get("내용"));
     }

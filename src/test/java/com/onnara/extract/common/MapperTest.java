@@ -48,17 +48,17 @@ class MapperTest {
     void mapsSample8Fields() {
         SchemaResult result = Mapper.mapToSchema(sample8Like(), "hml-dom");
 
-        assertEquals("고시문.hml", result.getSourceFile());
-        assertEquals("hml", result.getFileType());
-        assertEquals("hml-dom", result.getEngine());
+        assertEquals("고시문.hml", result.getFileNm());
+        assertEquals("hml", result.getFileExtn());
+        assertEquals("hml-dom", result.getEngnNm());
         assertEquals(1, result.getRecords().size());
 
         NoticeRecord record = result.getRecords().get(0);
-        assertEquals("군산지방해양수산청", record.agency());
-        assertEquals("고시 제2026-47호", record.noticeNo());
-        assertEquals("2026-06-17", record.noticeDate());
-        assertEquals("공유수면 점용·사용 변경허가 고시", record.title());
-        assertEquals("군산지방해양수산청장", record.signer());
+        assertEquals("군산지방해양수산청", record.bodyAgncyNm());
+        assertEquals("고시 제2026-47호", record.notiNo());
+        assertEquals("2026-06-17", record.notiYmd());
+        assertEquals("공유수면 점용·사용 변경허가 고시", record.notiTtl());
+        assertEquals("군산지방해양수산청장", record.notiPsn());
         assertEquals("2026-06-05", record.approvalDate());
         assertEquals("군산시 비응로 107 인근 공유수면", record.location());
         assertEquals("367,120.2㎡", record.area());
@@ -98,7 +98,7 @@ class MapperTest {
         RawDocument raw = new RawDocument("empty.hwp", "hwp", false);
         SchemaResult result = Mapper.mapToSchema(raw);
         assertEquals(1, result.getRecords().size());
-        assertNull(result.getRecords().get(0).agency());
+        assertNull(result.getRecords().get(0).bodyAgncyNm());
     }
 
     /**
@@ -114,7 +114,74 @@ class MapperTest {
 
         SchemaResult result = Mapper.mapToSchema(raw);
         NoticeRecord record = result.getRecords().get(0);
-        assertNull(record.agency(), "빈 값 칸 건너뛰어 옆 필드 라벨을 삼키면 안 됨");
+        assertNull(record.bodyAgncyNm(), "빈 값 칸 건너뛰어 옆 필드 라벨을 삼키면 안 됨");
+    }
+
+    /**
+     * 한 파일에 고시 블록이 반복되는 서식을 처분별로 가르는지 검증한다.
+     *
+     * <p>군산시 풍황계측기 고시 미러 — 허가번호만 바꿔 같은 블록이 세 번 반복된다. 예전에는
+     * {@code set()}이 선착순이라 첫 블록만 남고 나머지 처분이 통째로 사라졌다. 문서 메타는
+     * 블록마다 상속되고, 블록별 값(장소)은 서로 섞이지 않아야 한다.
+     */
+    @Test
+    void splitsRepeatedNoticeBlocksIntoRecords() {
+        RawDocument raw = new RawDocument("고시문.hwp", "hwp", false);
+        for (String text : List.of(
+                "군산지방해양수산청 고시 제2020-75호",
+                "공유수면 점용·사용 승인 고시",
+                "2020년 12월 14일",
+                "군산지방해양수산청장",
+                "1. 승인연월일 : 2020. 12. 14.(허가번호 제2020-14호)",
+                "2. 점용·사용목적 : 부유식 해상 풍황계측기 설치",
+                "3. 점용·사용의 장소 : 서해 배타적경제수역 가 지점",
+                "1. 승인연월일 : 2020. 12. 14.(허가번호 제2020-15호)",
+                "2. 점용·사용목적 : 부유식 해상 풍황계측기 설치",
+                "3. 점용·사용의 장소 : 서해 배타적경제수역 나 지점",
+                "1. 승인연월일 : 2020. 12. 14.(허가번호 제2020-16호)",
+                "2. 점용·사용목적 : 부유식 해상 풍황계측기 설치",
+                "3. 점용·사용의 장소 : 서해 배타적경제수역 다 지점")) {
+            raw.getContent().add(new RawParagraph(text));
+        }
+
+        SchemaResult result = Mapper.mapToSchema(raw);
+        assertEquals(3, result.getRecords().size(), "블록 3개가 각각 처분이 되어야 함");
+
+        assertEquals("서해 배타적경제수역 가 지점", result.getRecords().get(0).location());
+        assertEquals("서해 배타적경제수역 나 지점", result.getRecords().get(1).location());
+        assertEquals("서해 배타적경제수역 다 지점", result.getRecords().get(2).location());
+
+        for (NoticeRecord record : result.getRecords()) {
+            assertEquals("고시 제2020-75호", record.notiNo(), "문서 메타는 블록마다 상속된다");
+            assertEquals("공유수면 점용·사용 승인 고시", record.notiTtl());
+            assertEquals("2020-12-14", record.notiYmd());
+            assertEquals("부유식 해상 풍황계측기 설치", record.purpose());
+        }
+    }
+
+    /**
+     * 번호가 1로 돌아가도 그 항목이 아직 비어 있으면 가르지 않는지 검증한다(오탐 가드).
+     *
+     * <p>붙임·중첩 목록에서 번호는 흔히 1로 되돌아간다. "번호가 1로 돌아감"만 조건으로 걸면
+     * 실입력 1,816건 중 68건이 잘못 갈라졌다 — 세 조건을 모두 걸어야 9건만 갈라진다.
+     */
+    @Test
+    void doesNotSplitWhenNumberingRestartsWithoutRepeatingAField() {
+        RawDocument raw = new RawDocument("고시문.hwp", "hwp", false);
+        for (String text : List.of(
+                "군산지방해양수산청 고시 제2010-19호",
+                "공유수면 점·사용 실시계획 변경승인",
+                "1. 시 행 자 : 연수조선(주) 대표이사 이용식",
+                "2. 주    소 : 군산시 소룡동 1019-7번지",
+                "3. 공사내역",
+                "○ 당초 : 선가대 설치",
+                "○ 변경 : 선가대 설치 (옹벽 추가)",
+                "1. 참고사항 : 관계도서는 사무소에 비치합니다")) {
+            raw.getContent().add(new RawParagraph(text));
+        }
+
+        SchemaResult result = Mapper.mapToSchema(raw);
+        assertEquals(1, result.getRecords().size(), "당초/변경 대비표는 한 처분이다");
     }
 
     /**
@@ -140,9 +207,9 @@ class MapperTest {
         assertEquals(1, result.getRecords().size(), "데이터 행 1건만 레코드가 되어야 함");
 
         NoticeRecord record = result.getRecords().get(0);
-        assertEquals("부산광역시 강서구", record.agency());
-        assertEquals("고시 제2018–82호", record.noticeNo());
-        assertEquals("공유수면 점용․사용 승인사항 고시", record.title());
+        assertEquals("부산광역시 강서구", record.bodyAgncyNm());
+        assertEquals("고시 제2018–82호", record.notiNo());
+        assertEquals("공유수면 점용․사용 승인사항 고시", record.notiTtl());
         assertEquals("2018-1", record.approvalNo());
         assertEquals("2018-08-10", record.approvalDate());
         assertEquals("부산광역시 동구 충장대로 351", record.applicantAddress());
@@ -181,7 +248,7 @@ class MapperTest {
         assertEquals("태항조선㈜ 대표이사", record.applicantName());
         assertEquals("인천광역시 동구 보세로 62(만석동)", record.applicantAddress());
         // 전수 통계 반영으로 표준항목이 된 라벨 — 예전에는 extras로 흘러갔다
-        assertEquals("선가대(6기)", record.get("structure_type"));
+        assertEquals("선가대(6기)", record.get("STRUCTURE_TYPE"));
     }
 
     /**
@@ -210,18 +277,24 @@ class MapperTest {
         }
     }
 
-    /** 스키마 JSON이 snake_case 키를 쓰고 camelCase가 새어 나오지 않는지 검증한다. */
+    /**
+     * 스키마 JSON의 구조 키는 snake_case, 사전 코드 키는 대문자여야 한다.
+     *
+     * <p>규칙이 층마다 다르다 — 구조 키는 DB 컬럼에 대응하는 필드명이라 계층 관례를 따르고,
+     * records[] 안의 키는 표준항목 <b>코드 값</b>이라 DB·JSON·Java 어디서나 같은 대문자다.
+     * camelCase는 어느 쪽으로도 새면 안 된다.
+     */
     @Test
     void schemaJsonUsesSnakeCaseKeys() throws Exception {
         String json = Json.MAPPER.writeValueAsString(Mapper.mapToSchema(sample8Like(), "hml-dom"));
-        assertTrue(json.contains("\"source_file\""));
-        assertTrue(json.contains("\"file_type\""));
-        assertTrue(json.contains("\"is_scanned\""));
-        assertTrue(json.contains("\"notice_no\""));
-        assertTrue(json.contains("\"work_period_start\""));
-        assertTrue(json.contains("\"applicant_address\""));
+        assertTrue(json.contains("\"file_nm\""));
+        assertTrue(json.contains("\"file_extn\""));
+        assertTrue(json.contains("\"scan_yn\""));
+        assertTrue(json.contains("\"noti_sn\""), "게시물 일련번호는 구조 키다");
+        assertTrue(json.contains("\"WORK_PERIOD_START\""), "사전 코드는 대문자다");
+        assertTrue(json.contains("\"APPLICANT_ADDRESS\""));
         assertTrue(json.contains("\"ocr_text\"") || !json.contains("ocrText"));
-        assertTrue(!json.contains("\"sourceFile\""));
+        assertTrue(!json.contains("\"fileNm\""));
     }
 
     /** raw 문서가 snake_case JSON으로 직렬화·역직렬화 왕복되는지 검증한다. */
@@ -229,10 +302,10 @@ class MapperTest {
     void rawJsonRoundTripsSnakeCase() throws Exception {
         RawDocument raw = sample8Like();
         String json = Json.MAPPER.writeValueAsString(raw);
-        assertTrue(json.contains("\"source_file\""));
-        assertTrue(json.contains("\"is_scanned\""));
+        assertTrue(json.contains("\"file_nm\""));
+        assertTrue(json.contains("\"scan_yn\""));
         RawDocument back = Json.MAPPER.readValue(json, RawDocument.class);
-        assertEquals(raw.getSourceFile(), back.getSourceFile());
+        assertEquals(raw.getFileNm(), back.getFileNm());
         assertEquals(raw.getContent().size(), back.getContent().size());
     }
 }

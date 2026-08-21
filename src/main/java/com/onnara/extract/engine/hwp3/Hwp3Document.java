@@ -52,7 +52,7 @@ public record Hwp3Document(List<Item> items, List<Image> images) {
      * <p>표 셀·캡션까지 센다. 머리말·꼬리말·각주는 애초에 {@code items}에 없으므로
      * 따로 걸러 낼 필요가 없다.
      */
-    public int bodyChars() {
+    public int bodyCharCnt() {
         int total = 0;
         for (Item item : items) {
             if (item instanceof Text text) {

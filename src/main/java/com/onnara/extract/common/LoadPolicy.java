@@ -84,16 +84,16 @@ public final class LoadPolicy {
      * @return 판정을 반영한 같은 {@code schema} 인스턴스(호출부에서 이어 쓰기 좋게)
      */
     public SchemaResult apply(SchemaResult schema, RawDocument raw) {
-        schema.setBodyChars(DocumentSize.bodyChars(raw));
-        schema.setDbSkipReason(skipReasonFor(schema.getBodyChars()));
+        schema.setBodyCharCnt(DocumentSize.bodyCharCnt(raw));
+        schema.setExclRsn(skipReasonFor(schema.getBodyCharCnt()));
         return schema;
     }
 
     /** 적재 제외 사유 — 대상이면 null. */
-    public String skipReasonFor(int bodyChars) {
-        if (maxBodyChars <= 0 || bodyChars <= maxBodyChars) {
+    public String skipReasonFor(int bodyCharCnt) {
+        if (maxBodyChars <= 0 || bodyCharCnt <= maxBodyChars) {
             return null;
         }
-        return String.format("본문 %,d자 (임계 %,d자 초과)", bodyChars, maxBodyChars);
+        return String.format("본문 %,d자 (임계 %,d자 초과)", bodyCharCnt, maxBodyChars);
     }
 }

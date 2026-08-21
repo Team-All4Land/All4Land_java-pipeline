@@ -1,5 +1,7 @@
 package com.onnara.extract.db;
 
+import com.onnara.extract.common.AgencyRegistry;
+import com.onnara.extract.common.NoticeTypes;
 import com.onnara.extract.common.model.NoticeRecord;
 import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.SchemaResult;
@@ -28,12 +30,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>테스트가 쓰는 게시물 순번은 {@link #NOTICE_BASE} 이상의 고정 구간이다 — 크롤 순번
  * (83~21,751)이나 폴백 음수 구간과 겹치지 않아, 실 데이터가 든 DB에서도 안전하다.
+ * 기관번호도 같은 이유로 {@link #AGENCY_BASE} 이상만 쓴다(실제는 1~74다).
  */
 @Tag("db")
 class DbLoaderIT {
 
     /** 테스트 전용 게시물 순번 구간 시작 — 실 데이터와 겹치지 않는 자리. */
     private static final int NOTICE_BASE = 900_000;
+
+    /** 테스트 전용 기관번호 구간 시작 — 폴더에서 나온 실제 기관번호(1~74)와 겹치지 않는다. */
+    private static final int AGENCY_BASE = 900_000;
+
+    /** 게시 중인 게시판에서 온 파일의 수집처 픽스처. */
+    private static final AgencyRegistry.SourceBoard OPEN_BOARD =
+            new AgencyRegistry.SourceBoard(AGENCY_BASE + 1, "목포시청", "local", "게시중");
+
+    /** 같은 기관의 지난 공고 게시판 — 기관은 같고 BOARD_CD만 갈린다. */
+    private static final AgencyRegistry.SourceBoard CLOSED_BOARD =
+            new AgencyRegistry.SourceBoard(AGENCY_BASE + 1, "목포시청", "local", "게시완료");
 
     private HikariDataSource dataSource;
 
@@ -52,18 +66,30 @@ class DbLoaderIT {
         dataSource = new HikariDataSource(config);
 
         DbSchema.migrate(dataSource);
-        // document_attributes가 attribute_defs를 참조하므로 적재 전에 사전이 있어야 한다
+        // TB_NOTI_ITEM_VAL이 TB_NOTI_ITEM을 참조하므로 적재 전에 사전이 있어야 한다
         ReferenceSync.sync(dataSource);
     }
 
-    /** 테스트가 넣은 게시물을 지우고 풀을 닫는다(각 테스트 후). CASCADE로 하위가 함께 정리된다. */
+    /**
+     * 테스트가 넣은 게시물과 기관을 지우고 풀을 닫는다(각 테스트 후).
+     * 첨부·이미지·항목값은 CASCADE로 함께 정리된다.
+     *
+     * <p>기관은 게시물보다 <b>나중에</b> 지운다 — {@code TB_NOTI.AGNCY_NO}가 FK라 순서를
+     * 뒤집으면 참조 위반으로 정리가 실패하고 다음 테스트가 더러운 DB를 물려받는다.
+     */
     @AfterEach
     void tearDown() throws SQLException {
-        try (var conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "DELETE FROM notices WHERE notice_no >= ?")) {
-            ps.setInt(1, NOTICE_BASE);
-            ps.executeUpdate();
+        try (var conn = dataSource.getConnection()) {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "DELETE FROM TB_NOTI WHERE NOTI_SN >= ?")) {
+                ps.setInt(1, NOTICE_BASE);
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "DELETE FROM TB_AGNCY WHERE AGNCY_NO >= ?")) {
+                ps.setInt(1, AGENCY_BASE);
+                ps.executeUpdate();
+            }
         }
         dataSource.close();
     }
@@ -71,17 +97,17 @@ class DbLoaderIT {
     /** 사전이 DB로 동기화되고, 계열·주요 여부까지 실려 오는지 검증한다. */
     @Test
     void syncsDictionaryIntoReferenceTables() throws SQLException {
-        assertEquals(40, count("SELECT count(*) FROM attribute_defs"));
-        assertEquals(55, count("SELECT count(*) FROM notice_types"));
-        assertEquals(6, count("SELECT count(*) FROM attribute_defs WHERE is_core"));
+        assertEquals(40, count("SELECT count(*) FROM TB_NOTI_ITEM"));
+        assertEquals(56, count("SELECT count(*) FROM TB_NOTI_KND"));
+        assertEquals(6, count("SELECT count(*) FROM TB_NOTI_ITEM WHERE CORE_YN"));
 
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT series, value_type FROM attribute_defs WHERE attr_code = 'area'");
+                     "SELECT SRS_NM, VAL_TY_CD FROM TB_NOTI_ITEM WHERE ITEM_CD = 'AREA'");
              ResultSet rs = ps.executeQuery()) {
             assertTrue(rs.next());
-            assertEquals("면적", rs.getString("series"));
-            assertEquals("text", rs.getString("value_type"));
+            assertEquals("면적", rs.getString("SRS_NM"));
+            assertEquals("text", rs.getString("VAL_TY_CD"));
         }
     }
 
@@ -100,29 +126,34 @@ class DbLoaderIT {
         // 문서 단위 메타는 첨부 컬럼으로 간다 — 항목값 행이 아니다
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement("""
-                     SELECT status_code, agency_name, doc_no, doc_date, title, record_count
-                       FROM attachments WHERE notice_no = ? AND attach_no = ?""")) {
+                     SELECT STTS_CD, NOTI_KND_CD, NOTI_NO, NOTI_YMD, NOTI_TTL
+                       FROM TB_ATCH_FILE WHERE NOTI_SN = ? AND ATCH_SN = ?""")) {
             ps.setInt(1, NOTICE_BASE + 1);
             ps.setInt(2, 1);
             try (ResultSet rs = ps.executeQuery()) {
                 assertTrue(rs.next());
-                assertEquals("ok", rs.getString("status_code"));
-                assertEquals("군산지방해양수산청", rs.getString("agency_name"));
-                assertEquals("고시 제2026-47호", rs.getString("doc_no"));
-                assertEquals("2026-06-17", rs.getDate("doc_date").toLocalDate().toString());
-                assertEquals(1, rs.getInt("record_count"));
+                assertEquals("ok", rs.getString("STTS_CD"));
+                assertEquals("OCUPY_CHG_PRMSN", rs.getString("NOTI_KND_CD"),
+                        "제목 \"공유수면 점용·사용 변경허가 고시\"는 변경허가로 분류돼야 한다");
+                assertEquals("고시 제2026-47호", rs.getString("NOTI_NO"));
+                assertEquals("2026-06-17", rs.getDate("NOTI_YMD").toLocalDate().toString());
             }
         }
 
-        assertEquals("367,120.2㎡", attribute(NOTICE_BASE + 1, "area"));
-        assertEquals("군산시 비응로 107 인근 공유수면", attribute(NOTICE_BASE + 1, "location"));
-        // 기간은 시작/종료가 daterange 리터럴 한 행으로 합쳐진다
-        assertEquals("[2025-09-01,2028-08-31]", attribute(NOTICE_BASE + 1, "work_period"));
-        // 문서 메타는 항목값으로 중복 저장하지 않는다
-        assertNull(attribute(NOTICE_BASE + 1, "agency"));
-        assertNull(attribute(NOTICE_BASE + 1, "notice_date"));
+        // 처분 건수는 컬럼이 아니라 자식 테이블에서 나온다
+        assertEquals(1, count("SELECT count(DISTINCT DSPS_SN) FROM TB_NOTI_ITEM_VAL"
+                + " WHERE NOTI_SN = " + (NOTICE_BASE + 1)));
 
-        assertEquals(1, count("SELECT count(*) FROM attachment_images WHERE notice_no = "
+        assertEquals("367,120.2㎡", attribute(NOTICE_BASE + 1, "AREA"));
+        assertEquals("군산시 비응로 107 인근 공유수면", attribute(NOTICE_BASE + 1, "LOCATION"));
+        // 기간은 시작/종료가 daterange 리터럴 한 행으로 합쳐진다
+        assertEquals("[2025-09-01,2028-08-31]", attribute(NOTICE_BASE + 1, "WORK_PERIOD"));
+        // 문서 메타는 항목값으로 중복 저장하지 않는다
+        assertNull(attribute(NOTICE_BASE + 1, "BODY_AGNCY_NM"),
+                "본문 기관명은 적재하지 않는다 — 기관 추적은 TB_AGNCY로 한다");
+        assertNull(attribute(NOTICE_BASE + 1, "NOTI_YMD"));
+
+        assertEquals(1, count("SELECT count(*) FROM TB_ATCH_IMG WHERE NOTI_SN = "
                 + (NOTICE_BASE + 1)));
     }
 
@@ -136,12 +167,12 @@ class DbLoaderIT {
             loader.loadAll(List.of(schema), List.of());
         }
 
-        assertEquals(1, count("SELECT count(*) FROM attachments WHERE notice_no = "
+        assertEquals(1, count("SELECT count(*) FROM TB_ATCH_FILE WHERE NOTI_SN = "
                 + (NOTICE_BASE + 2)));
-        assertEquals(1, count("SELECT count(*) FROM attachment_images WHERE notice_no = "
+        assertEquals(1, count("SELECT count(*) FROM TB_ATCH_IMG WHERE NOTI_SN = "
                 + (NOTICE_BASE + 2)));
-        assertEquals(1, count("SELECT count(*) FROM document_attributes WHERE notice_no = "
-                + (NOTICE_BASE + 2) + " AND attr_code = 'area'"));
+        assertEquals(1, count("SELECT count(*) FROM TB_NOTI_ITEM_VAL WHERE NOTI_SN = "
+                + (NOTICE_BASE + 2) + " AND ITEM_CD = 'AREA'"));
     }
 
     /**
@@ -160,16 +191,17 @@ class DbLoaderIT {
             loader.loadAll(List.of(sample(notice, 3, "900003_3_고시문.hml")), List.of());
         }
 
-        assertEquals(3, count("SELECT count(*) FROM attachments WHERE notice_no = " + notice));
-        assertEquals(3, count("SELECT count(*) FROM document_attributes WHERE notice_no = "
-                + notice + " AND attr_code = 'area'"));
+        assertEquals(3, count("SELECT count(*) FROM TB_ATCH_FILE WHERE NOTI_SN = " + notice));
+        assertEquals(3, count("SELECT count(*) FROM TB_NOTI_ITEM_VAL WHERE NOTI_SN = "
+                + notice + " AND ITEM_CD = 'AREA'"));
     }
 
     /** 판별·추출 실패도 첨부 행으로 남아야 한다 — 성공만 적재하면 추출 0건 기관이 안 보인다. */
     @Test
     void recordsFailedAttachments() throws SQLException {
         DbLoader.FailedAttachment failure = new DbLoader.FailedAttachment(
-                "900004_1_깨진문서.hwp", "추출", "ZIP_CORRUPT", "IOException: 중앙 디렉터리를 찾을 수 없음");
+                "900004_1_깨진문서.hwp", "추출", "ZIP_CORRUPT", "IOException: 중앙 디렉터리를 찾을 수 없음",
+                OPEN_BOARD);
 
         try (DbLoader loader = new DbLoader(dataSource)) {
             loader.loadAll(List.of(), List.of(failure));
@@ -177,27 +209,33 @@ class DbLoaderIT {
 
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement("""
-                     SELECT status_code, fail_stage, fail_kind, fail_message, ext_outer, record_count
-                       FROM attachments WHERE file_name = ?""")) {
+                     SELECT STTS_CD, FAIL_STEP, FAIL_KND, FAIL_MSG, FILE_EXTN
+                       FROM TB_ATCH_FILE WHERE FILE_NM = ?""")) {
             ps.setString(1, "900004_1_깨진문서.hwp");
             try (ResultSet rs = ps.executeQuery()) {
                 assertTrue(rs.next());
-                assertEquals("failed", rs.getString("status_code"));
-                assertEquals("추출", rs.getString("fail_stage"));
-                assertEquals("ZIP_CORRUPT", rs.getString("fail_kind"));
-                assertTrue(rs.getString("fail_message").contains("중앙 디렉터리"));
-                assertEquals("hwp", rs.getString("ext_outer"), "확장자는 파일명만으로 알 수 있다");
-                assertEquals(0, rs.getInt("record_count"));
+                assertEquals("failed", rs.getString("STTS_CD"));
+                assertEquals("추출", rs.getString("FAIL_STEP"));
+                assertEquals("ZIP_CORRUPT", rs.getString("FAIL_KND"));
+                assertTrue(rs.getString("FAIL_MSG").contains("중앙 디렉터리"));
+                assertEquals("hwp", rs.getString("FILE_EXTN"), "확장자는 파일명만으로 알 수 있다");
             }
         }
+
+        assertEquals(0, count("SELECT count(*) FROM TB_NOTI_ITEM_VAL WHERE NOTI_SN = "
+                + (NOTICE_BASE + 4)), "실패 건은 항목값을 남기지 않는다");
+
+        // 실패 건에도 기관이 붙어야 한다 — 안 붙이면 그 기관의 실패가 "기관 미상"으로 새어
+        // 기관별 수집률이 실제보다 좋아 보인다
+        assertEquals(AGENCY_BASE + 1, agencyOf(NOTICE_BASE + 4));
     }
 
-    /** 목록표 문서는 레코드마다 record_no가 갈려 값의 짝이 유지돼야 한다. */
+    /** 목록표 문서는 레코드마다 DSPS_SN이 갈려 값의 짝이 유지돼야 한다. */
     @Test
     void keepsValuePairingAcrossListTableRecords() throws SQLException {
         SchemaResult schema = new SchemaResult("900005_1_목록고시.hml", "hml", false, "hml-dom");
-        schema.setNoticeNo(NOTICE_BASE + 5);
-        schema.setAttachNo(1);
+        schema.setNotiSn(NOTICE_BASE + 5);
+        schema.setAtchSn(1);
         schema.getRecords().add(record("갑 부두", "100㎡", "가나상사"));
         schema.getRecords().add(record("을 부두", "200㎡", "다라수산"));
 
@@ -207,10 +245,10 @@ class DbLoaderIT {
 
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement("""
-                     SELECT record_no, max(value) FILTER (WHERE attr_code = 'location') AS loc,
-                            max(value) FILTER (WHERE attr_code = 'applicant_name') AS who
-                       FROM document_attributes WHERE notice_no = ?
-                      GROUP BY record_no ORDER BY record_no""")) {
+                     SELECT DSPS_SN, max(ITEM_VAL) FILTER (WHERE ITEM_CD = 'LOCATION') AS loc,
+                            max(ITEM_VAL) FILTER (WHERE ITEM_CD = 'APPLICANT_NAME') AS who
+                       FROM TB_NOTI_ITEM_VAL WHERE NOTI_SN = ?
+                      GROUP BY DSPS_SN ORDER BY DSPS_SN""")) {
             ps.setInt(1, NOTICE_BASE + 5);
             try (ResultSet rs = ps.executeQuery()) {
                 assertTrue(rs.next());
@@ -223,12 +261,161 @@ class DbLoaderIT {
         }
     }
 
-    /** 항목값 하나를 읽는다(없으면 null). */
-    private String attribute(int noticeNo, String attrCode) throws SQLException {
+    /**
+     * 중간 처분의 값이 비어도 나머지 처분의 짝이 어긋나면 안 된다.
+     *
+     * <p>{@code DSPS_SN}이 존재하는 이유가 바로 이것이다. 항목별 순번({@code RPT_SN})만으로
+     * 짝을 맞추면 면적이 빈 처분 하나 때문에 뒤따르는 면적이 한 칸씩 밀려 엉뚱한 장소에 붙는다.
+     * 구멍은 예외가 아니다 — 전역 출현율이 60%를 넘는 표준항목은 여섯 개뿐이다.
+     */
+    @Test
+    void keepsPairingWhenAMiddleDispositionHasNoValue() throws SQLException {
+        int notice = NOTICE_BASE + 11;
+        SchemaResult schema = new SchemaResult("900011_1_목록고시.hml", "hml", false, "hml-dom");
+        schema.setNotiSn(notice);
+        schema.setAtchSn(1);
+        schema.getRecords().add(record("인천", "50㎡", "가나상사"));
+        schema.getRecords().add(record("군산", null, "다라수산"));
+        schema.getRecords().add(record("여수", "100㎡", "마바해운"));
+
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            loader.loadAll(List.of(schema), List.of());
+        }
+
+        assertEquals(3, count("SELECT count(DISTINCT DSPS_SN) FROM TB_NOTI_ITEM_VAL"
+                + " WHERE NOTI_SN = " + notice));
+        // 면적은 두 행뿐인데도 장소와의 짝이 유지된다
+        assertEquals(2, count("SELECT count(*) FROM TB_NOTI_ITEM_VAL"
+                + " WHERE NOTI_SN = " + notice + " AND ITEM_CD = 'AREA'"));
+
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement("""
+                     SELECT max(ITEM_VAL) FILTER (WHERE ITEM_CD = 'AREA') AS area
+                       FROM TB_NOTI_ITEM_VAL
+                      WHERE NOTI_SN = ? AND DSPS_SN = (
+                            SELECT DSPS_SN FROM TB_NOTI_ITEM_VAL
+                             WHERE NOTI_SN = ? AND ITEM_CD = 'LOCATION' AND ITEM_VAL = '여수')""")) {
+            ps.setInt(1, notice);
+            ps.setInt(2, notice);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals("100㎡", rs.getString("area"), "여수의 면적은 100㎡여야 한다");
+            }
+        }
+    }
+
+    /**
+     * 입력 폴더에서 읽은 기관과 게시판이 TB_AGNCY·TB_NOTI로 들어가야 한다.
+     *
+     * <p>같은 기관이 게시판을 둘 운영하면 기관 행은 하나고 {@code BOARD_CD}만 갈린다 —
+     * 기관을 쪼개면 "목포시청 수집 현황"이 두 줄로 나뉜다.
+     */
+    @Test
+    void fillsAgencyAndBoardFromTheSourceFolder() throws SQLException {
+        SchemaResult open = sample(NOTICE_BASE + 6, 1, "900006_1_고시문.hml", OPEN_BOARD);
+        SchemaResult closed = sample(NOTICE_BASE + 7, 1, "900007_1_고시문.hml", CLOSED_BOARD);
+
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            LoadStats stats = loader.loadAll(List.of(open, closed), List.of());
+            assertEquals(1, stats.agenciesUpserted(), "게시판이 둘이어도 기관은 하나다");
+        }
+
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT value FROM document_attributes WHERE notice_no = ? AND attr_code = ?")) {
-            ps.setInt(1, noticeNo);
+                     "SELECT AGNCY_NM, KND_CD FROM TB_AGNCY WHERE AGNCY_NO = ?")) {
+            ps.setInt(1, AGENCY_BASE + 1);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals("목포시청", rs.getString("AGNCY_NM"));
+                assertEquals("local", rs.getString("KND_CD"));
+            }
+        }
+
+        assertEquals(AGENCY_BASE + 1, agencyOf(NOTICE_BASE + 6));
+        assertEquals(AGENCY_BASE + 1, agencyOf(NOTICE_BASE + 7));
+        assertEquals("게시중", boardOf(NOTICE_BASE + 6));
+        assertEquals("게시완료", boardOf(NOTICE_BASE + 7));
+    }
+
+    /**
+     * 수집처를 모르는 파일도 첨부는 적재되고 기관만 NULL이어야 한다.
+     *
+     * <p>{@code map} → {@code load}로 나눠 도는 경로와 손으로 모은 샘플이 여기 해당한다.
+     * 기관이 없다고 적재를 거르면 그 파일의 항목값이 통째로 사라진다.
+     */
+    @Test
+    void loadsAttachmentsWithoutAnAgency() throws SQLException {
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            LoadStats stats = loader.loadAll(
+                    List.of(sample(NOTICE_BASE + 8, 1, "900008_1_고시문.hml")), List.of());
+            assertEquals(0, stats.agenciesUpserted());
+            assertEquals(1, stats.filesOk());
+        }
+
+        assertEquals(0, agencyOf(NOTICE_BASE + 8), "기관 미상은 NULL로 남는다");
+        assertEquals(1, count("SELECT count(*) FROM TB_ATCH_FILE WHERE NOTI_SN = "
+                + (NOTICE_BASE + 8)));
+    }
+
+    /**
+     * 첨부가 0건인 기관도 행으로 남아야 한다 — 그래야 "긁었는데 아무것도 못 건진 기관"이
+     * DB에서 보인다. 수집 누락과 애초에 자료가 없던 기관을 구분하려면 필요하다.
+     */
+    @Test
+    void registersAgenciesThatYieldedNoAttachments() throws SQLException {
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            assertEquals(1, loader.loadAgencies(
+                    List.of(new AgencyRegistry.Agency(AGENCY_BASE + 2, "포항시청", "local"))));
+        }
+
+        assertEquals(1, count("SELECT count(*) FROM TB_AGNCY WHERE AGNCY_NO = "
+                + (AGENCY_BASE + 2)));
+        assertEquals(0, count("SELECT count(*) FROM TB_NOTI WHERE AGNCY_NO = "
+                + (AGENCY_BASE + 2)));
+    }
+
+    /**
+     * 수집처를 모르는 재적재가 이미 채운 기관을 지우면 안 된다.
+     *
+     * <p>{@code pipeline}으로 넣은 뒤 같은 스키마 JSON을 {@code load}로 다시 밀면 폴더 정보가
+     * 없다. {@code DO NOTHING}이나 무조건 덮어쓰기였다면 여기서 기관이 NULL로 되돌아간다.
+     */
+    @Test
+    void reloadingWithoutFolderInfoKeepsTheAgency() throws SQLException {
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            loader.loadAll(List.of(
+                    sample(NOTICE_BASE + 9, 1, "900009_1_고시문.hml", OPEN_BOARD)), List.of());
+            loader.loadAll(List.of(
+                    sample(NOTICE_BASE + 9, 1, "900009_1_고시문.hml")), List.of());
+        }
+
+        assertEquals(AGENCY_BASE + 1, agencyOf(NOTICE_BASE + 9));
+        assertEquals("게시중", boardOf(NOTICE_BASE + 9));
+    }
+
+    /** 게시물의 기관번호를 읽는다(NULL이면 0). */
+    private int agencyOf(int notiSn) throws SQLException {
+        return count("SELECT coalesce(AGNCY_NO, 0) FROM TB_NOTI WHERE NOTI_SN = " + notiSn);
+    }
+
+    /** 게시물의 게시판 구분을 읽는다(없으면 null). */
+    private String boardOf(int notiSn) throws SQLException {
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT BOARD_CD FROM TB_NOTI WHERE NOTI_SN = ?")) {
+            ps.setInt(1, notiSn);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
+    /** 항목값 하나를 읽는다(없으면 null). */
+    private String attribute(int notiSn, String attrCode) throws SQLException {
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT ITEM_VAL FROM TB_NOTI_ITEM_VAL WHERE NOTI_SN = ? AND ITEM_CD = ?")) {
+            ps.setInt(1, notiSn);
             ps.setString(2, attrCode);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getString(1) : null;
@@ -246,30 +433,41 @@ class DbLoaderIT {
         }
     }
 
+    /** 수집처를 모르는(폴더 규약 밖) 적재용 스키마 픽스처. */
+    private static SchemaResult sample(int notiSn, int atchSn, String fileNm) {
+        return sample(notiSn, atchSn, fileNm, null);
+    }
+
     /** 레코드 1건 + 이미지 1건을 담은 적재용 스키마 픽스처. */
-    private static SchemaResult sample(int noticeNo, int attachNo, String sourceFile) {
-        SchemaResult schema = new SchemaResult(sourceFile, "hml", false, "hml-dom");
-        schema.setNoticeNo(noticeNo);
-        schema.setAttachNo(attachNo);
+    private static SchemaResult sample(int notiSn, int atchSn, String fileNm,
+                                       AgencyRegistry.SourceBoard board) {
+        SchemaResult schema = new SchemaResult(fileNm, "hml", false, "hml-dom");
+        schema.setSourceBoard(board);
+        schema.setNotiSn(notiSn);
+        schema.setAtchSn(atchSn);
+        // Mapper가 하는 것과 같은 방식으로 분류한다 — 픽스처에 코드를 손으로 박으면
+        // 규칙이 바뀌어도 테스트가 계속 통과해 회귀를 놓친다
+        schema.setNotiKndCd(
+                NoticeTypes.classify("공유수면 점용·사용 변경허가 고시").orElseThrow());
         schema.getRecords().add(new NoticeRecord.Builder()
-                .set("agency", "군산지방해양수산청")
-                .set("notice_no", "고시 제2026-47호")
-                .set("notice_date", "2026-06-17")
-                .set("title", "공유수면 점용·사용 변경허가 고시")
-                .set("signer", "군산지방해양수산청장")
-                .set("approval_date", "2026-06-05")
-                .set("location", "군산시 비응로 107 인근 공유수면")
-                .set("area", "367,120.2㎡")
-                .set("purpose", "청소년 해양종합레포츠 교육")
-                .set("work_period_start", "2025-09-01")
-                .set("work_period_end", "2028-08-31")
-                .set("applicant_name", "한국해양소년단 전북연맹")
-                .set("applicant_address", "군산시 비응로 107")
+                .set("BODY_AGNCY_NM", "군산지방해양수산청")
+                .set("NOTI_NO", "고시 제2026-47호")
+                .set("NOTI_YMD", "2026-06-17")
+                .set("NOTI_TTL", "공유수면 점용·사용 변경허가 고시")
+                .set("NOTI_PSN", "군산지방해양수산청장")
+                .set("APPROVAL_DATE", "2026-06-05")
+                .set("LOCATION", "군산시 비응로 107 인근 공유수면")
+                .set("AREA", "367,120.2㎡")
+                .set("PURPOSE", "청소년 해양종합레포츠 교육")
+                .set("WORK_PERIOD_START", "2025-09-01")
+                .set("WORK_PERIOD_END", "2028-08-31")
+                .set("APPLICANT_NAME", "한국해양소년단 전북연맹")
+                .set("APPLICANT_ADDRESS", "군산시 비응로 107")
                 .extra("특이사항", "없음")
                 .build());
 
-        RawImage image = new RawImage(sourceFile + "_img0.png", 100);
-        image.setPath("/srv/extract/out/images/" + sourceFile + "_img0.png");
+        RawImage image = new RawImage(fileNm + "_img0.png", 100);
+        image.setPath("/srv/extract/out/images/" + fileNm + "_img0.png");
         schema.getImages().add(image);
         return schema;
     }
@@ -277,9 +475,9 @@ class DbLoaderIT {
     /** 목록표 한 행에 해당하는 레코드. */
     private static NoticeRecord record(String location, String area, String name) {
         return new NoticeRecord.Builder()
-                .set("location", location)
-                .set("area", area)
-                .set("applicant_name", name)
+                .set("LOCATION", location)
+                .set("AREA", area)
+                .set("APPLICANT_NAME", name)
                 .build();
     }
 }

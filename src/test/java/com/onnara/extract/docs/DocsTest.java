@@ -23,8 +23,8 @@ class DocsTest {
                                     String location) throws IOException {
         SchemaResult schema = new SchemaResult(name, "hml", false, "hml-dom");
         NoticeRecord.Builder record = new NoticeRecord.Builder()
-                .set("agency", "군산지방해양수산청")
-                .set("location", location);
+                .set("BODY_AGNCY_NM", "군산지방해양수산청")
+                .set("LOCATION", location);
         if (extras != null) {
             extras.forEach(record::extra);
         }
@@ -38,12 +38,12 @@ class DocsTest {
         String md = SynonymsDoc.render();
 
         for (Synonyms.FieldSpec field : Synonyms.fields()) {
-            assertTrue(md.contains("`" + field.canonical() + "`"),
-                    "문서에 표준 필드가 빠짐: " + field.canonical());
-            assertTrue(md.contains(field.display()), "문서에 표시명이 빠짐: " + field.display());
+            assertTrue(md.contains("`" + field.itemCd() + "`"),
+                    "문서에 표준 필드가 빠짐: " + field.itemCd());
+            assertTrue(md.contains(field.itemNm()), "문서에 표시명이 빠짐: " + field.itemNm());
             for (String synonym : field.rawSynonyms()) {
                 assertTrue(md.contains(synonym),
-                        "문서에 동의어가 빠짐: " + field.canonical() + " / " + synonym);
+                        "문서에 동의어가 빠짐: " + field.itemCd() + " / " + synonym);
             }
         }
         assertTrue(md.contains(Synonyms.version()), "사전 버전이 표기돼야 함");
@@ -69,7 +69,7 @@ class DocsTest {
 
         // 채움률: location은 2건 중 1건만 채워졌다
         assertTrue(md.contains("## 표준 필드 채움률"));
-        assertTrue(md.contains("| `location` | 점용·사용 장소 | 1 / 2 | 50% |"),
+        assertTrue(md.contains("| `LOCATION` | 점용·사용 장소 | 1 / 2 | 50% |"),
                 "채움률 집계가 어긋남:\n" + md);
     }
 

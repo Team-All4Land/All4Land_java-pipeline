@@ -18,16 +18,32 @@ public final class Labels {
             "^\\s*(?:[-–—·o○]\\s*)?(?:\\d{1,2}\\s*[.)]|[가-힣]\\s*[.)]|[①-⑳㉮-㉻])?\\s*"
                     + "([^:：]{1,40}?)\\s*[:：]\\s*(.*)$");
 
+    // 줄 앞 열거 번호("1." "2)")만 따로 뽑는다. LABEL_VALUE에 캡처 그룹을 더하지 않는 이유는
+    // 그룹 번호가 밀리면 scan·isLabelLine 호출부가 아무 소리 없이 어긋나기 때문이다.
+    private static final Pattern LEADING_NUMBER = Pattern.compile(
+            "^\\s*(?:[-–—·o○]\\s*)?(\\d{1,2})\\s*[.)]");
+
     /** extras에 보존할 라벨의 최대 정규화 길이 — 문장 오탐 방지. */
     private static final int MAX_EXTRA_LABEL_LEN = 20;
 
     /**
      * 스캔으로 얻은 라벨:값 1쌍.
      *
-     * @param label 원시 라벨(정규화 전) — canonical 매핑과 extras 저장 시 정규화된다
+     * @param label 원시 라벨(정규화 전) — itemCd 매핑과 extras 저장 시 정규화된다
      * @param value 값
      */
     public record Pair(String label, String value) {
+    }
+
+    /**
+     * 라벨:값 1쌍 + 그 줄의 열거 번호.
+     *
+     * <p>번호가 필요한 곳은 한 군데뿐이다 — 한 파일에 고시 블록이 통째로 반복되는 서식에서
+     * "번호가 1로 되돌아갔다"가 곧 새 처분의 시작이다({@code Mapper}의 처분 블록 분할).
+     *
+     * @param number 줄 앞 열거 번호. 번호가 없으면 0
+     */
+    public record Numbered(String label, String value, int number) {
     }
 
     /** 인스턴스화 방지 — 정적 함수만 제공하는 유틸리티 클래스. */
@@ -47,6 +63,20 @@ public final class Labels {
      */
     public static List<Pair> scan(List<String> lines) {
         List<Pair> pairs = new ArrayList<>();
+        for (Numbered numbered : scanNumbered(lines)) {
+            pairs.add(new Pair(numbered.label(), numbered.value()));
+        }
+        return pairs;
+    }
+
+    /**
+     * {@link #scan}과 같은 규칙으로 훑되 각 쌍이 나온 줄의 열거 번호를 함께 돌려준다.
+     *
+     * <p>{@code scan}은 이 메서드를 감싼 것이다 — 두 벌로 두면 "값이 빈 줄은 다음 줄을
+     * 소비한다" 같은 규칙이 한쪽에서만 고쳐져 산출물이 갈린다.
+     */
+    public static List<Numbered> scanNumbered(List<String> lines) {
+        List<Numbered> pairs = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             String text = lines.get(i);
 
@@ -54,7 +84,7 @@ public final class Labels {
             if ((text.startsWith(":") || text.startsWith("：")) && i > 0) {
                 String prev = lines.get(i - 1);
                 if (!isLabelLine(prev)) {
-                    add(pairs, prev, text.substring(1).trim());
+                    add(pairs, prev, text.substring(1).trim(), numberOf(prev));
                     continue;
                 }
             }
@@ -68,15 +98,24 @@ public final class Labels {
             if (value.isEmpty() && i + 1 < lines.size() && !isLabelLine(lines.get(i + 1))) {
                 value = lines.get(i + 1).trim();
             }
-            add(pairs, m.group(1), value);
+            add(pairs, m.group(1), value, numberOf(text));
         }
         return pairs;
     }
 
+    /** 줄 앞 열거 번호("1." "2)"). 번호가 없으면 0. */
+    public static int numberOf(String line) {
+        if (line == null) {
+            return 0;
+        }
+        Matcher m = LEADING_NUMBER.matcher(line);
+        return m.find() ? Integer.parseInt(m.group(1)) : 0;
+    }
+
     /** 값이 있는 쌍만 결과에 담는다. */
-    private static void add(List<Pair> pairs, String label, String value) {
+    private static void add(List<Numbered> pairs, String label, String value, int number) {
         if (value != null && !value.isBlank()) {
-            pairs.add(new Pair(label, value));
+            pairs.add(new Numbered(label, value, number));
         }
     }
 

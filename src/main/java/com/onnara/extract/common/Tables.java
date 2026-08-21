@@ -59,6 +59,23 @@ public final class Tables {
         return out;
     }
 
+    /**
+     * 행의 연속 중복 셀을 하나로 줄인다 — 병합 셀(col_span)이 같은 내용을 옆 칸으로 복제한
+     * 격자를 훑을 때 쓴다. null은 빈 문자열로, 앞뒤 공백은 제거한 뒤 비교한다.
+     *
+     * <p>빈 칸은 값 자리 구분자 역할을 하므로 지우지 않는다(연속 빈 칸만 하나로 접는다).
+     */
+    public static List<String> dedupeConsecutive(List<String> row) {
+        List<String> out = new ArrayList<>(row.size());
+        for (String cell : row) {
+            String value = cell == null ? "" : cell.trim();
+            if (out.isEmpty() || !out.get(out.size() - 1).equals(value)) {
+                out.add(value);
+            }
+        }
+        return out;
+    }
+
     /** 격자를 표준 표(n_rows/n_cols/cells/grid)로 변환한다 (grid_to_table 포팅). */
     public static RawTable gridToTable(List<List<String>> grid) {
         List<RawCell> cells = new ArrayList<>();

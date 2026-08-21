@@ -63,9 +63,9 @@ class ProtectedDocumentTest {
         RawDocument raw = new com.onnara.extract.engine.hwp.HwplibExtractor().extractRaw(file);
         NoticeRecord record = Mapper.mapToSchema(raw, "hwplib").getRecords().get(0);
 
-        assertEquals("영광군", record.agency());
-        assertTrue(record.noticeNo().contains("2025"), record.noticeNo());
-        assertTrue(record.title().contains("공유수면"), record.title());
+        assertEquals("영광군", record.bodyAgncyNm());
+        assertTrue(record.notiNo().contains("2025"), record.notiNo());
+        assertTrue(record.notiTtl().contains("공유수면"), record.notiTtl());
     }
 
     /** 배포용 문서는 스캔본이 아니다 — 판별이 예외 없이 네이티브로 떨어져야 한다. */

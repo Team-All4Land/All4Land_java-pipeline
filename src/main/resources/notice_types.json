@@ -1,286 +1,520 @@
 {
   "version": "2026-08-13",
-  "description": "공유수면 고시공고 종류 55종. ReferenceSync가 notice_types 테이블로 동기화한다.",
+  "description": "공유수면 고시공고 종류 56종. ReferenceSync가 notice_types 테이블로 동기화한다.",
   "conventions": {
-    "source": "26.08.07 전수 통계 워크북의 핵심 키워드 55종을 그대로 옮긴 것이다.",
-    "family": "55종을 평면으로 두면 조회 화면과 집계가 감당되지 않아 상위 묶음을 둔다. 워크북 키워드명 접두사에서 유도했다.",
-    "code": "family 접두 + 한글 이름 슬러그. 한글을 그대로 쓰면 종류가 바뀌어도 코드가 안 흔들린다."
+    "source": "26.08.07 전수 통계 워크북의 핵심 키워드 55종에, 실입력에서 확인해 보탠 1종(ETC_BID_NOTI)을 더한 것이다.",
+    "family": "종류를 평면으로 두면 조회 화면과 집계가 감당되지 않아 상위 묶음을 둔다. 워크북 키워드명 접두사에서 유도했다.",
+    "code": "{상위분류}_{행위} 영문 약어. 상위분류 접두는 OCUPY(점용·사용)·IMPL(실시계획)·RECLM(매립)·FEE(점용료·사용료)·MIXED(혼합)·ETC(기타)이고, 행위는 PRMSN(허가)·APRV(승인)·CNSLT(협의)·CHG(변경)·CNCL(취소)·NEW(신규)·EXTN(기간연장)·RPT(신고)·ACPT(수리)·CMPL(준공·완료)·GEN(일반) 따위를 잇는다. 한글 뜻은 name에 남는다.",
+    "keywords": "제목에서 종류를 판정하는 규칙. \"가+나\"는 두 낱말이 모두 들어 있어야 매칭이라는 뜻이고, 배열 안 항목끼리는 OR다. 제목은 가운뎃점류(·ㆍ․‧∙)와 공백을 지우고 점용사용·점용을 점사용으로 접은 뒤 비교한다 — 같은 말이 서식마다 네 가지로 적힌다.",
+    "priority": "내림차순으로 훑어 첫 매칭을 쓴다. 구체적인 규칙이 큰 수다 — \"기간연장+변경+허가\"(69)가 \"변경+허가\"(57)보다, 그것이 다시 \"허가\"(43)보다 먼저 걸려야 한다. 순서를 배열 위치가 아니라 숫자로 정하는 이유는, 종류를 보탤 때 중간에 끼워 넣게 하면 반드시 순서를 틀리기 때문이다. 빈 keywords(priority 0)는 제목으로 판정하지 않는 종류다."
   },
   "types": [
     {
-      "code": "occupancy:점용_사용_허가",
+      "code": "OCUPY_PRMSN",
       "name": "점용·사용 허가",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "허가"
+      ],
+      "priority": 43
     },
     {
-      "code": "occupancy:점용_사용_승인",
+      "code": "OCUPY_APRV",
       "name": "점용·사용 승인",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "승인"
+      ],
+      "priority": 42
     },
     {
-      "code": "etc:준공_완료_수리",
+      "code": "ETC_CMPL_ACPT",
       "name": "준공·완료 수리",
-      "family": "기타"
+      "family": "기타",
+      "keywords": [
+        "준공검사",
+        "준공",
+        "공사완료+신고",
+        "완료+수리"
+      ],
+      "priority": 78
     },
     {
-      "code": "occupancy:변경허가",
+      "code": "OCUPY_CHG_PRMSN",
       "name": "변경허가",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "변경+허가"
+      ],
+      "priority": 57
     },
     {
-      "code": "occupancy:점용_사용_협의",
+      "code": "OCUPY_CNSLT",
       "name": "점용·사용 협의",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "협의"
+      ],
+      "priority": 41
     },
     {
-      "code": "impl_plan:실시계획_승인",
+      "code": "IMPL_APRV",
       "name": "실시계획 승인",
-      "family": "실시계획"
+      "family": "실시계획",
+      "keywords": [
+        "실시계획+승인"
+      ],
+      "priority": 79
     },
     {
-      "code": "impl_plan:실시계획_신고수리",
+      "code": "IMPL_RPT_ACPT",
       "name": "실시계획 신고수리",
-      "family": "실시계획"
+      "family": "실시계획",
+      "keywords": [
+        "실시계획+신고+수리"
+      ],
+      "priority": 83
     },
     {
-      "code": "impl_plan:실시계획_변경승인",
+      "code": "IMPL_CHG_APRV",
       "name": "실시계획 변경승인",
-      "family": "실시계획"
+      "family": "실시계획",
+      "keywords": [
+        "실시계획+변경+승인"
+      ],
+      "priority": 84
     },
     {
-      "code": "occupancy:기간연장_변경허가",
+      "code": "OCUPY_EXTN_CHG_PRMSN",
       "name": "기간연장 변경허가",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "기간연장+변경+허가",
+        "연장+변경+허가"
+      ],
+      "priority": 69
     },
     {
-      "code": "mixed:협의_승인_혼합",
+      "code": "MIXED_CNSLT_APRV",
       "name": "협의·승인 혼합",
-      "family": "혼합"
+      "family": "혼합",
+      "keywords": [],
+      "priority": 0
     },
     {
-      "code": "occupancy:점용_사용_변경",
+      "code": "OCUPY_CHG",
       "name": "점용·사용 변경",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "점사용+변경"
+      ],
+      "priority": 44
     },
     {
-      "code": "occupancy:변경승인",
+      "code": "OCUPY_CHG_APRV",
       "name": "변경승인",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "변경+승인"
+      ],
+      "priority": 56
     },
     {
-      "code": "impl_plan:실시계획_신고",
+      "code": "IMPL_RPT",
       "name": "실시계획 신고",
-      "family": "실시계획"
+      "family": "실시계획",
+      "keywords": [
+        "실시계획+신고"
+      ],
+      "priority": 80
     },
     {
-      "code": "impl_plan:실시계획_승인_신고_병기",
+      "code": "IMPL_APRV_RPT_BOTH",
       "name": "실시계획 승인·신고 병기",
-      "family": "실시계획"
+      "family": "실시계획",
+      "keywords": [
+        "실시계획+승인+신고"
+      ],
+      "priority": 81
     },
     {
-      "code": "occupancy:허가취소",
+      "code": "OCUPY_PRMSN_CNCL",
       "name": "허가취소",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "허가+취소"
+      ],
+      "priority": 66
     },
     {
-      "code": "occupancy:점용_사용_일반",
+      "code": "OCUPY_GEN",
       "name": "점용·사용 일반",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "점사용"
+      ],
+      "priority": 40
     },
     {
-      "code": "occupancy:변경협의",
+      "code": "OCUPY_CHG_CNSLT",
       "name": "변경협의",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "변경+협의"
+      ],
+      "priority": 55
     },
     {
-      "code": "etc:방치선박_물건_제거",
+      "code": "ETC_ABND_RMV",
       "name": "방치선박·물건 제거",
-      "family": "기타"
+      "family": "기타",
+      "keywords": [
+        "방치선박",
+        "방치+물건+제거"
+      ],
+      "priority": 77
     },
     {
-      "code": "impl_plan:실시계획_변경신고",
+      "code": "IMPL_CHG_RPT",
       "name": "실시계획 변경신고",
-      "family": "실시계획"
+      "family": "실시계획",
+      "keywords": [
+        "실시계획+변경+신고"
+      ],
+      "priority": 85
     },
     {
-      "code": "impl_plan:실시계획_변경신고수리",
+      "code": "IMPL_CHG_RPT_ACPT",
       "name": "실시계획 변경신고수리",
-      "family": "실시계획"
+      "family": "실시계획",
+      "keywords": [
+        "실시계획+변경+신고+수리"
+      ],
+      "priority": 86
     },
     {
-      "code": "mixed:허가_협의_혼합",
+      "code": "MIXED_PRMSN_CNSLT",
       "name": "허가·협의 혼합",
-      "family": "혼합"
+      "family": "혼합",
+      "keywords": [],
+      "priority": 0
     },
     {
-      "code": "etc:허가_면제기준",
+      "code": "ETC_PRMSN_EXMPT",
       "name": "허가 면제기준",
-      "family": "기타"
+      "family": "기타",
+      "keywords": [
+        "면제"
+      ],
+      "priority": 76
     },
     {
-      "code": "fee:점용료_사용료_감면",
+      "code": "FEE_REDCT",
       "name": "점용료·사용료 감면",
-      "family": "점용료·사용료"
+      "family": "점용료·사용료",
+      "keywords": [
+        "점사용료+감면",
+        "사용료+감면"
+      ],
+      "priority": 88
     },
     {
-      "code": "reclamation:매립면허",
+      "code": "RECLM_LCNS",
       "name": "매립면허",
-      "family": "매립"
+      "family": "매립",
+      "keywords": [
+        "매립면허",
+        "매립+면허"
+      ],
+      "priority": 90
     },
     {
-      "code": "fee:점용료_사용료_산정",
+      "code": "FEE_CALC",
       "name": "점용료·사용료 산정",
-      "family": "점용료·사용료"
+      "family": "점용료·사용료",
+      "keywords": [
+        "점사용료+산정",
+        "사용료+산정"
+      ],
+      "priority": 87
     },
     {
-      "code": "mixed:허가_승인_혼합",
+      "code": "MIXED_PRMSN_APRV",
       "name": "허가·승인 혼합",
-      "family": "혼합"
+      "family": "혼합",
+      "keywords": [],
+      "priority": 0
     },
     {
-      "code": "mixed:변경허가_협의_혼합",
+      "code": "MIXED_CHG_PRMSN_CNSLT",
       "name": "변경허가·협의 혼합",
-      "family": "혼합"
+      "family": "혼합",
+      "keywords": [],
+      "priority": 0
     },
     {
-      "code": "etc:법령_조례_제_개정",
+      "code": "ETC_LAW_ENACT",
       "name": "법령·조례 제·개정",
-      "family": "기타"
+      "family": "기타",
+      "keywords": [
+        "법령+개정",
+        "조례+개정",
+        "규칙+개정"
+      ],
+      "priority": 75
     },
     {
-      "code": "etc:권리_의무_이전",
+      "code": "ETC_RGHT_TRNSF",
       "name": "권리·의무 이전",
-      "family": "기타"
+      "family": "기타",
+      "keywords": [
+        "권리+이전",
+        "의무+이전",
+        "권리+의무+승계"
+      ],
+      "priority": 74
     },
     {
-      "code": "reclamation:매립_준공",
+      "code": "RECLM_CMPL",
       "name": "매립 준공",
-      "family": "매립"
+      "family": "매립",
+      "keywords": [
+        "매립+준공"
+      ],
+      "priority": 95
     },
     {
-      "code": "mixed:변경허가_승인_혼합",
+      "code": "MIXED_CHG_PRMSN_APRV",
       "name": "변경허가·승인 혼합",
-      "family": "혼합"
+      "family": "혼합",
+      "keywords": [],
+      "priority": 0
     },
     {
-      "code": "mixed:허가_협의_승인_혼합",
+      "code": "MIXED_PRMSN_CNSLT_APRV",
       "name": "허가·협의·승인 혼합",
-      "family": "혼합"
+      "family": "혼합",
+      "keywords": [],
+      "priority": 0
     },
     {
-      "code": "etc:도시_군관리계획_결정_변경",
+      "code": "ETC_URBAN_PLAN_DCSN",
       "name": "도시·군관리계획 결정·변경",
-      "family": "기타"
+      "family": "기타",
+      "keywords": [
+        "군관리계획",
+        "도시관리계획"
+      ],
+      "priority": 73
     },
     {
-      "code": "occupancy:기간연장_변경승인",
+      "code": "OCUPY_EXTN_CHG_APRV",
       "name": "기간연장 변경승인",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "기간연장+변경+승인",
+        "연장+변경+승인"
+      ],
+      "priority": 68
     },
     {
-      "code": "impl_plan:실시계획_기타",
+      "code": "IMPL_ETC",
       "name": "실시계획 기타",
-      "family": "실시계획"
+      "family": "실시계획",
+      "keywords": [
+        "실시계획"
+      ],
+      "priority": 58
     },
     {
-      "code": "reclamation:매립_실시계획_변경승인",
+      "code": "RECLM_IMPL_CHG_APRV",
       "name": "매립 실시계획 변경승인",
-      "family": "매립"
+      "family": "매립",
+      "keywords": [
+        "매립+실시계획+변경+승인"
+      ],
+      "priority": 93
     },
     {
-      "code": "mixed:변경협의_승인_혼합",
+      "code": "MIXED_CHG_CNSLT_APRV",
       "name": "변경협의·승인 혼합",
-      "family": "혼합"
+      "family": "혼합",
+      "keywords": [],
+      "priority": 0
     },
     {
-      "code": "etc:법_위반_행정처분",
+      "code": "ETC_VIOL_DSPS",
       "name": "법 위반 행정처분",
-      "family": "기타"
+      "family": "기타",
+      "keywords": [
+        "위반+행정처분",
+        "위반+처분"
+      ],
+      "priority": 72
     },
     {
-      "code": "etc:개축_철거_명령",
+      "code": "ETC_RMDL_DMLT_ORDR",
       "name": "개축·철거 명령",
-      "family": "기타"
+      "family": "기타",
+      "keywords": [
+        "철거+명령",
+        "개축+명령",
+        "원상회복+명령"
+      ],
+      "priority": 71
     },
     {
-      "code": "mixed:변경허가_협의_승인_혼합",
+      "code": "MIXED_CHG_PRMSN_CNSLT_APRV",
       "name": "변경허가·협의·승인 혼합",
-      "family": "혼합"
+      "family": "혼합",
+      "keywords": [],
+      "priority": 0
     },
     {
-      "code": "reclamation:매립_기본계획",
+      "code": "RECLM_BSC_PLAN",
       "name": "매립 기본계획",
-      "family": "매립"
+      "family": "매립",
+      "keywords": [
+        "매립+기본계획"
+      ],
+      "priority": 91
     },
     {
-      "code": "occupancy:신규허가",
+      "code": "OCUPY_NEW_PRMSN",
       "name": "신규허가",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "신규+허가"
+      ],
+      "priority": 63
     },
     {
-      "code": "etc:기타_행정공고",
+      "code": "ETC_ADMIN_NOTI",
       "name": "기타 행정공고",
-      "family": "기타"
+      "family": "기타",
+      "keywords": [],
+      "priority": 0
     },
     {
-      "code": "reclamation:매립_기타",
+      "code": "RECLM_ETC",
       "name": "매립 기타",
-      "family": "매립"
+      "family": "매립",
+      "keywords": [
+        "매립"
+      ],
+      "priority": 60
     },
     {
-      "code": "reclamation:매립_승인",
+      "code": "RECLM_APRV",
       "name": "매립 승인",
-      "family": "매립"
+      "family": "매립",
+      "keywords": [
+        "매립+승인"
+      ],
+      "priority": 89
     },
     {
-      "code": "occupancy:승인취소",
+      "code": "OCUPY_APRV_CNCL",
       "name": "승인취소",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "승인+취소"
+      ],
+      "priority": 65
     },
     {
-      "code": "etc:골재_해사채취",
+      "code": "ETC_AGGR_EXTRC",
       "name": "골재·해사채취",
-      "family": "기타"
+      "family": "기타",
+      "keywords": [
+        "골재",
+        "해사채취"
+      ],
+      "priority": 70
     },
     {
-      "code": "reclamation:매립_실시계획_승인",
+      "code": "RECLM_IMPL_APRV",
       "name": "매립 실시계획 승인",
-      "family": "매립"
+      "family": "매립",
+      "keywords": [
+        "매립+실시계획+승인"
+      ],
+      "priority": 92
     },
     {
-      "code": "occupancy:신규승인",
+      "code": "OCUPY_NEW_APRV",
       "name": "신규승인",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "신규+승인"
+      ],
+      "priority": 62
     },
     {
-      "code": "reclamation:매립_실시계획_변경인가",
+      "code": "RECLM_IMPL_CHG_AUTH",
       "name": "매립 실시계획 변경인가",
-      "family": "매립"
+      "family": "매립",
+      "keywords": [
+        "매립+실시계획+변경+인가"
+      ],
+      "priority": 94
     },
     {
-      "code": "occupancy:기간연장_변경협의",
+      "code": "OCUPY_EXTN_CHG_CNSLT",
       "name": "기간연장 변경협의",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "기간연장+변경+협의",
+        "연장+변경+협의"
+      ],
+      "priority": 67
     },
     {
-      "code": "fee:점용료_사용료_일반",
+      "code": "FEE_GEN",
       "name": "점용료·사용료 일반",
-      "family": "점용료·사용료"
+      "family": "점용료·사용료",
+      "keywords": [
+        "점사용료",
+        "사용료"
+      ],
+      "priority": 59
     },
     {
-      "code": "impl_plan:실시계획_신고취소",
+      "code": "IMPL_RPT_CNCL",
       "name": "실시계획 신고취소",
-      "family": "실시계획"
+      "family": "실시계획",
+      "keywords": [
+        "실시계획+신고+취소"
+      ],
+      "priority": 82
     },
     {
-      "code": "occupancy:점용_사용_취소_유형불명",
+      "code": "OCUPY_CNCL_UNKN",
       "name": "점용·사용 취소(유형불명)",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "점사용+취소"
+      ],
+      "priority": 45
     },
     {
-      "code": "occupancy:협의취소",
+      "code": "OCUPY_CNSLT_CNCL",
       "name": "협의취소",
-      "family": "점용·사용"
+      "family": "점용·사용",
+      "keywords": [
+        "협의+취소"
+      ],
+      "priority": 64
+    },
+    {
+      "code": "ETC_BID_NOTI",
+      "name": "입찰공고",
+      "family": "기타",
+      "keywords": [
+        "입찰"
+      ],
+      "priority": 10,
+      "notes": "워크북 55종 밖에서 실입력으로 확인해 보탠 첫 종류다. 공유수면 처분이 아니라 기관이 같은 게시판에 올리는 조달 공고인데, 첨부로 섞여 들어와 제목이 멀쩡히 뽑히고도 종류가 비었다(전수 11건). priority를 10으로 낮춘 것은 \"공유수면 점용·사용 …입찰공고\"처럼 두 성격이 겹친 제목을 점용·사용 쪽에 양보하기 위함이다."
     }
   ]
 }

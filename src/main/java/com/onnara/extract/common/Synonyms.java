@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  * 라벨 동의어 사전 + 라벨 정규화.
  *
  * <p>고시문마다 같은 필드를 다른 라벨로 부르므로(예: 고시일자/공고일자),
- * 정규화한 라벨을 canonical 필드명으로 매핑한다. 매핑 안 된 라벨은 extras에
+ * 정규화한 라벨을 itemCd 필드명으로 매핑한다. 매핑 안 된 라벨은 extras에
  * 보존되며, 빈도가 쌓이면 사전에 추가한다(§9 동의어 보강 절차).
  *
  * <p>사전 본문은 {@code src/main/resources/synonyms.json}이 단일 정의처다 —
@@ -31,18 +31,18 @@ import java.util.regex.Pattern;
 public final class Synonyms {
 
     /** 기간 가상 필드명 — Mapper가 시작/종료로 분리하므로 레코드에는 그대로 남지 않는다. */
-    public static final String WORK_PERIOD = "work_period";
+    public static final String WORK_PERIOD = "WORK_PERIOD";
 
     /** {@link #WORK_PERIOD} 분리 결과 — 시작일(ISO). 사전에는 없는 파생 필드다. */
-    public static final String WORK_PERIOD_START = "work_period_start";
+    public static final String WORK_PERIOD_START = "WORK_PERIOD_START";
 
     /** {@link #WORK_PERIOD} 분리 결과 — 종료일(ISO). 사전에는 없는 파생 필드다. */
-    public static final String WORK_PERIOD_END = "work_period_end";
+    public static final String WORK_PERIOD_END = "WORK_PERIOD_END";
 
     /** 문서 단위 메타 — attachments 테이블의 컬럼이 된다(고시번호·고시일자·제목·고시자·기관). */
     public static final String SCOPE_ATTACHMENT = "attachment";
 
-    /** 처분 단위 값 — document_attributes 테이블의 행이 된다(표준항목 40종). */
+    /** 처분 단위 값 — TB_NOTI_ITEM_VAL 테이블의 행이 된다(표준항목 40종). */
     public static final String SCOPE_ATTRIBUTE = "attribute";
 
     /** 사전 리소스 경로 — 클래스패스 기준. */
@@ -69,23 +69,23 @@ public final class Synonyms {
         VERSION = root.path("version").asText("unknown");
     }
 
-    /** canonical 필드 → 정규화된 동의어 라벨 목록. */
+    /** itemCd 필드 → 정규화된 동의어 라벨 목록. */
     public static final Map<String, List<String>> LABEL_SYNONYMS = createDictionary();
 
-    /** 사전 선언 순서의 canonical 필드명 — 레코드 필드 정렬 기준. */
-    private static final List<String> FIELD_ORDER = FIELDS.stream().map(FieldSpec::canonical).toList();
+    /** 사전 선언 순서의 itemCd 필드명 — 레코드 필드 정렬 기준. */
+    private static final List<String> FIELD_ORDER = FIELDS.stream().map(FieldSpec::itemCd).toList();
 
-    /** 정규화된 라벨 → canonical 필드 (역인덱스). */
+    /** 정규화된 라벨 → itemCd 필드 (역인덱스). */
     private static final Map<String, String> LOOKUP = createLookup();
 
     /**
      * 사전의 필드 1건 — 매핑에 쓰이는 동의어와, 검토 문서에 쓰이는 설명·예시를 함께 담는다.
      *
-     * @param canonical   표준 필드명(= NoticeRecord 필드 키)
-     * @param display     사람이 읽는 필드 표시명
+     * @param itemCd   표준 필드명(= NoticeRecord 필드 키)
+     * @param itemNm     사람이 읽는 필드 표시명
      * @param scope       저장 계층: {@link #SCOPE_ATTACHMENT}(문서 메타 → attachments 컬럼) 또는
-     *                    {@link #SCOPE_ATTRIBUTE}(처분 단위 값 → document_attributes 행).
-     *                    attribute_defs 테이블로 동기화되는 것은 후자뿐이다
+     *                    {@link #SCOPE_ATTRIBUTE}(처분 단위 값 → TB_NOTI_ITEM_VAL 행).
+     *                    TB_NOTI_ITEM 테이블로 동기화되는 것은 후자뿐이다
      * @param series      같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음(면적/기간/위치/인적/주소/
      *                    날짜/연락/사유). 누락 검증을 항목이 아니라 계열 단위로 하기 위한 축이며,
      *                    계열이 없는 단독 항목은 null
@@ -98,14 +98,26 @@ public final class Synonyms {
      * @param examples    실제 고시문에서 관측된 값 예시
      * @param notes       검토자를 위한 주의사항(없으면 null)
      */
-    public record FieldSpec(String canonical, String display, String scope, String series,
-                            String type, boolean core, boolean virtual, String description,
+    public record FieldSpec(String itemCd, String itemNm, String scope, String srsNm,
+                            String valTyCd, boolean coreYn, boolean virtual, boolean stored,
+                            String description,
                             List<String> synonyms, List<String> rawSynonyms,
                             List<String> examples, String notes) {
 
-        /** 이 필드가 처분 단위 값인지 — attribute_defs 동기화 대상 판정에 쓴다. */
+        /** 이 필드가 처분 단위 값인지 — TB_NOTI_ITEM 동기화 대상 판정에 쓴다. */
         public boolean isAttribute() {
             return SCOPE_ATTRIBUTE.equals(scope);
+        }
+
+        /**
+         * 추출만 하고 적재하지 않는 필드인지.
+         *
+         * <p>BODY_AGNCY_NM·NOTI_PSN이 그렇다 — 컬럼은 뺐지만 사전에서까지 빼면 매핑이 깨진다.
+         * 기관은 고시번호와 한 정규식으로 함께 잡히고, 고시자는 제목이 서명 줄을 삼키는 것을
+         * 막는 가드다.
+         */
+        public boolean isExtractOnly() {
+            return !stored;
         }
     }
 
@@ -119,7 +131,7 @@ public final class Synonyms {
     }
 
     /**
-     * canonical 필드명을 사전 선언 순서로 반환한다.
+     * itemCd 필드명을 사전 선언 순서로 반환한다.
      *
      * <p>레코드가 필드를 이 순서로 정렬해 담으므로, 같은 서식을 표 읽는 순서가 달라도
      * {@code *.schema.json}의 키 순서가 흔들리지 않는다.
@@ -133,9 +145,9 @@ public final class Synonyms {
         return VERSION;
     }
 
-    /** canonical 필드명으로 필드 정의를 찾는다. */
-    public static Optional<FieldSpec> field(String canonical) {
-        return FIELDS.stream().filter(f -> f.canonical().equals(canonical)).findFirst();
+    /** itemCd 필드명으로 필드 정의를 찾는다. */
+    public static Optional<FieldSpec> field(String itemCd) {
+        return FIELDS.stream().filter(f -> f.itemCd().equals(itemCd)).findFirst();
     }
 
     /**
@@ -156,12 +168,12 @@ public final class Synonyms {
         Set<String> seenCanonicals = new LinkedHashSet<>();
 
         for (JsonNode node : fieldsNode) {
-            String canonical = node.path("canonical").asText("").trim();
-            if (canonical.isEmpty()) {
+            String itemCd = node.path("canonical").asText("").trim();
+            if (itemCd.isEmpty()) {
                 throw new IllegalStateException(RESOURCE + ": canonical이 없는 필드 항목이 있습니다");
             }
-            if (!seenCanonicals.add(canonical)) {
-                throw new IllegalStateException(RESOURCE + ": canonical 필드가 중복 정의됨 — " + canonical);
+            if (!seenCanonicals.add(itemCd)) {
+                throw new IllegalStateException(RESOURCE + ": canonical 필드가 중복 정의됨 — " + itemCd);
             }
 
             List<String> rawSynonyms = new ArrayList<>();
@@ -171,12 +183,12 @@ public final class Synonyms {
                 String norm = normalizeLabel(raw);
                 if (norm.isEmpty()) {
                     throw new IllegalStateException(
-                            RESOURCE + ": 정규화하면 빈 문자열이 되는 동의어 — " + canonical + " / \"" + raw + "\"");
+                            RESOURCE + ": 정규화하면 빈 문자열이 되는 동의어 — " + itemCd + " / \"" + raw + "\"");
                 }
-                String owner = seenSynonyms.putIfAbsent(norm, canonical);
+                String owner = seenSynonyms.putIfAbsent(norm, itemCd);
                 if (owner != null) {
                     throw new IllegalStateException(RESOURCE + ": 동의어 \"" + norm + "\"이(가) "
-                            + owner + "와 " + canonical + " 두 필드에 중복 등재됐습니다");
+                            + owner + "와 " + itemCd + " 두 필드에 중복 등재됐습니다");
                 }
                 rawSynonyms.add(raw);
                 normalized.add(norm);
@@ -185,7 +197,7 @@ public final class Synonyms {
             // (subject_address: 관측 라벨이 머리기호 붙은 "주소"뿐이라 applicant_address와 겹친다).
             // 다만 사유를 notes에 적게 강제해, 실수로 빠뜨린 것과 의도적으로 비운 것을 갈라 놓는다.
             if (normalized.isEmpty() && node.path("notes").asText("").isBlank()) {
-                throw new IllegalStateException(RESOURCE + ": 동의어가 하나도 없는 필드 — " + canonical
+                throw new IllegalStateException(RESOURCE + ": 동의어가 하나도 없는 필드 — " + itemCd
                         + " (의도한 것이라면 notes에 사유를 적으세요)");
             }
 
@@ -197,13 +209,14 @@ public final class Synonyms {
             JsonNode notes = node.path("notes");
             JsonNode series = node.path("series");
             specs.add(new FieldSpec(
-                    canonical,
-                    node.path("display").asText(canonical),
+                    itemCd,
+                    node.path("display").asText(itemCd),
                     node.path("scope").asText(SCOPE_ATTRIBUTE),
                     series.isMissingNode() || series.isNull() ? null : series.asText(),
                     node.path("value_type").asText("text"),
                     node.path("is_core").asBoolean(false),
                     node.path("virtual").asBoolean(false),
+                    node.path("stored").asBoolean(true),
                     node.path("description").asText(""),
                     List.copyOf(normalized),
                     List.copyOf(rawSynonyms),
@@ -231,7 +244,7 @@ public final class Synonyms {
     private static Map<String, List<String>> createDictionary() {
         Map<String, List<String>> d = new LinkedHashMap<>();
         for (FieldSpec spec : FIELDS) {
-            d.put(spec.canonical(), spec.synonyms());
+            d.put(spec.itemCd(), spec.synonyms());
         }
         return Map.copyOf(d);
     }
@@ -239,9 +252,9 @@ public final class Synonyms {
     /** {@link #LABEL_SYNONYMS}를 뒤집어 "동의어 라벨 → canonical 필드" 역인덱스를 만든다. */
     private static Map<String, String> createLookup() {
         Map<String, String> m = new LinkedHashMap<>();
-        LABEL_SYNONYMS.forEach((canonical, synonyms) -> {
+        LABEL_SYNONYMS.forEach((itemCd, synonyms) -> {
             for (String s : synonyms) {
-                m.put(s, canonical);
+                m.put(s, itemCd);
             }
         });
         return Map.copyOf(m);
@@ -289,7 +302,7 @@ public final class Synonyms {
         return parts;
     }
 
-    /** 원시 라벨 → canonical 필드. 괄호 병기 부분까지 시도한다. */
+    /** 원시 라벨 → itemCd 필드. 괄호 병기 부분까지 시도한다. */
     public static Optional<String> canonicalFor(String rawLabel) {
         String normalized = normalizeLabel(rawLabel);
         if (normalized.isEmpty()) {

@@ -52,9 +52,9 @@ class ScanOcrRunnerTest {
         return script;
     }
 
-    private Path rawJsonFile(String sourceFile, String fileType) throws IOException {
+    private Path rawJsonFile(String fileNm, String fileExtn) throws IOException {
         Path json = tempDir.resolve("prepared-raw.json");
-        Files.writeString(json, "{\"source_file\":\"" + sourceFile + "\",\"file_type\":\"" + fileType + "\","
+        Files.writeString(json, "{\"source_file\":\"" + fileNm + "\",\"file_type\":\"" + fileExtn + "\","
                 + "\"is_scanned\":false,\"content\":[],\"images\":[],\"markdown\":\"# ignored\"}");
         return json;
     }
@@ -73,8 +73,8 @@ class ScanOcrRunnerTest {
         assertTrue(args.contains("--source-file scan.hwpx"), "인자 전달: " + args);
         assertTrue(args.contains("--file-type hwpx"), "인자 전달: " + args);
         assertTrue(args.contains(image.toAbsolutePath().toString()), "입력 이미지 경로 전달: " + args);
-        assertTrue(raw.isScanned(), "결과 JSON의 is_scanned=false여도 true로 강제되어야 함");
-        assertEquals("scan.hwpx", raw.getSourceFile());
+        assertTrue(raw.isScanYn(), "결과 JSON의 is_scanned=false여도 true로 강제되어야 함");
+        assertEquals("scan.hwpx", raw.getFileNm());
     }
 
     @Test
@@ -89,7 +89,7 @@ class ScanOcrRunnerTest {
         String args = Files.readString(argsDump);
         assertTrue(args.contains("--file-type pdf"), "인자 전달: " + args);
         assertTrue(args.contains(pdf.toAbsolutePath().toString()), "PDF 경로 전달: " + args);
-        assertEquals("scan.pdf", raw.getSourceFile());
+        assertEquals("scan.pdf", raw.getFileNm());
     }
 
     @Test

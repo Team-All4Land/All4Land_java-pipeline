@@ -48,12 +48,12 @@ public final class SynonymsDoc {
         int i = 1;
         for (Synonyms.FieldSpec f : fields) {
             md.append("| ").append(i++)
-                    .append(" | `").append(f.canonical()).append('`')
-                    .append(" | ").append(Markdown.cell(f.display()))
+                    .append(" | `").append(f.itemCd()).append('`')
+                    .append(" | ").append(Markdown.cell(f.itemNm()))
                     .append(" | ").append(scopeLabel(f))
-                    .append(" | ").append(f.series() == null ? "—" : Markdown.cell(f.series()))
+                    .append(" | ").append(f.srsNm() == null ? "—" : Markdown.cell(f.srsNm()))
                     .append(" | ").append(typeLabel(f))
-                    .append(" | ").append(f.core() ? "●" : "")
+                    .append(" | ").append(f.coreYn() ? "●" : "")
                     .append(" | ").append(f.synonyms().size())
                     .append(" |\n");
         }
@@ -61,23 +61,27 @@ public final class SynonymsDoc {
         return md.toString();
     }
 
-    /** 저장 계층 표기 — 이 필드가 첨부파일 컬럼인지 처분 단위 항목 행인지. */
+    /** 저장 계층 표기 — 항목 행인지, 첨부 컬럼인지, 아니면 적재하지 않는지. */
     private static String scopeLabel(Synonyms.FieldSpec f) {
-        return f.isAttribute() ? "`document_attributes` 행" : "`attachments` 컬럼";
+        if (f.isAttribute()) {
+            return "`TB_NOTI_ITEM_VAL` 행";
+        }
+        // 추출은 하되 어디에도 넣지 않는 필드가 있다. 컬럼으로 적으면 없는 컬럼을 찾게 된다
+        return f.isExtractOnly() ? "추출만(적재 안 함)" : "`TB_ATCH_FILE` 컬럼";
     }
 
     /** 필드별 상세 — 설명·예시·주의사항과 인식하는 라벨 전체 목록. */
     private static String details(List<Synonyms.FieldSpec> fields) {
         StringBuilder md = new StringBuilder("## 필드별 상세\n\n");
         for (Synonyms.FieldSpec f : fields) {
-            md.append("### `").append(f.canonical()).append("` — ").append(f.display()).append("\n\n");
+            md.append("### `").append(f.itemCd()).append("` — ").append(f.itemNm()).append("\n\n");
             md.append("- **저장 계층**: ").append(scopeLabel(f)).append('\n');
-            if (f.series() != null) {
-                md.append("- **계열**: ").append(f.series())
+            if (f.srsNm() != null) {
+                md.append("- **계열**: ").append(f.srsNm())
                         .append(" — 누락 검증은 항목이 아니라 계열 단위로 본다\n");
             }
             md.append("- **값 형식**: ").append(typeLabel(f)).append('\n');
-            if (f.core()) {
+            if (f.coreYn()) {
                 md.append("- **주요 항목**: 전수 표본 출현율 60% 이상\n");
             }
             if (!f.description().isBlank()) {
@@ -101,7 +105,7 @@ public final class SynonymsDoc {
 
     /** 값 형식 표기 — 가상 필드는 분리 적재된다는 사실을 함께 드러낸다. */
     private static String typeLabel(Synonyms.FieldSpec f) {
-        return f.virtual() ? f.type() + " (가상 필드 · 분리 적재)" : f.type();
+        return f.virtual() ? f.valTyCd() + " (가상 필드 · 분리 적재)" : f.valTyCd();
     }
 
     /** 라벨 정규화 규칙 — 사전에 라벨을 어떤 형태로 적어도 되는지 설명한다. */

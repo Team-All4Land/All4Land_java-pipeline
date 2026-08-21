@@ -1,6 +1,7 @@
 package com.onnara.extract.cli;
 
 import com.onnara.extract.docs.ExtrasReport;
+import com.onnara.extract.docs.NoticeTypesReport;
 import com.onnara.extract.docs.SynonymsDoc;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -14,13 +15,16 @@ import java.util.concurrent.Callable;
 import java.util.stream.Stream;
 
 /**
- * {@code dict}: 동의어 사전과 미매핑 라벨 검토 문서를 생성한다 (§9).
+ * {@code dict}: 동의어 사전과 검토 문서(미매핑 라벨·미분류 제목)를 생성한다 (§9).
  *
- * <p>사전 본문은 {@code src/main/resources/synonyms.json}이고, 여기서 만드는 문서는
- * 그 파생물이다 — 검토자가 JSON이나 Java를 열지 않고도 무엇이 어떻게 매핑되는지,
- * 무엇이 아직 매핑되지 않는지 확인할 수 있게 한다.
+ * <p>사전 본문은 {@code src/main/resources/synonyms.json}과 {@code notice_types.json}이고,
+ * 여기서 만드는 문서는 그 파생물이다 — 검토자가 JSON이나 Java를 열지 않고도 무엇이 어떻게
+ * 매핑되는지, 무엇이 아직 매핑되지 않는지 확인할 수 있게 한다.
+ *
+ * <p>검토 리포트가 둘인 이유: 두 사전의 구멍이 서로 다른 곳에서 드러난다. 라벨이 모자라면
+ * 값이 {@code extras}로 새고, 공고종류가 모자라면 {@code NOTI_KND_CD}가 빈다.
  */
-@Command(name = "dict", description = "동의어 사전·미매핑 라벨 검토 문서 생성")
+@Command(name = "dict", description = "동의어 사전·검토 리포트 생성")
 public class DictCommand implements Callable<Integer> {
 
     /** 스키마 결과 파일 접미사 — 검토 리포트의 입력. */
@@ -37,8 +41,13 @@ public class DictCommand implements Callable<Integer> {
 
     /** 미매핑 라벨 검토 리포트 출력 경로. */
     @Option(names = "--review-output", defaultValue = "docs/EXTRAS_REVIEW.md",
-            description = "검토 리포트 경로 (기본 ${DEFAULT-VALUE})")
+            description = "미매핑 라벨 리포트 경로 (기본 ${DEFAULT-VALUE})")
     Path reviewOutput;
+
+    /** 미분류 제목 검토 리포트 출력 경로. */
+    @Option(names = "--types-output", defaultValue = "docs/NOTICE_TYPES_REVIEW.md",
+            description = "미분류 제목 리포트 경로 (기본 ${DEFAULT-VALUE})")
+    Path typesOutput;
 
     /** 사전 문서를 생성하고, --review가 있으면 검토 리포트도 생성한다. */
     @Override
@@ -57,6 +66,9 @@ public class DictCommand implements Callable<Integer> {
         }
         write(reviewOutput, ExtrasReport.render(schemas));
         System.out.printf("미매핑 라벨 검토 리포트: %s (문서 %d개 집계)%n", reviewOutput, schemas.size());
+
+        write(typesOutput, NoticeTypesReport.render(schemas));
+        System.out.printf("미분류 제목 검토 리포트: %s (문서 %d개 집계)%n", typesOutput, schemas.size());
         return 0;
     }
 

@@ -39,7 +39,7 @@ class DocumentSizeTest {
         raw.getImages().add(image);
 
         // 셀 "값"(1) + 표 캡션 "표1"(2) + 그림 캡션 "그림2"(3)
-        assertEquals(6, DocumentSize.bodyChars(raw));
+        assertEquals(6, DocumentSize.bodyCharCnt(raw));
     }
 
     /** 캡션이 없으면 예전과 똑같이 센다 — 이 필드가 기존 판정을 흔들지 않는다. */
@@ -51,7 +51,7 @@ class DocumentSizeTest {
                 List.of(List.of("값"))));
         raw.getImages().add(new RawImage("고시문_img0.png", 100));
 
-        assertEquals("본문열글자".length() + 1, DocumentSize.bodyChars(raw));
+        assertEquals("본문열글자".length() + 1, DocumentSize.bodyCharCnt(raw));
     }
 
     /**

@@ -59,4 +59,4 @@ __pycache__/
 .venv/
 venv/
 
-samples
+samples/

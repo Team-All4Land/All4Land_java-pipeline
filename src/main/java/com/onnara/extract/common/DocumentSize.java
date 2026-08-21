@@ -31,7 +31,7 @@ public final class DocumentSize {
      * 임계치가 만 단위라 판정이 뒤집힐 정도는 아니고 {@code cells}가 없는 엔진(PDF·OCR)에서도
      * 같은 방식으로 세어 형식 간 기준이 갈리지 않는다.
      */
-    public static int bodyChars(RawDocument raw) {
+    public static int bodyCharCnt(RawDocument raw) {
         if (raw == null || raw.getContent() == null) {
             return 0;
         }

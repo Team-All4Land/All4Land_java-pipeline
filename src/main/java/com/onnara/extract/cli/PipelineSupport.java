@@ -37,7 +37,7 @@ final class PipelineSupport {
     private PipelineSupport() {
     }
 
-    /** 결과 raw 문서 + 실제 사용된 엔진 식별자(§6 documents.engine). */
+    /** 결과 raw 문서 + 실제 사용된 엔진 식별자(§6 TB_ATCH_FILE.ENGN_NM). */
     record ExtractResult(RawDocument raw, String engine) {
     }
 
@@ -70,7 +70,7 @@ final class PipelineSupport {
      * {@code images} 메타만 남긴다 — 사진 속 글자를 본문에 섞지 않는다.
      *
      * @param outputDir 스키마/원시 JSON이 저장될 기준 폴더 — 이미지는 {@code outputDir/images}에 저장되고
-     *                  {@code RawImage.path}는 저장된 이미지의 절대경로로 기록된다(ref_files.file_path 적재용).
+     *                  {@code RawImage.path}는 저장된 이미지의 절대경로로 기록된다(TB_ATCH_IMG.FILE_PATH 적재용).
      */
     static ExtractResult extractOne(Path file, Extractor forcedExtractor, Path outputDir,
                                     boolean saveImages, ScanOcrRunner scanRunner) throws IOException {
@@ -88,12 +88,12 @@ final class PipelineSupport {
                                     boolean scanned) throws IOException {
         // 라우팅 근거는 확장자가 아니라 파일 내용이다 — .hwp로 저장된 HWPX를 살리기 위해서다
         String format = DocFormat.routingKey(file);
-        String sourceFile = file.getFileName().toString();
+        String fileNm = file.getFileName().toString();
         Path imagesDir = outputDir.resolve("images");
 
         if (forcedExtractor == null && scanned) {
             ExtractResult result = extractScanned(
-                    file, format, sourceFile, imagesDir, saveImages, scanRunner);
+                    file, format, fileNm, imagesDir, saveImages, scanRunner);
             return new ExtractResult(tagFormats(result.raw(), file, format), result.engine());
         }
 
@@ -107,17 +107,17 @@ final class PipelineSupport {
     }
 
     /**
-     * 형식 두 축을 확정한다 — {@code file_type}은 <b>파일명 확장자</b>,
-     * {@code detected_format}은 <b>내용으로 판정한 실제 형식</b>.
+     * 형식 두 축을 확정한다 — {@code FILE_EXTN}은 <b>파일명 확장자</b>,
+     * {@code REAL_EXTN}은 <b>내용으로 판정한 실제 형식</b>.
      *
-     * <p>엔진은 자기가 아는 형식 이름을 {@code fileType}에 박아 넣는다(예: {@code OwpmlExtractor}는
-     * 항상 {@code "hwpx"}). 그대로 두면 {@code .hwp}로 저장된 HWPX가 {@code file_type=hwpx}로
+     * <p>엔진은 자기가 아는 형식 이름을 {@code fileExtn}에 박아 넣는다(예: {@code OwpmlExtractor}는
+     * 항상 {@code "hwpx"}). 그대로 두면 {@code .hwp}로 저장된 HWPX가 {@code FILE_EXTN=hwpx}로
      * 적재돼 기존 집계 쿼리와 값이 어긋난다. 두 축을 여기서 한 번에 정리해, 엔진은 형식 판정
      * 정책을 몰라도 되게 한다.
      */
     private static RawDocument tagFormats(RawDocument raw, Path file, String format) {
-        raw.setFileType(extensionOf(file));
-        raw.setDetectedFormat(format);
+        raw.setFileExtn(extensionOf(file));
+        raw.setRealExtn(format);
         return raw;
     }
 
@@ -126,11 +126,11 @@ final class PipelineSupport {
      * PaddleOCR-VL 서브프로세스로 넘긴다(§1, §7). 결과의 images 메타는 우리가 로컬에 저장한
      * 파일 목록으로 재구성한다 — 결과가 입력 이미지와 다른 목록/순서를 돌려줄 수 있어서다.
      */
-    private static ExtractResult extractScanned(Path file, String format, String sourceFile,
+    private static ExtractResult extractScanned(Path file, String format, String fileNm,
                                                 Path imagesDir, boolean saveImages,
                                                 ScanOcrRunner scanRunner) throws IOException {
         if ("pdf".equals(format)) {
-            RawDocument raw = scanRunner.parsePdf(file, sourceFile);
+            RawDocument raw = scanRunner.parsePdf(file, fileNm);
             return new ExtractResult(raw, "paddleocr-vl");
         }
 
@@ -142,7 +142,7 @@ final class PipelineSupport {
         try {
             List<Path> saved = nativeExtractor.saveImages(file, targetDir);
 
-            RawDocument raw = scanRunner.parseImages(saved, sourceFile, format);
+            RawDocument raw = scanRunner.parseImages(saved, fileNm, format);
             raw.setImages(new ArrayList<>());
             for (Path p : saved) {
                 RawImage image = new RawImage(p.getFileName().toString(), Files.size(p));
@@ -183,7 +183,7 @@ final class PipelineSupport {
         }
     }
 
-    /** 저장된 이미지 파일의 절대 경로 문자열(ref_files.file_path 적재용, 구분자는 '/'). */
+    /** 저장된 이미지 파일의 절대 경로 문자열(TB_ATCH_IMG.FILE_PATH 적재용, 구분자는 '/'). */
     private static String absolutePath(Path path) {
         return path.toAbsolutePath().normalize().toString().replace('\\', '/');
     }

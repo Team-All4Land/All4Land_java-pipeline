@@ -1,5 +1,7 @@
 package com.onnara.extract.db;
 
+import com.onnara.extract.common.AgencyRegistry;
+import com.onnara.extract.common.AttributeRows;
 import com.onnara.extract.common.Errors;
 import com.onnara.extract.common.SourceFileName;
 import com.onnara.extract.common.Synonyms;
@@ -14,49 +16,77 @@ import java.sql.SQLException;
 import java.sql.Savepoint;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * PostgreSQL 적재 — 공고 → 첨부 → 항목값 3계층으로 저장한다.
  *
- * <p>멱등 단위는 <b>첨부파일</b>이다({@code (notice_no, attach_no)}). 게시물 단위로 지우면
+ * <p>멱등 단위는 <b>첨부파일</b>이다({@code (NOTI_SN, ATCH_SN)}). 게시물 단위로 지우면
  * 파일을 한 건씩 처리하는 도중 같은 게시물의 앞선 첨부가 함께 날아간다. 첨부 행을 지우면
  * CASCADE로 이미지와 항목값이 함께 정리되므로 재적재가 안전하다.
  *
- * <p>성공한 파일만 넣지 않는다 — 실패·적재제외도 {@code status_code}를 달아 행으로 남긴다.
+ * <p>성공한 파일만 넣지 않는다 — 실패·적재제외도 {@code STTS_CD}를 달아 행으로 남긴다.
  * 성공만 적재하면 "첨부 401건 중 추출 0건"인 기관이 DB에서 아예 보이지 않는다.
+ *
+ * <p>기관은 첨부보다 <b>먼저</b> 한 번에 넣는다 — {@code TB_NOTI.AGNCY_NO}가 FK라
+ * 순서가 뒤바뀌면 첫 적재가 FK 위반으로 죽는다({@link ReferenceSync}를 앞세우는 것과 같은 이유).
  */
 public final class DbLoader implements AutoCloseable {
 
-    /** 게시물 행 — 같은 게시물의 첨부가 여럿이므로 최초 1회만 만든다. */
+    /** 기관 행 — 입력 폴더명에서 확정한 목록을 배치 시작에 한 번 반영한다. */
+    private static final String UPSERT_AGENCY = """
+            INSERT INTO TB_AGNCY (AGNCY_NO, AGNCY_NM, KND_CD) VALUES (?, ?, ?)
+            ON CONFLICT (AGNCY_NO) DO UPDATE SET
+                AGNCY_NM = EXCLUDED.AGNCY_NM, KND_CD = EXCLUDED.KND_CD
+            """;
+
+    /**
+     * 게시물 행 — 같은 게시물의 첨부가 여럿이므로 값은 COALESCE로 합친다.
+     *
+     * <p>{@code DO NOTHING}이 아닌 이유: 같은 게시물의 두 번째 첨부가 들어올 때 첫 첨부가 채운
+     * 기관을 덮어 지우면 안 되고, 폴더를 모르는 경로({@code map} → {@code load})로 재적재해도
+     * 이미 채운 값이 날아가면 안 된다. 새 정보가 있으면 이기고, 없으면 기존을 지킨다.
+     */
     private static final String INSERT_NOTICE = """
-            INSERT INTO notices (notice_no) VALUES (?) ON CONFLICT (notice_no) DO NOTHING
+            INSERT INTO TB_NOTI (NOTI_SN, AGNCY_NO, BOARD_CD) VALUES (?, ?, ?)
+            ON CONFLICT (NOTI_SN) DO UPDATE SET
+                AGNCY_NO = COALESCE(EXCLUDED.AGNCY_NO, TB_NOTI.AGNCY_NO),
+                BOARD_CD = COALESCE(EXCLUDED.BOARD_CD, TB_NOTI.BOARD_CD)
             """;
 
     /** 멱등 재적재를 위한 기존 첨부 삭제(이미지·항목값은 CASCADE로 함께 정리). */
     private static final String DELETE_ATTACHMENT =
-            "DELETE FROM attachments WHERE notice_no = ? AND attach_no = ?";
+            "DELETE FROM TB_ATCH_FILE WHERE NOTI_SN = ? AND ATCH_SN = ?";
 
-    /** 첨부 1행 — 파일 메타 + 문서 단위 메타 + 추출 상태. */
+    /**
+     * 첨부 1행 — 파일 메타 + 문서 단위 메타 + 추출 상태.
+     *
+     * <p>처분 건수를 컬럼으로 들고 있지 않다 — {@code COUNT(DISTINCT DSPS_SN)}으로 나오는
+     * 값을 적재 로직과 따로 동기화하면 언젠가 둘이 어긋난다.
+     */
     private static final String INSERT_ATTACHMENT = """
-            INSERT INTO attachments (
-                notice_no, attach_no, file_name, status_code,
-                fail_stage, fail_kind, fail_message, skip_reason,
-                ext_outer, ext_inner, is_scanned, engine,
-                agency_name, doc_no, doc_date, title, signer, record_count
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO TB_ATCH_FILE (
+                NOTI_SN, ATCH_SN, FILE_NM, STTS_CD,
+                FAIL_STEP, FAIL_KND, FAIL_MSG, EXCL_RSN,
+                FILE_EXTN, REAL_EXTN, SCAN_YN, ENGN_NM,
+                NOTI_KND_CD, NOTI_NO, NOTI_YMD, NOTI_TTL
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
     /** 이미지 1행(첨부당 N건, 배치 실행). */
     private static final String INSERT_IMAGE = """
-            INSERT INTO attachment_images (notice_no, attach_no, image_no, caption, abs_path)
+            INSERT INTO TB_ATCH_IMG (NOTI_SN, ATCH_SN, IMG_SN, IMG_CPTN, FILE_PATH)
             VALUES (?, ?, ?, ?, ?)
             """;
 
     /** 항목값 1행(레코드당 N건, 배치 실행). */
     private static final String INSERT_ATTRIBUTE = """
-            INSERT INTO document_attributes (notice_no, attach_no, record_no, attr_code, seq, value)
+            INSERT INTO TB_NOTI_ITEM_VAL (NOTI_SN, ATCH_SN, DSPS_SN, ITEM_CD, RPT_SN, ITEM_VAL)
             VALUES (?, ?, ?, ?, ?, ?)
             """;
 
@@ -85,8 +115,10 @@ public final class DbLoader implements AutoCloseable {
      * @param stage    실패한 단계(판별 / 추출 / 표해석 / 매핑)
      * @param kind     실패 갈래({@link com.onnara.extract.detect.FailureKind})
      * @param message  원인 체인까지 담은 사유 문장
+     * @param board    수집처 — 실패해도 게시물 행은 만들어지므로 기관이 붙어야 한다. 모르면 null
      */
-    public record FailedAttachment(String fileName, String stage, String kind, String message) {
+    public record FailedAttachment(String fileName, String stage, String kind, String message,
+                                   AgencyRegistry.SourceBoard board) {
     }
 
     /**
@@ -97,6 +129,7 @@ public final class DbLoader implements AutoCloseable {
      */
     public LoadStats loadAll(List<SchemaResult> files, List<FailedAttachment> failures)
             throws SQLException {
+        int agencies = upsertAgencies(collectAgencies(files, failures));
         int filesOk = 0;
         int filesFailed = 0;
         int filesSkipped = 0;
@@ -108,10 +141,10 @@ public final class DbLoader implements AutoCloseable {
             try {
                 Counts counts = loadOne(file);
                 conn.releaseSavepoint(savepoint);
-                if (file.isDbSkipped()) {
+                if (file.isExcluded()) {
                     filesSkipped++;
-                    System.out.println("[적재제외] " + file.getSourceFile() + ": "
-                            + file.getDbSkipReason() + " — 안내문류로 보고 항목 적재를 건너뜁니다");
+                    System.out.println("[적재제외] " + file.getFileNm() + ": "
+                            + file.getExclRsn() + " — 안내문류로 보고 항목 적재를 건너뜁니다");
                 } else {
                     filesOk++;
                 }
@@ -120,7 +153,7 @@ public final class DbLoader implements AutoCloseable {
             } catch (Exception e) {
                 conn.rollback(savepoint);
                 filesFailed++;
-                System.out.println("[실패] " + file.getSourceFile() + ": " + Errors.describe(e));
+                System.out.println("[실패] " + file.getFileNm() + ": " + Errors.describe(e));
             }
         }
 
@@ -136,7 +169,70 @@ public final class DbLoader implements AutoCloseable {
         }
 
         conn.commit();
-        return new LoadStats(filesOk, filesFailed, filesSkipped, recordsInserted, imagesInserted);
+        return new LoadStats(agencies, filesOk, filesFailed, filesSkipped,
+                recordsInserted, imagesInserted);
+    }
+
+    /**
+     * 이번 배치가 본 기관을 중복 없이 모은다 — 기관번호 오름차순.
+     *
+     * <p>스키마 JSON과 실패 목록 양쪽에서 긁는다. 첨부를 한 건도 못 건진 기관을 따로 넣고 싶으면
+     * {@link #loadAgencies}로 목록을 통째로 넘긴다.
+     */
+    private static Collection<AgencyRegistry.Agency> collectAgencies(
+            List<SchemaResult> files, List<FailedAttachment> failures) {
+        Map<Integer, AgencyRegistry.Agency> byNo = new LinkedHashMap<>();
+        for (SchemaResult file : files) {
+            addAgency(byNo, file.getSourceBoard());
+        }
+        for (FailedAttachment failure : failures) {
+            addAgency(byNo, failure.board());
+        }
+        List<AgencyRegistry.Agency> sorted = new ArrayList<>(byNo.values());
+        sorted.sort(Comparator.comparingInt(AgencyRegistry.Agency::agncyNo));
+        return sorted;
+    }
+
+    /** 수집처에서 기관을 뽑아 담는다. 같은 번호가 또 오면 처음 것을 지킨다. */
+    private static void addAgency(Map<Integer, AgencyRegistry.Agency> byNo,
+                                  AgencyRegistry.SourceBoard board) {
+        if (board != null) {
+            byNo.putIfAbsent(board.agncyNo(), new AgencyRegistry.Agency(
+                    board.agncyNo(), board.agncyNm(), board.kndCd()));
+        }
+    }
+
+    /**
+     * 기관 목록을 통째로 반영하고 커밋한다 — 첨부 적재보다 <b>먼저</b> 불러야 한다.
+     *
+     * <p>{@link #loadAll}은 파일에 딸린 기관만 넣는다. 첨부가 0건인 폴더까지 남기려면
+     * 배치가 {@link AgencyRegistry#agencies()}를 이 메서드로 먼저 넘겨야 한다 —
+     * "긁긴 했는데 아무것도 못 건진 기관"이 DB에서 보이지 않으면 수집 누락과
+     * 애초에 자료가 없던 기관을 구분할 수 없다.
+     *
+     * @return 반영한 기관 수
+     */
+    public int loadAgencies(Collection<AgencyRegistry.Agency> agencies) throws SQLException {
+        int count = upsertAgencies(agencies);
+        conn.commit();
+        return count;
+    }
+
+    /** 기관 upsert 배치 실행. 커밋은 호출부가 한다. */
+    private int upsertAgencies(Collection<AgencyRegistry.Agency> agencies) throws SQLException {
+        if (agencies.isEmpty()) {
+            return 0;
+        }
+        try (PreparedStatement ps = conn.prepareStatement(UPSERT_AGENCY)) {
+            for (AgencyRegistry.Agency agency : agencies) {
+                ps.setInt(1, agency.agncyNo());
+                ps.setString(2, agency.agncyNm());
+                ps.setString(3, agency.kndCd());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
+        return agencies.size();
     }
 
     /**
@@ -147,14 +243,14 @@ public final class DbLoader implements AutoCloseable {
      */
     public Counts loadOne(SchemaResult file) throws SQLException {
         SourceFileName.Parsed name = file.attachmentKey();
-        prepareSlot(name);
+        prepareSlot(name, file.getSourceBoard());
 
         List<NoticeRecord> records = file.getRecords();
         // 적재제외 파일은 첨부 메타만 남기고 항목값은 넣지 않는다
-        boolean loadValues = !file.isDbSkipped();
+        boolean loadValues = !file.isExcluded();
         NoticeRecord meta = records.isEmpty() ? null : records.get(0);
 
-        insertAttachment(file, name, meta, loadValues ? records.size() : 0);
+        insertAttachment(file, name, meta);
 
         int attributes = 0;
         if (loadValues) {
@@ -167,27 +263,25 @@ public final class DbLoader implements AutoCloseable {
     /** 판별·추출 실패 건을 첨부 행으로만 남긴다(항목값 없음). */
     private void loadFailure(FailedAttachment failure) throws SQLException {
         SourceFileName.Parsed name = SourceFileName.parse(failure.fileName());
-        prepareSlot(name);
+        prepareSlot(name, failure.board());
 
         try (PreparedStatement ps = conn.prepareStatement(INSERT_ATTACHMENT)) {
-            ps.setInt(1, name.noticeNo());
-            ps.setInt(2, name.attachNo());
+            ps.setInt(1, name.notiSn());
+            ps.setInt(2, name.atchSn());
             ps.setString(3, failure.fileName());
             ps.setString(4, STATUS_FAILED);
             ps.setString(5, failure.stage());
             ps.setString(6, failure.kind());
             ps.setString(7, failure.message());
-            ps.setNull(8, Types.VARCHAR);        // skip_reason
+            ps.setNull(8, Types.VARCHAR);        // EXCL_RSN
             ps.setString(9, extensionOf(failure.fileName()));
-            ps.setNull(10, Types.VARCHAR);       // ext_inner — 판별에 실패했으면 알 수 없다
-            ps.setBoolean(11, false);            // is_scanned — 위와 같은 이유로 단정하지 않는다
-            ps.setNull(12, Types.VARCHAR);       // engine
-            ps.setNull(13, Types.VARCHAR);       // agency_name
-            ps.setNull(14, Types.VARCHAR);       // doc_no
-            ps.setNull(15, Types.DATE);          // doc_date
-            ps.setNull(16, Types.VARCHAR);       // title
-            ps.setNull(17, Types.VARCHAR);       // signer
-            ps.setInt(18, 0);
+            ps.setNull(10, Types.VARCHAR);       // REAL_EXTN — 판별에 실패했으면 알 수 없다
+            ps.setBoolean(11, false);            // SCAN_YN — 위와 같은 이유로 단정하지 않는다
+            ps.setNull(12, Types.VARCHAR);       // ENGN_NM
+            ps.setNull(13, Types.VARCHAR);       // NOTI_KND_CD — 제목을 못 읽었으니 분류할 수 없다
+            ps.setNull(14, Types.VARCHAR);       // NOTI_NO
+            ps.setNull(15, Types.DATE);          // NOTI_YMD
+            ps.setNull(16, Types.VARCHAR);       // NOTI_TTL
             ps.executeUpdate();
         }
     }
@@ -201,51 +295,62 @@ public final class DbLoader implements AutoCloseable {
         return dot < 0 ? null : fileName.substring(dot + 1).toLowerCase(java.util.Locale.ROOT);
     }
 
-    /** 게시물 행을 확보하고 같은 첨부의 이전 적재분을 지운다. */
-    private void prepareSlot(SourceFileName.Parsed name) throws SQLException {
+    /**
+     * 게시물 행을 확보하고 같은 첨부의 이전 적재분을 지운다.
+     *
+     * @param board 수집처. null이면 기관·게시판을 비운 채로 게시물만 만든다 — 폴더 규약 밖에서
+     *              온 파일(수동 수집분)도 첨부는 적재돼야 한다
+     */
+    private void prepareSlot(SourceFileName.Parsed name, AgencyRegistry.SourceBoard board)
+            throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(INSERT_NOTICE)) {
-            ps.setInt(1, name.noticeNo());
+            ps.setInt(1, name.notiSn());
+            if (board == null) {
+                ps.setNull(2, Types.INTEGER);
+                ps.setNull(3, Types.VARCHAR);
+            } else {
+                ps.setInt(2, board.agncyNo());
+                ps.setString(3, board.boardCd());
+            }
             ps.executeUpdate();
         }
         try (PreparedStatement ps = conn.prepareStatement(DELETE_ATTACHMENT)) {
-            ps.setInt(1, name.noticeNo());
-            ps.setInt(2, name.attachNo());
+            ps.setInt(1, name.notiSn());
+            ps.setInt(2, name.atchSn());
             ps.executeUpdate();
         }
     }
 
     /** 첨부 1행 삽입 — 파일 메타는 SchemaResult에서, 문서 메타는 첫 레코드에서 가져온다. */
     private void insertAttachment(SchemaResult file, SourceFileName.Parsed name,
-                                  NoticeRecord meta, int recordCount) throws SQLException {
+                                  NoticeRecord meta) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(INSERT_ATTACHMENT)) {
             int i = 1;
-            ps.setInt(i++, name.noticeNo());
-            ps.setInt(i++, name.attachNo());
-            ps.setString(i++, file.getSourceFile());
-            ps.setString(i++, file.isDbSkipped() ? STATUS_SKIPPED : STATUS_OK);
-            ps.setNull(i++, Types.VARCHAR);                    // fail_stage
-            ps.setNull(i++, Types.VARCHAR);                    // fail_kind
-            ps.setNull(i++, Types.VARCHAR);                    // fail_message
-            ps.setString(i++, file.getDbSkipReason());
-            ps.setString(i++, file.getFileType());
-            ps.setString(i++, file.getDetectedFormat());
-            ps.setBoolean(i++, file.isScanned());
-            ps.setString(i++, file.getEngine());
-            ps.setString(i++, meta == null ? null : meta.agency());
-            ps.setString(i++, meta == null ? null : meta.noticeNo());
-            setDate(ps, i++, meta == null ? null : meta.noticeDate());
-            ps.setString(i++, meta == null ? null : meta.title());
-            ps.setString(i++, meta == null ? null : meta.signer());
-            ps.setInt(i, recordCount);
+            ps.setInt(i++, name.notiSn());
+            ps.setInt(i++, name.atchSn());
+            ps.setString(i++, file.getFileNm());
+            ps.setString(i++, file.isExcluded() ? STATUS_SKIPPED : STATUS_OK);
+            ps.setNull(i++, Types.VARCHAR);                    // FAIL_STEP
+            ps.setNull(i++, Types.VARCHAR);                    // FAIL_KND
+            ps.setNull(i++, Types.VARCHAR);                    // FAIL_MSG
+            ps.setString(i++, file.getExclRsn());
+            ps.setString(i++, file.getFileExtn());
+            ps.setString(i++, file.getRealExtn());
+            ps.setBoolean(i++, file.isScanYn());
+            ps.setString(i++, file.getEngnNm());
+            ps.setString(i++, file.getNotiKndCd());
+            ps.setString(i++, meta == null ? null : meta.notiNo());
+            setDate(ps, i++, meta == null ? null : meta.notiYmd());
+            ps.setString(i, meta == null ? null : meta.notiTtl());
             ps.executeUpdate();
         }
     }
 
     /**
-     * 레코드마다 {@code record_no}를 1부터 부여하고 표준항목 값을 행으로 펼친다.
+     * 레코드마다 {@code DSPS_SN}을 1부터 부여하고 표준항목 값을 행으로 펼친다.
      *
-     * <p>문서 단위 메타(기관·고시번호·고시일자·제목·고시자)는 첨부 컬럼으로 이미 갔으므로
-     * 건너뛴다. 기간은 시작/종료를 daterange 리터럴 한 행으로 합친다.
+     * <p>어느 필드가 행이 되는지는 {@link AttributeRows}가 정한다 — 적재하는 쪽과
+     * "한 줄도 못 넣었다"를 판정하는 쪽이 같은 코드를 봐야 둘이 어긋나지 않는다.
      */
     private int insertAttributes(SourceFileName.Parsed name, List<NoticeRecord> records)
             throws SQLException {
@@ -254,17 +359,8 @@ public final class DbLoader implements AutoCloseable {
             int recordNo = 0;
             for (NoticeRecord record : records) {
                 recordNo++;
-                for (Map.Entry<String, String> entry : record.fields().entrySet()) {
-                    String code = entry.getKey();
-                    if (isAttachmentScoped(code) || isPeriodPart(code)) {
-                        continue;
-                    }
-                    addAttribute(ps, name, recordNo, code, entry.getValue());
-                    inserted++;
-                }
-                String period = periodRange(record);
-                if (period != null) {
-                    addAttribute(ps, name, recordNo, Synonyms.WORK_PERIOD, period);
+                for (AttributeRows.Row row : AttributeRows.of(record)) {
+                    addAttribute(ps, name, recordNo, row.itemCd(), row.value());
                     inserted++;
                 }
             }
@@ -284,8 +380,8 @@ public final class DbLoader implements AutoCloseable {
      */
     private void addAttribute(PreparedStatement ps, SourceFileName.Parsed name,
                               int recordNo, String attrCode, String value) throws SQLException {
-        ps.setInt(1, name.noticeNo());
-        ps.setInt(2, name.attachNo());
+        ps.setInt(1, name.notiSn());
+        ps.setInt(2, name.atchSn());
         ps.setInt(3, recordNo);
         ps.setString(4, attrCode);
         ps.setInt(5, 1);
@@ -303,8 +399,8 @@ public final class DbLoader implements AutoCloseable {
                     continue;
                 }
                 imageNo++;
-                ps.setInt(1, name.noticeNo());
-                ps.setInt(2, name.attachNo());
+                ps.setInt(1, name.notiSn());
+                ps.setInt(2, name.atchSn());
                 ps.setInt(3, imageNo);
                 ps.setString(4, image.getName());
                 ps.setString(5, image.getPath());
@@ -316,30 +412,6 @@ public final class DbLoader implements AutoCloseable {
             }
         }
         return inserted;
-    }
-
-    /**
-     * 기간 시작/종료를 PostgreSQL daterange 리터럴로 합친다.
-     *
-     * <p>둘 중 하나라도 없으면 null — 반쪽짜리 범위를 넣느니 항목을 비우고, 원문은
-     * Mapper가 이미 extras에 남겨 뒀다. 양끝을 포함하는 닫힌 구간으로 적는다(점용 기간의
-     * 종료일은 그날까지 쓸 수 있다는 뜻이다).
-     */
-    private static String periodRange(NoticeRecord record) {
-        String start = record.workPeriodStart();
-        String end = record.workPeriodEnd();
-        return start == null || end == null ? null : "[" + start + "," + end + "]";
-    }
-
-    /** 문서 단위 메타인지 — attachments 컬럼으로 이미 갔으므로 항목값으로 또 넣지 않는다. */
-    private static boolean isAttachmentScoped(String canonical) {
-        return Synonyms.field(canonical).map(f -> !f.isAttribute()).orElse(false);
-    }
-
-    /** 기간 분리 파생 필드인지 — daterange 한 행으로 합쳐 넣으므로 개별로는 넣지 않는다. */
-    private static boolean isPeriodPart(String canonical) {
-        return Synonyms.WORK_PERIOD_START.equals(canonical)
-                || Synonyms.WORK_PERIOD_END.equals(canonical);
     }
 
     /** ISO 날짜 문자열을 DATE 파라미터로 바인딩한다. null·파싱 실패는 SQL NULL. */
@@ -359,8 +431,8 @@ public final class DbLoader implements AutoCloseable {
     /**
      * 첨부 1건을 적재한 결과.
      *
-     * @param records document_attributes에 넣은 항목값 행 수
-     * @param images  attachment_images에 넣은 이미지 행 수
+     * @param records TB_NOTI_ITEM_VAL에 넣은 항목값 행 수
+     * @param images  TB_ATCH_IMG에 넣은 이미지 행 수
      */
     public record Counts(int records, int images) {
     }

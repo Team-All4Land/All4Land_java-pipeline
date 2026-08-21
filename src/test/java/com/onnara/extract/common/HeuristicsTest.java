@@ -2,6 +2,8 @@ package com.onnara.extract.common;
 
 import com.onnara.extract.common.model.RawTable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.Optional;
@@ -70,6 +72,78 @@ class HeuristicsTest {
         assertTrue(hit.isPresent());
         assertNull(hit.get()[0]);
         assertEquals("공고 제56호", hit.get()[1]);
+    }
+
+    /**
+     * 일련번호를 비워 발행한 고시번호도 인식되는지 검증한다(제목 유실 회귀).
+     *
+     * <p>실입력 147건이 이 형태다. 숫자를 요구하면 이 줄이 고시번호로 안 잡히고,
+     * 그러면 "고시번호 다음 줄"이라는 제목 폴백까지 통째로 죽어 제목·공고종류가 함께 빈다.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "인천지방해양항만청 고시 제2008- 호",
+            "인천지방해양항만청 고시 제2008-호",
+            "인천지방해양수산청 고시 제2007-   호",
+    })
+    void splitsNoticeNoWithBlankSerial(String line) {
+        Optional<String[]> hit = Heuristics.agencyAndNoticeNo(line);
+        assertTrue(hit.isPresent(), line);
+        assertTrue(hit.get()[0].endsWith("청"), hit.get()[0]);
+        assertTrue(hit.get()[1].matches("고시 제200[78]-호"), hit.get()[1]);
+    }
+
+    /** 허가증 서식(한 셀에 번호와 제목이 줄바꿈으로)에서 제목을 뽑는지 검증한다. */
+    @Test
+    void guessesTitleFromNumberLineInsideCell() {
+        RawTable table = Tables.gridToTable(List.of(
+                List.of("", "", ""),
+                List.of("허가번호 제2017-48호\n\n공유수면 점용ㆍ사용 변경허가증",
+                        "허가번호 제2017-48호\n\n공유수면 점용ㆍ사용 변경허가증",
+                        "허가번호 제2017-48호\n\n공유수면 점용ㆍ사용 변경허가증")));
+        assertEquals("공유수면 점용ㆍ사용 변경허가증",
+                Heuristics.guessTitleFromTables(List.of(table)));
+    }
+
+    /** 번호 줄 다음이 라벨·날짜면 제목으로 삼지 않는지 검증한다(문장 오탐 가드). */
+    @Test
+    void cellTitleGuessRejectsLabelAndDateLines() {
+        RawTable label = Tables.gridToTable(List.of(
+                List.of("고시 제2026-1호\n1. 허가번호 : 제2026-9호")));
+        assertNull(Heuristics.guessTitleFromTables(List.of(label)));
+
+        RawTable date = Tables.gridToTable(List.of(
+                List.of("승인번호 제2026-1호\n2026. 6. 19.")));
+        assertNull(Heuristics.guessTitleFromTables(List.of(date)));
+    }
+
+    /**
+     * "고 시 문" 머리글 아래의 "기관명 제N호"도 고시번호로 잡는지 검증한다.
+     *
+     * <p>평택청 서식은 고시·공고 낱말이 번호 줄이 아니라 그 앞 줄에 있다. 앞 줄이 머리글일
+     * 때만 허용해야 "제N호"로 끝나는 아무 줄이나 고시번호로 오인하지 않는다.
+     */
+    @Test
+    void splitsNoticeNoUnderDocumentHeader() {
+        Optional<String[]> hit =
+                Heuristics.agencyAndNoticeNo("고   시   문", "평택지방해양수산청  제2018 - 2호");
+        assertTrue(hit.isPresent());
+        assertEquals("평택지방해양수산청", hit.get()[0]);
+        assertEquals("고시 제2018-2호", hit.get()[1]);
+
+        assertTrue(Heuristics.agencyAndNoticeNo("고   시   문(안)", "평택지방해양수산청 제2016-62호")
+                .isPresent());
+    }
+
+    /** 앞 줄이 머리글이 아니면 "기관명 제N호"를 고시번호로 보지 않는지 검증한다. */
+    @Test
+    void bareNoticeNoNeedsADocumentHeaderAbove() {
+        assertTrue(Heuristics.agencyAndNoticeNo("아무 문장", "평택지방해양수산청  제2018 - 2호")
+                .isEmpty());
+        assertTrue(Heuristics.agencyAndNoticeNo(null, "평택지방해양수산청  제2018 - 2호")
+                .isEmpty());
+        assertTrue(Heuristics.agencyAndNoticeNo("고   시   문", "1. 허가번호 : 제2018-2호")
+                .isEmpty());
     }
 
     /** 자간 벌림 텍스트는 복원하고 일반 문장은 건드리지 않는지 검증한다. */

@@ -165,7 +165,7 @@ public class DetectCommand implements Callable<Integer> {
                 row.put("file", entry.file().toString());
                 row.put("ext", entry.ext());
                 row.put("status", entry.status().label());
-                row.put("is_scanned", entry.scanned());
+                row.put("scan_yn", entry.scanned());
                 if (entry.kind() != null) {
                     row.put("kind", entry.kind().name());
                 }

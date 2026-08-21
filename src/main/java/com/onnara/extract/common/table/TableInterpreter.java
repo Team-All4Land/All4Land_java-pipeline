@@ -42,7 +42,7 @@ public final class TableInterpreter {
 
     /** raw 문서의 표들을 해석해 중간 산출물 문서를 만든다. */
     public static TableDoc interpret(RawDocument raw, String engine) {
-        return TableDoc.of(raw.getSourceFile(), raw.getFileType(), raw.isScanned(), engine,
+        return TableDoc.of(raw.getFileNm(), raw.getFileExtn(), raw.isScanYn(), engine,
                 interpret(tablesOf(raw)));
     }
 
@@ -137,9 +137,9 @@ public final class TableInterpreter {
                 TableColumn column = columns.get(c);
                 int originRow = cleaned.rowIndex()[r];
                 int originCol = cleaned.colIndex()[c];
-                if (column.canonical() != null) {
+                if (column.itemCd() != null) {
                     facts.add(new TableFact(TableFact.ORIGIN_HEADER_COLUMN, originRow, originCol,
-                            column.rawLabel(), column.label(), column.canonical(), value));
+                            column.rawLabel(), column.label(), column.itemCd(), value));
                 } else if (Labels.acceptableExtra(column.label(), value)) {
                     facts.add(new TableFact(TableFact.ORIGIN_HEADER_COLUMN, originRow, originCol,
                             column.rawLabel(), column.label(), null, value));
@@ -178,25 +178,25 @@ public final class TableInterpreter {
                 }
             }
             String rawLabel = levels.isEmpty() ? "" : levels.get(0);
-            Optional<String> canonical = Optional.empty();
+            Optional<String> itemCd = Optional.empty();
             for (String level : levels) {
-                canonical = Synonyms.canonicalFor(level);
-                if (canonical.isPresent()) {
+                itemCd = Synonyms.canonicalFor(level);
+                if (itemCd.isPresent()) {
                     rawLabel = level;
                     break;
                 }
             }
             // 하위 라벨 단독으로 못 찾으면 "상위 하위" 합성 형태로 조회한다
             // (사전에 "피승인자 성명"처럼 등재된 항목 대응)
-            for (int i = 1; i < levels.size() && canonical.isEmpty(); i++) {
+            for (int i = 1; i < levels.size() && itemCd.isEmpty(); i++) {
                 String composite = levels.get(i) + " " + levels.get(0);
-                canonical = Synonyms.canonicalFor(composite);
-                if (canonical.isPresent()) {
+                itemCd = Synonyms.canonicalFor(composite);
+                if (itemCd.isPresent()) {
                     rawLabel = composite;
                 }
             }
             columns.add(new TableColumn(cleaned.colIndex()[c], rawLabel,
-                    Synonyms.normalizeLabel(rawLabel), canonical.orElse(null)));
+                    Synonyms.normalizeLabel(rawLabel), itemCd.orElse(null)));
         }
         return columns;
     }
@@ -257,10 +257,10 @@ public final class TableInterpreter {
                     continue;
                 }
                 String normalized = Synonyms.normalizeLabel(labelCell);
-                Optional<String> canonical = Synonyms.canonicalFor(labelCell);
-                if (canonical.isPresent()) {
+                Optional<String> itemCd = Synonyms.canonicalFor(labelCell);
+                if (itemCd.isPresent()) {
                     facts.add(new TableFact(TableFact.ORIGIN_LABEL_PAIR, r, valueCell.col(),
-                            labelCell, normalized, canonical.get(), value));
+                            labelCell, normalized, itemCd.get(), value));
                     usedAsValue[j + 1] = true;
                 } else if (labelCell.indexOf(':') < 0 && labelCell.indexOf('：') < 0
                         && Labels.acceptableExtra(normalized, value)) {
@@ -284,10 +284,10 @@ public final class TableInterpreter {
                 }
                 for (Labels.Pair pair : Labels.scan(List.of(text.split("\n")))) {
                     String normalized = Synonyms.normalizeLabel(pair.label());
-                    Optional<String> canonical = Synonyms.canonicalFor(pair.label());
-                    if (canonical.isPresent()) {
+                    Optional<String> itemCd = Synonyms.canonicalFor(pair.label());
+                    if (itemCd.isPresent()) {
                         facts.add(new TableFact(TableFact.ORIGIN_IN_CELL, r, cell.col(),
-                                pair.label(), normalized, canonical.get(), pair.value()));
+                                pair.label(), normalized, itemCd.get(), pair.value()));
                     } else if (Labels.acceptableExtra(normalized, pair.value())) {
                         facts.add(new TableFact(TableFact.ORIGIN_IN_CELL, r, cell.col(),
                                 pair.label(), normalized, null, pair.value()));
