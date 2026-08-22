@@ -113,7 +113,7 @@ src/main/resources/
 ├── synonyms.json            표준항목 40종 + 문서 메타 5종 사전 (매핑의 단일 출처)
 ├── notice_types.json        공고종류 56종 레지스트리
 ├── db/standard_terms.json   DB 표준 사전 — 표준단어·표준도메인·표준용어·표준코드 (이름의 단일 출처)
-└── db/migration/            Flyway 마이그레이션 (V1__init.sql · V2 · V3__standard_naming.sql)
+└── db/migration/            Flyway 마이그레이션 (V1__init.sql — 표준 스키마를 세운다)
 
 src/test/java/...   JUnit 5 — detect/engine/common/scan 단위 테스트 + samples/ 기반 회귀 테스트
 samples/             실제 고시문 픽스처 (형식·스캔 여부별)
@@ -630,9 +630,9 @@ input/
 
 ## 데이터베이스 스키마 (PostgreSQL)
 
-Flyway 마이그레이션이 7테이블을 만듭니다 — `V1__init.sql`이 스키마를 세우고,
-`V3__standard_naming.sql`이 [DB 표준 사전](docs/DB_STANDARD.md)에 맞춰 이름과 타입을
-확정합니다.
+Flyway 마이그레이션 `V1__init.sql` 하나가 [DB 표준 사전](docs/DB_STANDARD.md)에 맞춰
+표준도메인 18개와 7테이블을 만듭니다. 스키마를 고칠 때도 파일을 얹지 않고 이 파일을 고친 뒤
+DB를 다시 만듭니다([개발 DB 초기화](#개발-db-초기화)).
 
 **ERD는 논리명으로 그립니다.** 물리명은 영문 약어 조합이라 한눈에 뜻이 잡히지 않고,
 어차피 논리명과 1:1로 대응하므로 둘 중 읽히는 쪽을 그림에 둡니다. 각 속성 오른쪽 주석에
@@ -937,29 +937,61 @@ SELECT count(*) FROM ATCH_FILE_DTL F
 
 ### 개발 DB 초기화
 
-스키마가 이전 버전(`documents`/`ref_files`, `agencies`/`notices`)과 호환되지 않습니다. 전건 재적재가 전제이므로
-이관 SQL은 없고, 기존 개발 DB는 스키마를 비우고 다시 만듭니다.
+스키마를 고쳤거나(=`V1__init.sql`을 손댔거나) 이전 버전 스키마가 남아 있으면 DB를 비우고
+다시 만듭니다. 이관 SQL은 없습니다 — 파이프라인이 원본 파일에서 전건을 다시 만들어 내므로
+DB는 파생물입니다.
 
 ```bash
+# 1) 스키마를 통째로 비우고 다시 만든다
 psql -U extract -d extract -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+
+# 2) 파이프라인이 기동하면서 Flyway가 V1을 적용한다 (DDL을 손으로 돌릴 일은 없습니다)
 java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out
 ```
 
-스키마 설계를 바꿀 때는 `V1__init.sql`을 제자리에서 고치고 위 명령으로 DB를 다시 만듭니다.
-이미 V1이 적용된 DB에 붙으면 Flyway가 체크섬 불일치로 **적재 전에** 멈추므로 데이터는
-건드리지 않습니다.
+**테이블만 지우면 안 됩니다.** 표준도메인(`D_SN`·`D_CD` …)과 `iso_daterange` 함수는 테이블이
+아니라 스키마 객체라 `DROP TABLE`로는 사라지지 않고, 남아 있으면 재적용이 이렇게 죽습니다:
 
 ```
-Validate failed: Migrations have failed validation
-Migration checksum mismatch for migration version 1
+ERROR: type "d_sn" already exists
 ```
 
-> **표준화(V3)만은 예외로 마이그레이션을 얹었습니다.** 이름과 타입만 바꾸는 일이라
-> 데이터를 버릴 이유가 없고, V1을 고치면 이미 적재를 마친 DB가 체크섬 불일치로 멈춰
-> "고칠 것도 없는데 전건을 다시 넣어야" 하기 때문입니다. `V3__standard_naming.sql`은
-> 도메인 생성 → 개명 → 타입 전환 → 코드값 변환 → 감사 컬럼 추가를 데이터를 보존한 채
-> 수행하며, 길이 제한이 있는 도메인으로 옮기기 전에 넘치는 값이 있는지 먼저 훑어
-> 어느 행이 걸리는지 이름째로 알려 주고 멈춥니다.
+Flyway 이력 테이블(`flyway_schema_history`)도 함께 지워져야 `V1`이 다시 돕니다.
+`DROP SCHEMA public CASCADE`는 이 셋을 한 번에 처리합니다.
+
+비었는지 확인하려면:
+
+```
+\dt    -- 테이블 0개 ("Did not find any relations.")
+\dD    -- 도메인 0개
+\df    -- 함수 0개
+```
+
+**`must be owner of schema public`이 나면** 스키마 소유자가 아닙니다. 슈퍼유저로 한 번
+넘겨주거나, 아래처럼 DB를 통째로 다시 만듭니다.
+
+```bash
+psql -U postgres -d extract -c 'ALTER SCHEMA public OWNER TO extract;'
+```
+
+**DB를 통째로 다시 만들 때**는 접속 세션이 남아 있으면 `DROP DATABASE`가 실패하므로 먼저
+끊습니다.
+
+```bash
+psql -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+                      WHERE datname = 'extract' AND pid <> pg_backend_pid();"
+psql -U postgres -c 'DROP DATABASE extract;' \
+                 -c 'CREATE DATABASE extract OWNER extract;'
+```
+
+> **되돌리기는 없습니다.** Flyway Community에는 undo가 없으므로 스키마를 고치는 길은 위
+> 재생성 하나뿐입니다. `V1`을 고쳤는데 DB를 안 지우면 Flyway가 체크섬 불일치로 **적재 전에**
+> 멈추므로 데이터는 건드리지 않습니다 — 아래 메시지를 보면 DB를 다시 만들면 됩니다.
+>
+> ```
+> Validate failed: Migrations have failed validation
+> Migration checksum mismatch for migration version 1
+> ```
 
 ## 테스트
 

@@ -151,7 +151,7 @@ extract-java/
 ├── src/main/resources/
 │   ├── application.properties   # db.url=jdbc:postgresql://... , 풀 설정, ocr.cli.* 등 (기본값)
 │   ├── synonyms.json           # ★ 동의어 사전 본문 (단일 정의처 — 설명·예시 포함)
-│   └── db/migration/           # Flyway 마이그레이션 (V1 = 스키마, V2 = DSPS_CNT 제거, V3 = 표준 이름·도메인)
+│   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL — 도메인 18 + 7테이블)
 │
 ├── src/test/java/...            # JUnit 5 — detect / mapper / 각 extractor / scan / db
 ├── src/test/resources/fixtures/ # 실제 고시문 픽스처 (형식·스캔 여부별, Python 버전과 공유)
@@ -542,8 +542,9 @@ span이 없으면(PDF·OCR) 옆 칸과 내용이 같은 것을 병합으로 간�
 ## 6. DB 스키마 (PostgreSQL — resources/db/migration/)
 
 기관 → 게시물 → 첨부파일 → (처분) 항목값의 4계층 EAV 스키마다. `DbLoader`가 PostgreSQL
-JDBC 드라이버로 적재하고, `V1__init.sql`이 스키마를 세운 뒤 `V3__standard_naming.sql`이
-DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 이름과 타입을 확정한다.
+JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
+(`resources/db/standard_terms.json`)에 맞춰 표준도메인과 7테이블을 세운다. 스키마를 고칠
+때는 파일을 얹지 않고 `V1`을 고친 뒤 DB를 다시 만든다(README "개발 DB 초기화").
 
 **ERD와 컬럼별 설명은 [README의 데이터베이스 스키마 절](README.md#데이터베이스-스키마-postgresql)에
 있다.** 여기서는 구성만 적는다 — 같은 표를 두 문서에 옮겨 적으면 반드시 한쪽이 뒤처진다.
