@@ -15,7 +15,7 @@ Java 파이프라인이 서브프로세스로 아래처럼 호출한다::
 
 종료 코드 0 → ``--output`` 경로에 §4 raw JSON을 쓴다::
 
-    {"source_file": "...", "file_type": "pdf", "is_scanned": true,
+    {"atch_file_nm": "...", "file_extn_nm": "pdf", "scan_yn": true,
      "content": [{"type": "paragraph", "text": "..."},
                  {"type": "table", "n_rows": .., "n_cols": .., "cells": [...], "grid": [[...]]}],
      "images": [{"name": "...", "size": 1234}]}
@@ -353,7 +353,9 @@ def blocks_to_raw(source_file: str, page_blocks: list[dict], images: list[dict])
                 text = _plain_text(cont)
                 if text:
                     content.append({"type": "paragraph", "text": text})
-    return {"source_file": source_file, "content": content, "images": images}
+    # 키 이름은 Java RawDocument의 @JsonProperty와 글자 그대로 같아야 한다 — 어긋나면
+    # Jackson이 조용히 무시하고(FAIL_ON_UNKNOWN_PROPERTIES=false) 값이 null로 남는다.
+    return {"atch_file_nm": source_file, "content": content, "images": images}
 
 
 # ---------------------------------------------------------------------------
@@ -426,8 +428,8 @@ def _run(inputs: list[str], file_type: str, source_file: str,
         images_meta.extend(page_imgs)
 
     raw = blocks_to_raw(source_file, page_blocks, images_meta)
-    raw["file_type"] = file_type
-    raw["is_scanned"] = True
+    raw["file_extn_nm"] = file_type
+    raw["scan_yn"] = True
     return raw
 
 

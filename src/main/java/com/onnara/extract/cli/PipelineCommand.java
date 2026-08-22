@@ -3,6 +3,7 @@ package com.onnara.extract.cli;
 import com.onnara.extract.common.AgencyRegistry;
 import com.onnara.extract.common.AppProperties;
 import com.onnara.extract.common.LoadPolicy;
+import com.onnara.extract.common.LoadStep;
 import com.onnara.extract.common.Mapper;
 import com.onnara.extract.common.SourceFileName;
 import com.onnara.extract.common.model.SchemaResult;
@@ -122,10 +123,10 @@ public class PipelineCommand implements Callable<Integer> {
             if (entry.status() == ScanSurvey.Status.FAILED) {
                 // 판별 단계는 이미 갈래와 원인 체인을 갖고 있다 — 예외로 다시 감싸지 않는다
                 failures.add(PipelineSupport.reportFailure(
-                        file, "판별", entry.error(), entry.kind().name()));
+                        file, LoadStep.DETECT, entry.error(), entry.kind().name()));
                 continue;
             }
-            String stage = "추출";
+            LoadStep step = LoadStep.EXTRACT;
             try {
                 boolean scanned = entry.scanned();
                 if (!ocrReady && scanned) {
@@ -135,25 +136,25 @@ public class PipelineCommand implements Callable<Integer> {
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
                         file, null, output, !noImages, scanRunner, scanned);
 
-                stage = "표해석";
+                step = LoadStep.TABLE;
                 // 표 해석은 한 번만 하고 중간 산출물 저장과 매핑이 함께 쓴다
                 List<InterpretedTable> interpreted = TableInterpreter.interpret(
                         TableInterpreter.tablesOf(result.raw()));
 
-                stage = "매핑";
+                step = LoadStep.MAP;
                 SchemaResult schema = loadPolicy.apply(
                         Mapper.mapToSchema(result.raw(), result.engine(), interpreted), result.raw());
                 // 수집처는 경로에만 있다 — Mapper는 파일명만 받으므로 여기서 붙인다
                 schema.setSourceBoard(registry.boardOf(file).orElse(null));
 
-                stage = "저장";
+                step = LoadStep.SAVE;
                 String stem = PipelineSupport.stem(file);
                 if (raw) {
                     PipelineSupport.writeJson(result.raw(), output.resolve(stem + ".raw.json"));
                 }
                 if (tables) {
                     PipelineSupport.writeJson(
-                            TableDoc.of(result.raw().getFileNm(), result.raw().getFileExtn(),
+                            TableDoc.of(result.raw().getAtchFileNm(), result.raw().getFileExtnNm(),
                                     result.raw().isScanYn(), result.engine(), interpreted),
                             output.resolve(stem + ".tables.json"));
                 }
@@ -171,7 +172,7 @@ public class PipelineCommand implements Callable<Integer> {
                 schemas.add(schema);
                 ok++;
             } catch (Throwable t) {
-                failures.add(PipelineSupport.reportFailure(file, stage, t, stacktrace));
+                failures.add(PipelineSupport.reportFailure(file, step, t, stacktrace));
             }
         }
 
@@ -231,8 +232,8 @@ public class PipelineCommand implements Callable<Integer> {
     /**
      * 커넥션 풀을 열어 스키마를 최신화하고 3계층으로 적재한다.
      *
-     * <p>{@link ReferenceSync}는 반드시 적재보다 먼저 돈다 — {@code TB_NOTI_ITEM_VAL}이
-     * {@code TB_NOTI_ITEM}을 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
+     * <p>{@link ReferenceSync}는 반드시 적재보다 먼저 돈다 — {@code NOTI_ITEM_VAL_DTL}이
+     * {@code NOTI_ITEM_TC}을 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
      *
      * <p>실패 건도 함께 넘긴다. 성공한 파일만 적재하면 "첨부 401건 중 추출 0건"인 기관이
      * DB에서 아예 보이지 않아, 추출 누락과 애초에 없던 자료를 구분할 수 없다.
@@ -245,7 +246,7 @@ public class PipelineCommand implements Callable<Integer> {
             ReferenceSync.Counts reference = ReferenceSync.sync(dataSource);
             try (DbLoader loader = new DbLoader(dataSource)) {
                 // 파일이 0건인 폴더도 기관으로 남긴다 — 그래야 "긁었는데 아무것도 못 건진 기관"이
-                // DB에서 보인다. 첨부보다 먼저 넣어야 TB_NOTI.AGNCY_NO FK가 걸리지 않는다
+                // DB에서 보인다. 첨부보다 먼저 넣어야 NOTI_BAS.AGNCY_SN FK가 걸리지 않는다
                 int agencies = loader.loadAgencies(registry.agencies());
                 LoadStats stats = loader.loadAll(schemas, toFailedAttachments(registry, failures));
                 System.out.printf("사전 동기화: 표준항목 %d종, 공고종류 %d종, 기관 %d곳%n",

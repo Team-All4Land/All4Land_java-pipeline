@@ -79,7 +79,7 @@ public final class ExtrasReport {
                 record.extras().forEach((label, value) -> {
                     counts.merge(label, 1, Integer::sum);
                     documents.computeIfAbsent(label, k -> new LinkedHashSet<>())
-                            .add(schema.getFileNm());
+                            .add(schema.getAtchFileNm());
                     examples.putIfAbsent(label, value);
                 });
             }

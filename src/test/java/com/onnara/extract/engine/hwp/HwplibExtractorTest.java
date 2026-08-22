@@ -49,7 +49,7 @@ class HwplibExtractorTest {
         Path file = TestFixtures.sample("공유수면 점용사용 허가 고시문.hwp");
         RawDocument raw = extractor.extractRaw(file);
 
-        assertEquals("hwp", raw.getFileExtn());
+        assertEquals("hwp", raw.getFileExtnNm());
         assertFalse(raw.isScanYn());
         assertFalse(raw.getContent().isEmpty(), "content가 비어있음");
         assertTrue(raw.getContent().stream().anyMatch(c -> c instanceof RawParagraph),

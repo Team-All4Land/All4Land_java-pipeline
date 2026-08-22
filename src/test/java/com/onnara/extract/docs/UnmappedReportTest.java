@@ -43,7 +43,7 @@ class UnmappedReportTest {
     @Test
     void reportsAttachmentWhoseContentReachedNothing() {
         NoticeRecord record = new NoticeRecord.Builder()
-                .set("NOTI_YMD", "2024-01-23")
+                .set("NOTI_DT", "2024-01-23")
                 .set("NOTI_PSN", "인천지방해양수산청장")
                 .extra("ㅇ처분사유", "「공유수면 관리 및 매립에 관한 법률」제17조제1항 위반")
                 .extra("ㅇ근거법령", "「공유수면 관리 및 매립에 관한 법률」제19조제1항제3호")
@@ -52,7 +52,7 @@ class UnmappedReportTest {
         UnmappedReport.Unmapped row =
                 UnmappedReport.of(schema(record), raw("인천지방해양수산청 고시 제2024-8호")).orElseThrow();
 
-        assertEquals("148_고시양식 (3).hml", row.fileNm());
+        assertEquals("148_고시양식 (3).hml", row.atchFileNm());
         assertEquals(148, row.notiSn());
         assertEquals(1, row.atchSn());
         assertEquals(389, row.bodyCharCnt());
@@ -71,7 +71,7 @@ class UnmappedReportTest {
     void countsDocumentMetaAsNothingLoaded() {
         NoticeRecord record = new NoticeRecord.Builder()
                 .set("NOTI_NO", "고시 제2021-178호")
-                .set("NOTI_YMD", "2021-10-21")
+                .set("NOTI_DT", "2021-10-21")
                 .set("NOTI_TTL", "공유수면 점용․사용허가의 면제대상 시설 고시")
                 .build();
 
@@ -122,11 +122,11 @@ class UnmappedReportTest {
                 "뒤집힌 기간은 적재되지 않으므로 미적재로 잡혀야 한다");
     }
 
-    /** 적재제외 판정을 받은 첨부는 이미 EXCL_RSN에 사유가 남으므로 대상이 아니다. */
+    /** 적재제외 판정을 받은 첨부는 이미 EXCL_RSN_CTNT에 사유가 남으므로 대상이 아니다. */
     @Test
     void ignoresAttachmentExcludedOnPurpose() {
         SchemaResult s = schema(new NoticeRecord.Builder().build());
-        s.setExclRsn("본문 8,355자 (임계 5,000자 초과)");
+        s.setExclRsnCtnt("본문 8,355자 (임계 5,000자 초과)");
 
         assertTrue(UnmappedReport.of(s, null).isEmpty());
     }
@@ -139,6 +139,6 @@ class UnmappedReportTest {
 
         assertTrue(row.extras().isEmpty());
         assertNull(row.bodyExcerpt());
-        assertEquals("148_고시양식 (3).hml", row.fileNm());
+        assertEquals("148_고시양식 (3).hml", row.atchFileNm());
     }
 }

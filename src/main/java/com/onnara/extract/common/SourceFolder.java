@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  *
  * <p>이 폴더명이 "어느 기관 게시판을 긁었는가"에 대한 <b>유일한</b> 근거다 — 첨부파일 안에는
  * 없다. 본문에서 읽은 기관명은 발령 주체이지 수집처가 아니라서 서로 다를 수 있다
- * ({@code TB_ATCH_FILE.BODY_AGNCY_NM}).
+ * ({@code ATCH_FILE_DTL.BODY_AGNCY_NM}).
  *
  * <p>기관 <b>번호</b>는 여기서 정하지 않는다. 한 번호 아래 이름이 갈리는 경우가 있어
  * 폴더 하나만 봐서는 확정할 수 없기 때문이다 — {@link AgencyRegistry}가 배치 전체를 보고 정한다.
@@ -37,23 +37,27 @@ public final class SourceFolder {
     /** 전자관보를 경유해 수집한 폴더의 이름 앞에 붙는 조각. */
     private static final String GAZETTE_PREFIX = "전자관보";
 
-    /** 게시판 구분 — 게시 중. */
-    public static final String BOARD_OPEN = "게시중";
+    // 아래 두 묶음은 표준코드 CD_BBS_STTS·CD_AGNCY_KND의 값이다(db/standard_terms.json).
+    // 폴더명을 읽는 정규식은 한글 그대로 두고 판정 결과만 코드로 옮긴다 — 정규식이 보는 것은
+    // 사람이 지은 폴더 이름이지 코드가 아니다.
 
-    /** 게시판 구분 — 게시 완료(지난·이전·완료 공고). */
-    public static final String BOARD_CLOSED = "게시완료";
+    /** 게시상태코드 — 게시 중. */
+    public static final String BBS_STTS_OPEN = "POST";
 
-    /** 기관 종류 — 지방해양수산청. */
-    public static final String KIND_MOF = "mof";
+    /** 게시상태코드 — 게시 완료(지난·이전·완료 공고). */
+    public static final String BBS_STTS_CLOSED = "CLSD";
 
-    /** 기관 종류 — 지자체. */
-    public static final String KIND_LOCAL = "local";
+    /** 기관종류코드 — 지방해양수산청. */
+    public static final String AGNCY_KND_MOF = "MOF";
 
-    /** 기관 종류 — 중앙행정기관. */
-    public static final String KIND_CENTRAL = "central";
+    /** 기관종류코드 — 지자체. */
+    public static final String AGNCY_KND_LOCAL = "LOCL";
 
-    /** 기관 종류 — 전자관보 경유 수집. 기관 자체 게시판({@link #KIND_CENTRAL})과 구분한다. */
-    public static final String KIND_GAZETTE = "gazette";
+    /** 기관종류코드 — 중앙행정기관. */
+    public static final String AGNCY_KND_CENTRAL = "CNTL";
+
+    /** 기관종류코드 — 전자관보 경유 수집. 기관 자체 게시판({@link #AGNCY_KND_CENTRAL})과 구분한다. */
+    public static final String AGNCY_KND_GAZETTE = "GZT";
 
     /**
      * 파싱 결과.
@@ -62,7 +66,7 @@ public final class SourceFolder {
      * @param subNo     하위번호. 없으면 0
      * @param agncyNm   기관명. 언더스코어는 공백으로 잇고 게시판 꼬리표·전자관보 접두는 뗀다
      * @param kndCd  mof / local / central / gazette
-     * @param boardCd {@link #BOARD_OPEN} 또는 {@link #BOARD_CLOSED}
+     * @param boardCd {@link #BBS_STTS_OPEN} 또는 {@link #BBS_STTS_CLOSED}
      */
     public record Parsed(int folderNo, int subNo, String agncyNm, String kndCd, String boardCd) {
     }
@@ -107,7 +111,7 @@ public final class SourceFolder {
             }
             // 전자관보는 기관명이 아니라 수집 경로다 — 이름에서 빼고 종류로 옮긴다
             if (i == 0 && part.equals(GAZETTE_PREFIX) && end > 1) {
-                kind = KIND_GAZETTE;
+                kind = AGNCY_KND_GAZETTE;
                 continue;
             }
             if (name.length() > 0) {
@@ -143,10 +147,10 @@ public final class SourceFolder {
     /** 꼬리표가 "지난·이전·완료"류면 게시완료, 그 밖에는(꼬리표가 없어도) 게시중. */
     private static String boardOf(String[] parts) {
         if (parts.length < 2) {
-            return BOARD_OPEN;
+            return BBS_STTS_OPEN;
         }
         String last = parts[parts.length - 1].trim();
-        return CLOSED_MARK.matcher(last).matches() ? BOARD_CLOSED : BOARD_OPEN;
+        return CLOSED_MARK.matcher(last).matches() ? BBS_STTS_CLOSED : BBS_STTS_OPEN;
     }
 
     /**
@@ -157,13 +161,13 @@ public final class SourceFolder {
      */
     private static String kindOf(String name) {
         if (name.endsWith("지방해양수산청")) {
-            return KIND_MOF;
+            return AGNCY_KND_MOF;
         }
         if (name.endsWith("시청") || name.endsWith("군청") || name.endsWith("구청")
                 || name.endsWith("도청") || name.endsWith("시") || name.endsWith("군")
                 || name.endsWith("구") || name.endsWith("도")) {
-            return KIND_LOCAL;
+            return AGNCY_KND_LOCAL;
         }
-        return KIND_CENTRAL;
+        return AGNCY_KND_CENTRAL;
     }
 }

@@ -64,10 +64,10 @@ public final class SynonymsDoc {
     /** 저장 계층 표기 — 항목 행인지, 첨부 컬럼인지, 아니면 적재하지 않는지. */
     private static String scopeLabel(Synonyms.FieldSpec f) {
         if (f.isAttribute()) {
-            return "`TB_NOTI_ITEM_VAL` 행";
+            return "`NOTI_ITEM_VAL_DTL` 행";
         }
         // 추출은 하되 어디에도 넣지 않는 필드가 있다. 컬럼으로 적으면 없는 컬럼을 찾게 된다
-        return f.isExtractOnly() ? "추출만(적재 안 함)" : "`TB_ATCH_FILE` 컬럼";
+        return f.isExtractOnly() ? "추출만(적재 안 함)" : "`ATCH_FILE_DTL` 컬럼";
     }
 
     /** 필드별 상세 — 설명·예시·주의사항과 인식하는 라벨 전체 목록. */

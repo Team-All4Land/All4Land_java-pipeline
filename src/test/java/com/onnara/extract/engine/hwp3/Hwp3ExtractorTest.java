@@ -71,7 +71,7 @@ class Hwp3ExtractorTest {
     /** file_type은 엔진이 아니라 라우팅 계층이 확정하므로, 엔진 자체는 확장자를 그대로 둔다. */
     @Test
     void reportsHwpAsFileType() throws IOException {
-        assertEquals("hwp", new Hwp3Extractor().extractRaw(sample()).getFileExtn());
+        assertEquals("hwp", new Hwp3Extractor().extractRaw(sample()).getFileExtnNm());
     }
 
     /** 이미지가 없는 문서는 빈 목록을 낸다 — saveImages도 같은 순서 계약을 지킨다. */

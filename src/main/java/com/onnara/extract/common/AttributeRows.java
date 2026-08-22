@@ -15,7 +15,7 @@ import java.util.Map;
  *
  * <p>레코드의 필드가 그대로 행이 되지 않는다. 두 가지가 빠지고 하나가 합쳐진다:
  * <ul>
- *   <li>문서 단위 메타({@code scope=attachment})는 {@code TB_ATCH_FILE} 컬럼으로 가거나
+ *   <li>문서 단위 메타({@code scope=attachment})는 {@code ATCH_FILE_DTL} 컬럼으로 가거나
  *       아예 적재하지 않으므로 항목값 행이 아니다.</li>
  *   <li>기간 시작/종료는 개별로 넣지 않고 daterange 리터럴 한 행으로 합친다.</li>
  * </ul>
@@ -25,8 +25,8 @@ public final class AttributeRows {
     /**
      * 항목값 행 1건.
      *
-     * @param itemCd 표준항목코드({@code TB_NOTI_ITEM_VAL.ITEM_CD})
-     * @param value  정규화된 값({@code ITEM_VAL})
+     * @param itemCd 표준항목코드({@code NOTI_ITEM_VAL_DTL.NOTI_ITEM_CD})
+     * @param value  정규화된 값({@code ITEM_VAL_CTNT})
      */
     public record Row(String itemCd, String value) {
     }

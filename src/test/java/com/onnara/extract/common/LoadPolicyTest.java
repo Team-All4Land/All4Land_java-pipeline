@@ -48,7 +48,7 @@ class LoadPolicyTest {
             SchemaResult schema = policy.apply(schemaFor(raw), raw);
 
             assertEquals(chars, schema.getBodyCharCnt());
-            assertNull(schema.getExclRsn(), chars + "자는 적재 대상이어야 함");
+            assertNull(schema.getExclRsnCtnt(), chars + "자는 적재 대상이어야 함");
             assertFalse(schema.isExcluded());
         }
     }
@@ -66,7 +66,7 @@ class LoadPolicyTest {
 
         assertEquals(8_355, schema.getBodyCharCnt());
         assertTrue(schema.isExcluded());
-        assertEquals("본문 8,355자 (임계 5,000자 초과)", schema.getExclRsn());
+        assertEquals("본문 8,355자 (임계 5,000자 초과)", schema.getExclRsnCtnt());
     }
 
     /** 경계값은 포함(초과일 때만 제외) — 임계치 정의를 애매하게 두면 재현이 안 된다. */
@@ -115,6 +115,6 @@ class LoadPolicyTest {
 
     /** 매퍼가 만들었을 법한 빈 스키마. */
     private static SchemaResult schemaFor(RawDocument raw) {
-        return new SchemaResult(raw.getFileNm(), raw.getFileExtn(), raw.isScanYn(), "pdfbox");
+        return new SchemaResult(raw.getAtchFileNm(), raw.getFileExtnNm(), raw.isScanYn(), "pdfbox");
     }
 }

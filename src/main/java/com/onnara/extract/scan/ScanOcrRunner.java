@@ -45,16 +45,16 @@ public final class ScanOcrRunner {
     }
 
     /** 스캔 PDF 원본을 넘긴다(스크립트가 페이지 렌더링 후 VLM 추론). */
-    public RawDocument parsePdf(Path pdf, String fileNm) throws IOException {
-        return run(fileNm, "pdf", List.of(pdf));
+    public RawDocument parsePdf(Path pdf, String atchFileNm) throws IOException {
+        return run(atchFileNm, "pdf", List.of(pdf));
     }
 
     /** 스캔 HWP/HWPX/HML에서 추출한 임베디드 이미지들을 넘긴다. */
-    public RawDocument parseImages(List<Path> images, String fileNm, String fileExtn) throws IOException {
-        return run(fileNm, fileExtn, images);
+    public RawDocument parseImages(List<Path> images, String atchFileNm, String fileExtnNm) throws IOException {
+        return run(atchFileNm, fileExtnNm, images);
     }
 
-    private RawDocument run(String fileNm, String fileExtn, List<Path> inputs) throws IOException {
+    private RawDocument run(String atchFileNm, String fileExtnNm, List<Path> inputs) throws IOException {
         Path workDir = Files.createTempDirectory("extract-ocr-");
         Path outputJson = workDir.resolve("raw.json");
         Path log = workDir.resolve("ocr.log");
@@ -63,9 +63,9 @@ public final class ScanOcrRunner {
             command.add(config.command());
             command.add(config.script().toString());
             command.add("--source-file");
-            command.add(fileNm);
+            command.add(atchFileNm);
             command.add("--file-type");
-            command.add(fileExtn);
+            command.add(fileExtnNm);
             command.add("--output");
             command.add(outputJson.toString());
             for (Path input : inputs) {
@@ -80,7 +80,7 @@ public final class ScanOcrRunner {
                 if (!process.waitFor(config.timeout().toMillis(), TimeUnit.MILLISECONDS)) {
                     killTree(process);
                     throw new ScanOcrException("OCR 프로세스가 제한 시간(" + config.timeout().toSeconds()
-                            + "초)을 초과했습니다: " + fileNm);
+                            + "초)을 초과했습니다: " + atchFileNm);
                 }
             } catch (InterruptedException e) {
                 killTree(process);

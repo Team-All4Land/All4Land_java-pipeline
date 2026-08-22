@@ -1,6 +1,7 @@
 package com.onnara.extract.cli;
 
 import com.onnara.extract.common.Errors;
+import com.onnara.extract.common.LoadStep;
 import com.onnara.extract.common.Json;
 import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.model.RawImage;
@@ -37,7 +38,7 @@ final class PipelineSupport {
     private PipelineSupport() {
     }
 
-    /** 결과 raw 문서 + 실제 사용된 엔진 식별자(§6 TB_ATCH_FILE.ENGN_NM). */
+    /** 결과 raw 문서 + 실제 사용된 엔진 식별자(§6 ATCH_FILE_DTL.EXTC_ENGN_NM). */
     record ExtractResult(RawDocument raw, String engine) {
     }
 
@@ -70,7 +71,7 @@ final class PipelineSupport {
      * {@code images} 메타만 남긴다 — 사진 속 글자를 본문에 섞지 않는다.
      *
      * @param outputDir 스키마/원시 JSON이 저장될 기준 폴더 — 이미지는 {@code outputDir/images}에 저장되고
-     *                  {@code RawImage.path}는 저장된 이미지의 절대경로로 기록된다(TB_ATCH_IMG.FILE_PATH 적재용).
+     *                  {@code RawImage.path}는 저장된 이미지의 절대경로로 기록된다(ATCH_IMG_DTL.IMG_FILE_PATH 적재용).
      */
     static ExtractResult extractOne(Path file, Extractor forcedExtractor, Path outputDir,
                                     boolean saveImages, ScanOcrRunner scanRunner) throws IOException {
@@ -88,12 +89,12 @@ final class PipelineSupport {
                                     boolean scanned) throws IOException {
         // 라우팅 근거는 확장자가 아니라 파일 내용이다 — .hwp로 저장된 HWPX를 살리기 위해서다
         String format = DocFormat.routingKey(file);
-        String fileNm = file.getFileName().toString();
+        String atchFileNm = file.getFileName().toString();
         Path imagesDir = outputDir.resolve("images");
 
         if (forcedExtractor == null && scanned) {
             ExtractResult result = extractScanned(
-                    file, format, fileNm, imagesDir, saveImages, scanRunner);
+                    file, format, atchFileNm, imagesDir, saveImages, scanRunner);
             return new ExtractResult(tagFormats(result.raw(), file, format), result.engine());
         }
 
@@ -107,17 +108,17 @@ final class PipelineSupport {
     }
 
     /**
-     * 형식 두 축을 확정한다 — {@code FILE_EXTN}은 <b>파일명 확장자</b>,
-     * {@code REAL_EXTN}은 <b>내용으로 판정한 실제 형식</b>.
+     * 형식 두 축을 확정한다 — {@code FILE_EXTN_NM}은 <b>파일명 확장자</b>,
+     * {@code ACTL_FILE_EXTN_NM}은 <b>내용으로 판정한 실제 형식</b>.
      *
-     * <p>엔진은 자기가 아는 형식 이름을 {@code fileExtn}에 박아 넣는다(예: {@code OwpmlExtractor}는
-     * 항상 {@code "hwpx"}). 그대로 두면 {@code .hwp}로 저장된 HWPX가 {@code FILE_EXTN=hwpx}로
+     * <p>엔진은 자기가 아는 형식 이름을 {@code fileExtnNm}에 박아 넣는다(예: {@code OwpmlExtractor}는
+     * 항상 {@code "hwpx"}). 그대로 두면 {@code .hwp}로 저장된 HWPX가 {@code FILE_EXTN_NM=hwpx}로
      * 적재돼 기존 집계 쿼리와 값이 어긋난다. 두 축을 여기서 한 번에 정리해, 엔진은 형식 판정
      * 정책을 몰라도 되게 한다.
      */
     private static RawDocument tagFormats(RawDocument raw, Path file, String format) {
-        raw.setFileExtn(extensionOf(file));
-        raw.setRealExtn(format);
+        raw.setFileExtnNm(extensionOf(file));
+        raw.setActlFileExtnNm(format);
         return raw;
     }
 
@@ -126,11 +127,11 @@ final class PipelineSupport {
      * PaddleOCR-VL 서브프로세스로 넘긴다(§1, §7). 결과의 images 메타는 우리가 로컬에 저장한
      * 파일 목록으로 재구성한다 — 결과가 입력 이미지와 다른 목록/순서를 돌려줄 수 있어서다.
      */
-    private static ExtractResult extractScanned(Path file, String format, String fileNm,
+    private static ExtractResult extractScanned(Path file, String format, String atchFileNm,
                                                 Path imagesDir, boolean saveImages,
                                                 ScanOcrRunner scanRunner) throws IOException {
         if ("pdf".equals(format)) {
-            RawDocument raw = scanRunner.parsePdf(file, fileNm);
+            RawDocument raw = scanRunner.parsePdf(file, atchFileNm);
             return new ExtractResult(raw, "paddleocr-vl");
         }
 
@@ -142,7 +143,7 @@ final class PipelineSupport {
         try {
             List<Path> saved = nativeExtractor.saveImages(file, targetDir);
 
-            RawDocument raw = scanRunner.parseImages(saved, fileNm, format);
+            RawDocument raw = scanRunner.parseImages(saved, atchFileNm, format);
             raw.setImages(new ArrayList<>());
             for (Path p : saved) {
                 RawImage image = new RawImage(p.getFileName().toString(), Files.size(p));
@@ -183,7 +184,7 @@ final class PipelineSupport {
         }
     }
 
-    /** 저장된 이미지 파일의 절대 경로 문자열(TB_ATCH_IMG.FILE_PATH 적재용, 구분자는 '/'). */
+    /** 저장된 이미지 파일의 절대 경로 문자열(ATCH_IMG_DTL.IMG_FILE_PATH 적재용, 구분자는 '/'). */
     private static String absolutePath(Path path) {
         return path.toAbsolutePath().normalize().toString().replace('\\', '/');
     }
@@ -194,17 +195,17 @@ final class PipelineSupport {
      * <p>메시지는 {@link Errors#describe}로 원인 체인까지 적는다 — 맨 바깥 예외의 메시지만 찍으면
      * "읽지 못했다"는 사실만 남고 왜인지가 사라져, 수백 건의 실패를 사후에 분류할 수 없다.
      *
-     * @param stage      실패한 단계(판별/추출/표해석/매핑/저장) — 한 try에 뭉쳐 있으면 어디서
-     *                   깨졌는지 알 수 없어 재현이 어렵다
+     * @param step       실패한 단계 — 한 try에 뭉쳐 있으면 어디서 깨졌는지 알 수 없어
+     *                   재현이 어렵다. 콘솔에는 한글, 산출물에는 표준코드가 실린다
      * @param stacktrace true면 스택 트레이스도 stderr로 남긴다
      */
-    static Map<String, Object> reportFailure(Path file, String stage, Throwable t, boolean stacktrace) {
+    static Map<String, Object> reportFailure(Path file, LoadStep step, Throwable t, boolean stacktrace) {
         if (stacktrace) {
             t.printStackTrace(System.err);
         }
         FailureKind kind = FailureClassifier.classify(file, t).kind();
         String chain = Errors.describe(t);
-        Map<String, Object> row = reportFailure(file, stage, chain, kind.name());
+        Map<String, Object> row = reportFailure(file, step, chain, kind.name());
         // 원인 체인과 안내문은 쓰임이 다르다 — 체인은 "라이브러리가 무슨 말을 하며 죽었나"이고,
         // 안내문은 "받는 사람이 무엇을 하면 되나"다. 체인만 남기면 This is not paragraph. 같은
         // 문장을 받아 든 담당자가 원인을 처음부터 다시 파야 한다.
@@ -226,12 +227,12 @@ final class PipelineSupport {
      * 갈래와 원인 체인을 이미 갖고 있는 경우다. 그것을 예외로 다시 감싸면 사유가
      * {@code IOException: UncheckedIOException: …}처럼 이중으로 찍혀 읽기 나빠진다.
      */
-    static Map<String, Object> reportFailure(Path file, String stage, String message, String kind) {
-        System.out.println("[실패] " + file + ": (" + stage + ") " + message);
+    static Map<String, Object> reportFailure(Path file, LoadStep step, String message, String kind) {
+        System.out.println("[실패] " + file + ": (" + step.label() + ") " + message);
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("file", file.toString());
         row.put("ext", extensionOf(file));
-        row.put("stage", stage);
+        row.put("stage", step.code());
         row.put("kind", kind);
         row.put("message", message);
         return row;

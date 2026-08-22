@@ -98,11 +98,11 @@ public final class Mapper {
         normalize(base, paragraphs);
 
         SchemaResult result = new SchemaResult(
-                raw.getFileNm(), raw.getFileExtn(), raw.isScanYn(), engine);
-        result.setRealExtn(raw.getRealExtn());
+                raw.getAtchFileNm(), raw.getFileExtnNm(), raw.isScanYn(), engine);
+        result.setActlFileExtnNm(raw.getActlFileExtnNm());
         // 적재 키는 여기서 한 번만 확정한다 — 폴백 순번이 호출마다 새로 발급되므로,
         // 적재 시점에 다시 파싱하면 pipeline 경로와 map→load 경로가 다른 게시물로 갈린다
-        SourceFileName.Parsed key = SourceFileName.parse(raw.getFileNm());
+        SourceFileName.Parsed key = SourceFileName.parse(raw.getAtchFileNm());
         result.setNotiSn(key.notiSn());
         result.setAtchSn(key.atchSn());
         if (records.isEmpty()) {
@@ -218,10 +218,10 @@ public final class Mapper {
         }
         for (int i = Math.max(0, noticeNoIdx); i < paragraphs.size(); i++) {
             String text = paragraphs.get(i);
-            if (!base.has("NOTI_YMD") && !Labels.isLabelLine(text)
+            if (!base.has("NOTI_DT") && !Labels.isLabelLine(text)
                     && Dates.toIso(text).isPresent()
                     && text.replaceAll("[\\d\\s.년월일:～~’'-]", "").isEmpty()) {
-                base.set("NOTI_YMD", text);
+                base.set("NOTI_DT", text);
             }
             if (!base.has("NOTI_PSN") && Heuristics.looksLikeSigner(text)) {
                 base.set("NOTI_PSN", Heuristics.cleanSigner(text));
@@ -342,7 +342,7 @@ public final class Mapper {
      */
     private static void normalize(NoticeRecord.Builder builder, List<String> paragraphs) {
         splitApprovalNoDate(builder);
-        normalizeDate(builder, "NOTI_YMD");
+        normalizeDate(builder, "NOTI_DT");
         normalizeDate(builder, "APPROVAL_DATE");
 
         String period = builder.get(Synonyms.WORK_PERIOD);
@@ -405,7 +405,7 @@ public final class Mapper {
 
     /** 헤더형 표 레코드에 문서 메타(기관·번호·일자·제목·고시자)를 상속. */
     private static void inheritMeta(NoticeRecord.Builder row, NoticeRecord.Builder base) {
-        for (String field : List.of("BODY_AGNCY_NM", "NOTI_NO", "NOTI_YMD", "NOTI_TTL", "NOTI_PSN")) {
+        for (String field : List.of("BODY_AGNCY_NM", "NOTI_NO", "NOTI_DT", "NOTI_TTL", "NOTI_PSN")) {
             String value = base.get(field);
             if (value != null) {
                 row.set(field, value);

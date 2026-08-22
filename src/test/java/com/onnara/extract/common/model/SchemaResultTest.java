@@ -24,7 +24,7 @@ class SchemaResultTest {
         schema.setNotiSn(6034);
         schema.setAtchSn(1);
         schema.setSourceBoard(
-                new AgencyRegistry.SourceBoard(12, "목포시청", "local", "게시완료"));
+                new AgencyRegistry.SourceBoard(12, "목포시청", "LOCL", "CLSD"));
 
         String json = Json.MAPPER.writeValueAsString(schema);
         assertTrue(json.contains("\"source_board\""), json);
