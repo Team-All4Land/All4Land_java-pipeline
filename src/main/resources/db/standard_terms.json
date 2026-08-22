@@ -1,0 +1,294 @@
+{
+  "version": "2026-08-22",
+  "description": "DB 표준화 사전 — 표준단어·표준도메인·표준용어·표준코드. DbStandard가 로드하고 DbStandardDoc이 docs/DB_STANDARD.md로 렌더링하며, DbStandardTest가 실제 DDL과 대조한다.",
+  "conventions": {
+    "composition": "물리명은 [수식어]+…+[분류어] 조합이다. 마지막 낱말(분류어)이 반드시 도메인을 지시하므로, 분류어만 보고도 타입과 길이를 알 수 있다.",
+    "table": "테이블명은 접두사 없이 [의미]+[유형 접미사]다. 대문자·언더스코어·단수형이고 30바이트를 넘지 않는다. 업무영역 접두사는 두지 않는다 — 이 저장소가 단일 업무영역(공유수면 고시공고)이라 모든 테이블에 같은 접두사가 붙어 아무것도 가르지 못한다.",
+    "code_table_suffix": "코드 테이블 접미사는 _CD가 아니라 _TC다. _CD를 쓰면 테이블 NOTI_KND_CD와 그 안의 컬럼 NOTI_KND_CD가 같은 이름이 돼 SELECT NOTI_KND_CD FROM NOTI_KND_CD가 된다.",
+    "uniqueness": "논리명과 물리명은 1:1이다. 한 논리명이 두 물리명을 갖거나 그 반대면 로드 시 오류로 중단한다. 컬럼명은 전사에서 유일한 뜻을 가져야 하므로 CUST_NM처럼 수식어를 붙인다 — users.name을 지향하는 웹 관행과는 체계가 다르다.",
+    "foreign_key": "FK는 부모 PK 컬럼명을 그대로 상속한다. 한 테이블이 같은 부모를 두 번 참조할 때만 역할 수식어를 앞에 붙인다(SEND_ACCT_NO / RECV_ACCT_NO).",
+    "audit": "감사 컬럼 FRST_REG_DTM·LAST_CHG_DTM은 전 테이블에 같은 이름으로 강제한다. 등록자·변경자 ID는 두지 않는다 — 사람이 아니라 배치 CLI가 적재하므로 어떤 값을 넣어도 가짜다.",
+    "number_vs_serial": "번호(NO)와 일련번호(SN)를 가른다. NO는 문자 번호(\"고시 제2026-47호\"), SN은 숫자 순번이다. 이게 갈리지 않으면 AGNCY_NO INT처럼 분류어가 타입을 지시하지 못하는 컬럼이 생긴다.",
+    "value_classifier": "값(VAL)은 수식어로만 쓰고 분류어로 등록하지 않는다. 자유 텍스트 값은 내용(CTNT)이 받는다 — 분류어를 늘릴수록 분류어→도메인 대응이 흐려진다.",
+    "code_length": "코드 도메인은 관행적인 VARCHAR(8)이 아니라 VARCHAR(30)이다. 공고종류코드가 뜻이 읽히는 조합형이고 최장값이 MIXED_CHG_PRMSN_CNSLT_APRV(26자)다.",
+    "code_value_form": "코드값은 대문자 영문 약어다. 숫자 코드(01/02)가 더 정통이지만, 이 스키마는 이미 공고종류 56종·공고항목 45종을 뜻이 읽히는 영문 코드로 운영하고 있어 두 체계가 섞이는 쪽이 더 나쁘다.",
+    "row_data_scope": "TB의 코드 테이블에 행으로 쌓이는 값(공고종류코드 56종·공고항목코드 45종)은 표준용어가 아니라 표준코드다. 컬럼명이 아니므로 표준단어로 분해될 필요가 없다.",
+    "forbidden": "SQL 예약어, 숫자로 시작하는 이름, 하이픈, 한글 물리명, 사전에 없는 임의 약어, COL1·SPARE1·FILLER 같은 여유 컬럼을 금지한다."
+  },
+
+  "words": [
+    { "term": "기관",     "abbr": "AGNCY", "english": "AGENCY",       "role": "modifier" },
+    { "term": "게시판",   "abbr": "BBS",   "english": "BULLETIN BOARD", "role": "modifier" },
+    { "term": "고시공고", "abbr": "NOTI",  "english": "NOTICE",       "role": "modifier" },
+    { "term": "첨부",     "abbr": "ATCH",  "english": "ATTACHMENT",   "role": "modifier" },
+    { "term": "파일",     "abbr": "FILE",  "english": "FILE",         "role": "modifier" },
+    { "term": "이미지",   "abbr": "IMG",   "english": "IMAGE",        "role": "modifier" },
+    { "term": "항목",     "abbr": "ITEM",  "english": "ITEM",         "role": "modifier" },
+    { "term": "값",       "abbr": "VAL",   "english": "VALUE",        "role": "modifier", "notes": "분류어로는 쓰지 않는다 — 자유 텍스트 값은 CTNT가 받는다" },
+    { "term": "종류",     "abbr": "KND",   "english": "KIND",         "role": "modifier" },
+    { "term": "유형",     "abbr": "TY",    "english": "TYPE",         "role": "modifier", "notes": "TYPE은 예약어라 TY로 줄인다" },
+    { "term": "상위",     "abbr": "HRNK",  "english": "HIGH RANK",    "role": "modifier" },
+    { "term": "처분",     "abbr": "DSPS",  "english": "DISPOSITION",  "role": "modifier" },
+    { "term": "반복",     "abbr": "RPT",   "english": "REPEAT",       "role": "modifier" },
+    { "term": "실패",     "abbr": "FAIL",  "english": "FAIL",         "role": "modifier" },
+    { "term": "단계",     "abbr": "STEP",  "english": "STEP",         "role": "modifier" },
+    { "term": "메시지",   "abbr": "MSG",   "english": "MESSAGE",      "role": "modifier" },
+    { "term": "제외",     "abbr": "EXCL",  "english": "EXCLUDE",      "role": "modifier" },
+    { "term": "사유",     "abbr": "RSN",   "english": "REASON",       "role": "modifier" },
+    { "term": "확장자",   "abbr": "EXTN",  "english": "EXTENSION",    "role": "modifier" },
+    { "term": "실제",     "abbr": "ACTL",  "english": "ACTUAL",       "role": "modifier", "notes": "REAL은 PostgreSQL의 부동소수 타입명이라 쓰지 않는다" },
+    { "term": "스캔",     "abbr": "SCAN",  "english": "SCAN",         "role": "modifier" },
+    { "term": "추출",     "abbr": "EXTC",  "english": "EXTRACT",      "role": "modifier" },
+    { "term": "엔진",     "abbr": "ENGN",  "english": "ENGINE",       "role": "modifier" },
+    { "term": "상태",     "abbr": "STTS",  "english": "STATUS",       "role": "modifier" },
+    { "term": "처리",     "abbr": "PROC",  "english": "PROCESS",      "role": "modifier" },
+    { "term": "캡션",     "abbr": "CPTN",  "english": "CAPTION",      "role": "modifier" },
+    { "term": "계열",     "abbr": "SRS",   "english": "SERIES",       "role": "modifier" },
+    { "term": "주요",     "abbr": "CORE",  "english": "CORE",         "role": "modifier" },
+    { "term": "최초",     "abbr": "FRST",  "english": "FIRST",        "role": "modifier" },
+    { "term": "최종",     "abbr": "LAST",  "english": "LAST",         "role": "modifier" },
+    { "term": "등록",     "abbr": "REG",   "english": "REGISTER",     "role": "modifier" },
+    { "term": "변경",     "abbr": "CHG",   "english": "CHANGE",       "role": "modifier" },
+
+    { "term": "일련번호", "abbr": "SN",    "english": "SERIAL NUMBER", "role": "classifier", "domain": "D_SN" },
+    { "term": "번호",     "abbr": "NO",    "english": "NUMBER",        "role": "classifier", "domain": "D_NO" },
+    { "term": "코드",     "abbr": "CD",    "english": "CODE",          "role": "classifier", "domain": "D_CD" },
+    { "term": "명",       "abbr": "NM",    "english": "NAME",          "role": "classifier", "domain": "D_NM" },
+    { "term": "제목",     "abbr": "TTL",   "english": "TITLE",         "role": "classifier", "domain": "D_TTL" },
+    { "term": "일자",     "abbr": "DT",    "english": "DATE",          "role": "classifier", "domain": "D_DT" },
+    { "term": "일시",     "abbr": "DTM",   "english": "DATETIME",      "role": "classifier", "domain": "D_DTM" },
+    { "term": "여부",     "abbr": "YN",    "english": "YES OR NO",     "role": "classifier", "domain": "D_YN" },
+    { "term": "내용",     "abbr": "CTNT",  "english": "CONTENT",       "role": "classifier", "domain": "D_CTNT" },
+    { "term": "경로",     "abbr": "PATH",  "english": "PATH",          "role": "classifier", "domain": "D_PATH" },
+    { "term": "건수",     "abbr": "CNT",   "english": "COUNT",         "role": "classifier", "domain": "D_CNT" },
+    { "term": "설명",     "abbr": "DSCR",  "english": "DESCRIPTION",   "role": "classifier", "domain": "D_DSCR" },
+    { "term": "금액",     "abbr": "AMT",   "english": "AMOUNT",        "role": "classifier", "domain": "D_AMT" },
+    { "term": "수량",     "abbr": "QTY",   "english": "QUANTITY",      "role": "classifier", "domain": "D_QTY" },
+    { "term": "율",       "abbr": "RT",    "english": "RATE",          "role": "classifier", "domain": "D_RT" },
+    { "term": "순번",     "abbr": "SEQ",   "english": "SEQUENCE",      "role": "classifier", "domain": "D_SEQ" },
+    { "term": "구분",     "abbr": "SE",    "english": "SECTION",       "role": "classifier", "domain": "D_SE" },
+    { "term": "식별자",   "abbr": "ID",    "english": "IDENTIFIER",    "role": "classifier", "domain": "D_ID" }
+  ],
+
+  "domains": [
+    { "id": "D_SN",    "term": "일련번호", "sqlType": "INTEGER",        "description": "숫자 순번·일련번호. 기관·게시물·첨부·이미지·처분·반복 순번이 모두 이 도메인이다" },
+    { "id": "D_NO",    "term": "번호",     "sqlType": "VARCHAR(50)",    "description": "문자 번호. \"고시 제2026-47호\"처럼 접두어·괄호가 붙은 원문 표기를 그대로 담는다" },
+    { "id": "D_CD",    "term": "코드",     "sqlType": "VARCHAR(30)",    "description": "표준코드 허용값. 최장값이 MIXED_CHG_PRMSN_CNSLT_APRV(26자)라 30으로 잡았다" },
+    { "id": "D_NM",    "term": "명",       "sqlType": "VARCHAR(300)",   "description": "이름. 첨부파일명이 공고 제목을 그대로 쓰는 경우가 있어 300으로 잡았다" },
+    { "id": "D_TTL",   "term": "제목",     "sqlType": "VARCHAR(500)",   "description": "문서 제목. 고시문 제목은 한 문장을 통째로 쓰는 일이 잦아 명보다 길게 잡는다" },
+    { "id": "D_DT",    "term": "일자",     "sqlType": "DATE",           "description": "날짜만. 시각이 필요하면 일시(DTM)를 쓴다" },
+    { "id": "D_DTM",   "term": "일시",     "sqlType": "TIMESTAMPTZ",    "description": "타임존 포함 일시. 감사 컬럼이 이 도메인이다" },
+    { "id": "D_YN",    "term": "여부",     "sqlType": "CHAR(1)",        "check": "VALUE IN ('Y','N')", "description": "'Y'/'N' 두 값만 허용한다. BOOLEAN을 쓰지 않는 이유는 표준 분류어 YN이 지시하는 도메인이 CHAR(1)이고, 도메인이 지시하는 타입과 실제 타입이 어긋나면 사전이 무의미해지기 때문이다" },
+    { "id": "D_CTNT",  "term": "내용",     "sqlType": "TEXT",           "description": "길이를 예측할 수 없는 자유 텍스트. 실패 메시지·적재제외 사유·항목값이 여기 속한다" },
+    { "id": "D_PATH",  "term": "경로",     "sqlType": "VARCHAR(1000)",  "description": "파일 시스템 절대경로" },
+    { "id": "D_CNT",   "term": "건수",     "sqlType": "INTEGER",        "description": "예비 — 현재 스키마에 쓰이는 컬럼이 없다" },
+    { "id": "D_DSCR",  "term": "설명",     "sqlType": "VARCHAR(1000)",  "description": "예비. 주의: 물리명을 DESC로 줄이면 SQL 예약어와 충돌한다" },
+    { "id": "D_AMT",   "term": "금액",     "sqlType": "NUMERIC(18,3)",  "description": "예비" },
+    { "id": "D_QTY",   "term": "수량",     "sqlType": "NUMERIC",        "description": "예비" },
+    { "id": "D_RT",    "term": "율",       "sqlType": "NUMERIC(7,4)",   "description": "예비" },
+    { "id": "D_SEQ",   "term": "순번",     "sqlType": "INTEGER",        "description": "예비 — 이 스키마의 순번은 전부 일련번호(SN)로 등록돼 있다" },
+    { "id": "D_SE",    "term": "구분",     "sqlType": "VARCHAR(4)",     "description": "예비 — 코드 테이블 없이 두세 값만 가르는 구분값용" },
+    { "id": "D_ID",    "term": "식별자",   "sqlType": "VARCHAR(20)",    "description": "예비 — 사용자·시스템 식별자용" }
+  ],
+
+  "tableSuffixes": [
+    { "suffix": "BAS", "term": "기준",       "description": "기준·마스터. 기관·상품 같은 원장성 테이블", "used": true },
+    { "suffix": "DTL", "term": "명세",       "description": "거래·명세. 발생 건을 행으로 쌓는 테이블", "used": true },
+    { "suffix": "TC",  "term": "코드",       "description": "코드 테이블", "used": true },
+    { "suffix": "HIS", "term": "이력",       "description": "변경 이력", "used": false },
+    { "suffix": "SUM", "term": "요약",       "description": "배치 집계·요약", "used": false },
+    { "suffix": "MAP", "term": "매핑",       "description": "N:M 관계 해소", "used": false }
+  ],
+
+  "tables": [
+    {
+      "logical": "기관", "physical": "AGNCY_BAS", "suffix": "BAS",
+      "description": "고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다",
+      "primaryKey": ["AGNCY_SN"],
+      "columns": ["AGNCY_SN", "AGNCY_NM", "AGNCY_KND_CD", "FRST_REG_DTM", "LAST_CHG_DTM"]
+    },
+    {
+      "logical": "고시공고게시물", "physical": "NOTI_BAS", "suffix": "BAS",
+      "description": "게시물. 크롤링 대상이 첨부파일뿐이라 게시물 자체의 정보는 없고 같은 게시물의 첨부를 묶는 키로만 쓴다",
+      "primaryKey": ["NOTI_SN"],
+      "columns": ["NOTI_SN", "AGNCY_SN", "BBS_STTS_CD", "FRST_REG_DTM", "LAST_CHG_DTM"]
+    },
+    {
+      "logical": "공고종류", "physical": "NOTI_KND_TC", "suffix": "TC",
+      "description": "공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다",
+      "primaryKey": ["NOTI_KND_CD"],
+      "columns": ["NOTI_KND_CD", "NOTI_KND_NM", "HRNK_NOTI_KND_NM", "FRST_REG_DTM", "LAST_CHG_DTM"]
+    },
+    {
+      "logical": "공고항목", "physical": "NOTI_ITEM_TC", "suffix": "TC",
+      "description": "표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다",
+      "primaryKey": ["NOTI_ITEM_CD"],
+      "columns": ["NOTI_ITEM_CD", "NOTI_ITEM_NM", "ITEM_SRS_NM", "ITEM_VAL_TY_CD", "CORE_ITEM_YN", "FRST_REG_DTM", "LAST_CHG_DTM"]
+    },
+    {
+      "logical": "첨부파일", "physical": "ATCH_FILE_DTL", "suffix": "DTL",
+      "description": "파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태",
+      "primaryKey": ["NOTI_SN", "ATCH_SN"],
+      "columns": ["NOTI_SN", "ATCH_SN", "ATCH_FILE_NM", "PROC_STTS_CD", "FAIL_STEP_CD", "FAIL_KND_CD", "FAIL_MSG_CTNT", "EXCL_RSN_CTNT", "FILE_EXTN_NM", "ACTL_FILE_EXTN_NM", "SCAN_YN", "EXTC_ENGN_NM", "NOTI_KND_CD", "NOTI_NO", "NOTI_DT", "NOTI_TTL", "FRST_REG_DTM", "LAST_CHG_DTM"]
+    },
+    {
+      "logical": "첨부이미지", "physical": "ATCH_IMG_DTL", "suffix": "DTL",
+      "description": "이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다",
+      "primaryKey": ["NOTI_SN", "ATCH_SN", "IMG_SN"],
+      "columns": ["NOTI_SN", "ATCH_SN", "IMG_SN", "IMG_CPTN_CTNT", "IMG_FILE_PATH", "FRST_REG_DTM", "LAST_CHG_DTM"]
+    },
+    {
+      "logical": "공고항목값", "physical": "NOTI_ITEM_VAL_DTL", "suffix": "DTL",
+      "description": "항목값. 40개 표준항목을 전부 동등하게 행으로 담는다",
+      "primaryKey": ["NOTI_SN", "ATCH_SN", "DSPS_SN", "NOTI_ITEM_CD", "RPT_SN"],
+      "columns": ["NOTI_SN", "ATCH_SN", "DSPS_SN", "NOTI_ITEM_CD", "RPT_SN", "ITEM_VAL_CTNT", "FRST_REG_DTM", "LAST_CHG_DTM"]
+    }
+  ],
+
+  "terms": [
+    { "logical": "기관일련번호",     "physical": "AGNCY_SN",          "domain": "D_SN",   "description": "입력 폴더명 앞 번호. AgencyRegistry가 폴더 집합 전체를 보고 결정론적으로 발급한다" },
+    { "logical": "기관명",           "physical": "AGNCY_NM",          "domain": "D_NM",   "description": "수집처 기관명 — 입력 폴더명에서 온다" },
+    { "logical": "기관종류코드",     "physical": "AGNCY_KND_CD",      "domain": "D_CD",   "code": "CD_AGNCY_KND", "description": "GZT는 기관 종류가 아니라 수집 경로다 — 같은 부처를 자체 게시판과 전자관보 양쪽에서 긁으므로 이름이 같은 두 행을 이 값으로 가린다" },
+    { "logical": "고시공고일련번호", "physical": "NOTI_SN",           "domain": "D_SN",   "description": "크롤 일련번호. 첨부파일명 앞자리다. 문서 본문의 고시번호(NOTI_NO)와는 다른 것이다" },
+    { "logical": "게시상태코드",     "physical": "BBS_STTS_CD",       "domain": "D_CD",   "code": "CD_BBS_STTS", "description": "폴더명 꼬리표로 가른다. 같은 기관이 게시판을 둘 운영하면 기관은 하나고 이 값만 갈린다" },
+    { "logical": "공고종류코드",     "physical": "NOTI_KND_CD",       "domain": "D_CD",   "code": "CD_NOTI_KND", "description": "{상위분류}_{행위} 조합. 코드만 보고도 계열을 알 수 있어야 필터가 쉽다" },
+    { "logical": "공고종류명",       "physical": "NOTI_KND_NM",       "domain": "D_NM",   "description": "공고종류의 한글 이름" },
+    { "logical": "상위공고종류명",   "physical": "HRNK_NOTI_KND_NM",  "domain": "D_NM",   "description": "점용·사용 / 실시계획 / 매립 / 점용료·사용료 / 혼합 / 기타. UPPER_로 시작하면 SQL 함수명과 겹쳐 HRNK_를 쓴다" },
+    { "logical": "공고항목코드",     "physical": "NOTI_ITEM_CD",      "domain": "D_CD",   "code": "CD_NOTI_ITEM", "description": "표준항목코드 = synonyms.json의 canonical" },
+    { "logical": "공고항목명",       "physical": "NOTI_ITEM_NM",      "domain": "D_NM",   "description": "표준항목의 한글 표시명" },
+    { "logical": "항목계열명",       "physical": "ITEM_SRS_NM",       "domain": "D_NM",   "description": "같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음. 누락 검증은 항목이 아니라 계열 단위로 봐야 오탐이 없다" },
+    { "logical": "항목값유형코드",   "physical": "ITEM_VAL_TY_CD",    "domain": "D_CD",   "code": "CD_ITEM_VAL_TY", "description": "값의 정규화 방식을 정한다" },
+    { "logical": "주요항목여부",     "physical": "CORE_ITEM_YN",      "domain": "D_YN",   "description": "전수 표본 출현율 60% 이상인 주요 6항목 — 누락 검증 가중치용이며 저장 위치와는 무관하다" },
+    { "logical": "첨부일련번호",     "physical": "ATCH_SN",           "domain": "D_SN",   "description": "첨부가 1건인 게시물은 파일명에 순번이 없어 항상 1이다. 결번은 버그가 아니라 미수집 신호이므로 다시 매겨 메우지 않는다" },
+    { "logical": "첨부파일명",       "physical": "ATCH_FILE_NM",      "domain": "D_NM",   "description": "입력 파일명 원문" },
+    { "logical": "처리상태코드",     "physical": "PROC_STTS_CD",      "domain": "D_CD",   "code": "CD_PROC_STTS", "description": "FAIL·SKIP도 행으로 남긴다 — 성공만 적재하면 \"추출 0건인 기관\"이 DB에서 보이지 않는다" },
+    { "logical": "실패단계코드",     "physical": "FAIL_STEP_CD",      "domain": "D_CD",   "code": "CD_FAIL_STEP", "description": "파이프라인의 어느 단계에서 넘어졌는지" },
+    { "logical": "실패종류코드",     "physical": "FAIL_KND_CD",       "domain": "D_CD",   "code": "CD_FAIL_KND", "description": "실패 이유의 갈래. 대응이 다른 실패를 한 덩어리로 세지 않기 위한 축이다" },
+    { "logical": "실패메시지내용",   "physical": "FAIL_MSG_CTNT",     "domain": "D_CTNT", "description": "사람이 읽는 실패 설명 원문" },
+    { "logical": "적재제외사유내용", "physical": "EXCL_RSN_CTNT",     "domain": "D_CTNT", "description": "안내문류 차단 등 적재를 건너뛴 사유" },
+    { "logical": "파일확장자명",     "physical": "FILE_EXTN_NM",      "domain": "D_NM",   "code": "CD_FILE_EXTN", "description": "파일명 확장자 기준 형식" },
+    { "logical": "실제파일확장자명", "physical": "ACTL_FILE_EXTN_NM", "domain": "D_NM",   "code": "CD_FILE_EXTN", "description": "매직바이트로 판정한 실제 형식. FILE_EXTN_NM과 다른 행이 곧 확장자가 어긋난 파일 목록이다" },
+    { "logical": "스캔여부",         "physical": "SCAN_YN",           "domain": "D_YN",   "description": "본문이 텍스트가 아니라 이미지인 스캔본 여부" },
+    { "logical": "추출엔진명",       "physical": "EXTC_ENGN_NM",      "domain": "D_NM",   "description": "본문을 읽어 낸 엔진" },
+    { "logical": "고시번호",         "physical": "NOTI_NO",           "domain": "D_NO",   "description": "문서 본문의 고시번호(\"고시 제2026-47호\"). 게시물 일련번호와도, 처분받은 허가번호와도 다른 것이다" },
+    { "logical": "고시일자",         "physical": "NOTI_DT",           "domain": "D_DT",   "description": "고시문에 적힌 고시 날짜" },
+    { "logical": "고시제목",         "physical": "NOTI_TTL",          "domain": "D_TTL",  "description": "고시문 제목. 공고종류 판정의 입력이다" },
+    { "logical": "이미지일련번호",   "physical": "IMG_SN",            "domain": "D_SN",   "description": "한 첨부 안에서의 이미지 순번" },
+    { "logical": "이미지캡션내용",   "physical": "IMG_CPTN_CTNT",     "domain": "D_CTNT", "description": "그림 아래 캡션 원문" },
+    { "logical": "이미지파일경로",   "physical": "IMG_FILE_PATH",     "domain": "D_PATH", "description": "추출한 이미지를 저장한 절대경로" },
+    { "logical": "처분일련번호",     "physical": "DSPS_SN",           "domain": "D_SN",   "description": "목록표의 N번째 행 = 처분 1건. 이 값이 없으면 목록표에서 장소·면적·성명이 짝을 잃고 그 손실은 조용하며 사후 복구가 불가능하다" },
+    { "logical": "반복일련번호",     "physical": "RPT_SN",            "domain": "D_SN",   "description": "같은 처분에 같은 항목이 반복될 때의 순번 — 변경 고시문의 당초/변경 대비표가 대표적이다" },
+    { "logical": "항목값내용",       "physical": "ITEM_VAL_CTNT",     "domain": "D_CTNT", "description": "Java가 정규화한 값. 날짜는 ISO, 기간은 daterange 리터럴, 정규화 실패나 TEXT 항목은 원문 그대로다" },
+    { "logical": "최초등록일시",     "physical": "FRST_REG_DTM",      "domain": "D_DTM",  "audit": true, "description": "행을 처음 적재한 시각" },
+    { "logical": "최종변경일시",     "physical": "LAST_CHG_DTM",      "domain": "D_DTM",  "audit": true, "description": "행을 마지막으로 갱신한 시각" }
+  ],
+
+  "codes": [
+    {
+      "group": "CD_AGNCY_KND", "name": "기관종류코드", "columns": ["AGNCY_BAS.AGNCY_KND_CD"],
+      "description": "수집처의 갈래. GZT만은 기관 종류가 아니라 수집 경로다",
+      "values": [
+        { "code": "MOF",  "name": "지방해양수산청" },
+        { "code": "LOCL", "name": "지방자치단체" },
+        { "code": "CNTL", "name": "중앙행정기관" },
+        { "code": "GZT",  "name": "전자관보" }
+      ]
+    },
+    {
+      "group": "CD_BBS_STTS", "name": "게시상태코드", "columns": ["NOTI_BAS.BBS_STTS_CD"],
+      "description": "입력 폴더명 꼬리표로 판정한다",
+      "values": [
+        { "code": "POST", "name": "게시중" },
+        { "code": "CLSD", "name": "게시완료" }
+      ]
+    },
+    {
+      "group": "CD_PROC_STTS", "name": "처리상태코드", "columns": ["ATCH_FILE_DTL.PROC_STTS_CD"],
+      "description": "첨부파일 1건의 처리 결과",
+      "values": [
+        { "code": "OK",   "name": "정상" },
+        { "code": "FAIL", "name": "실패" },
+        { "code": "SKIP", "name": "적재제외" }
+      ]
+    },
+    {
+      "group": "CD_FAIL_STEP", "name": "실패단계코드", "columns": ["ATCH_FILE_DTL.FAIL_STEP_CD"],
+      "description": "파이프라인 단계. 콘솔에는 한글 표시명이 나가고 DB에는 코드가 들어간다",
+      "values": [
+        { "code": "DTCT", "name": "판별" },
+        { "code": "EXTC", "name": "추출" },
+        { "code": "TBIT", "name": "표해석" },
+        { "code": "MAPP", "name": "매핑" },
+        { "code": "SAVE", "name": "저장" }
+      ]
+    },
+    {
+      "group": "CD_FAIL_KND", "name": "실패종류코드", "columns": ["ATCH_FILE_DTL.FAIL_KND_CD"],
+      "description": "detect.FailureKind가 정의처다. 이미 대문자 영문이라 값을 그대로 등재한다",
+      "values": [
+        { "code": "HWP3_LEGACY",              "name": "한글 3.0 구조 미해독" },
+        { "code": "NOT_COMPOUND_FILE",        "name": "HWP 컨테이너 아님" },
+        { "code": "PASSWORD_PROTECTED",       "name": "열기암호 설정" },
+        { "code": "DRM_PROTECTED",            "name": "DRM 보안문서" },
+        { "code": "DISTRIBUTION_UNSUPPORTED", "name": "배포용 본문 미해독" },
+        { "code": "DISTRIBUTION_TRUNCATED",   "name": "배포용 본문 잘림" },
+        { "code": "ENCRYPTED",                "name": "암호화 갈래 미상" },
+        { "code": "NOT_ZIP",                  "name": "HWPX 컨테이너 아님" },
+        { "code": "ZIP_CORRUPT",              "name": "ZIP 구조 손상" },
+        { "code": "XML_PARSE",                "name": "본문 XML 파싱 실패" },
+        { "code": "DOCUMENT_PARSE",           "name": "내부 문서구조 미해독" },
+        { "code": "PDF_LOAD",                 "name": "PDF 열기 실패" },
+        { "code": "EMPTY_FILE",               "name": "빈 파일" },
+        { "code": "FILE_ACCESS",              "name": "파일 접근 실패" },
+        { "code": "UNSUPPORTED_EXT",          "name": "미지원 확장자" },
+        { "code": "OUT_OF_MEMORY",            "name": "메모리 부족" },
+        { "code": "IO",                       "name": "입출력 오류" },
+        { "code": "OTHER",                    "name": "기타" }
+      ]
+    },
+    {
+      "group": "CD_ITEM_VAL_TY", "name": "항목값유형코드", "columns": ["NOTI_ITEM_TC.ITEM_VAL_TY_CD"],
+      "description": "synonyms.json의 value_type이 정의처다",
+      "values": [
+        { "code": "TEXT", "name": "문자 — 원문 보존" },
+        { "code": "DATE", "name": "일자 — ISO 정규화" },
+        { "code": "DTRG", "name": "기간 — daterange 리터럴" },
+        { "code": "NUM",  "name": "수치" }
+      ]
+    },
+    {
+      "group": "CD_FILE_EXTN", "name": "파일확장자명", "columns": ["ATCH_FILE_DTL.FILE_EXTN_NM", "ATCH_FILE_DTL.ACTL_FILE_EXTN_NM"],
+      "enforced": false,
+      "description": "참고 목록이다. 파일명 확장자는 열린 집합이라(jpg·zip·xlsx가 실제로 들어온다) 값을 강제하지 않는다. 아래는 detect.DocFormat이 판정하는 값들이다",
+      "values": [
+        { "code": "hwp",  "name": "한글 5.0 (OLE 복합문서)" },
+        { "code": "hwp3", "name": "한글 3.0" },
+        { "code": "hwpx", "name": "한글 XML (OWPML/ZIP)" },
+        { "code": "hml",  "name": "한글 마크업" },
+        { "code": "pdf",  "name": "PDF" }
+      ]
+    },
+    {
+      "group": "CD_NOTI_KND", "name": "공고종류코드", "columns": ["NOTI_KND_TC.NOTI_KND_CD", "ATCH_FILE_DTL.NOTI_KND_CD"],
+      "managedBy": "notice_types.json", "table": "NOTI_KND_TC",
+      "description": "56종. 값 목록은 notice_types.json이 정의처이고 ReferenceSync가 테이블로 동기화한다 — 여기에 복사해 두면 두 곳이 어긋난다",
+      "values": []
+    },
+    {
+      "group": "CD_NOTI_ITEM", "name": "공고항목코드", "columns": ["NOTI_ITEM_TC.NOTI_ITEM_CD", "NOTI_ITEM_VAL_DTL.NOTI_ITEM_CD"],
+      "managedBy": "synonyms.json", "table": "NOTI_ITEM_TC",
+      "description": "표준항목 40종(+ 컬럼으로 직행하는 attachment 5종). 값 목록은 synonyms.json이 정의처다. 컬럼명이 아니라 행으로 쌓이는 코드 데이터이므로 표준단어로 분해될 필요가 없다",
+      "values": []
+    }
+  ],
+
+  "reservedWords": [
+    "ALL", "AND", "ANY", "AS", "ASC", "BETWEEN", "BY", "CASE", "CHECK", "COLUMN", "COMMENT",
+    "CONSTRAINT", "CREATE", "CURRENT_DATE", "DATE", "DEFAULT", "DELETE", "DESC", "DISTINCT",
+    "DROP", "ELSE", "END", "EXISTS", "FALSE", "FOR", "FOREIGN", "FROM", "GRANT", "GROUP",
+    "HAVING", "IN", "INDEX", "INSERT", "INTO", "IS", "JOIN", "KEY", "LEVEL", "LIKE", "LIMIT",
+    "NOT", "NULL", "NUMBER", "OF", "OFFSET", "ON", "OR", "ORDER", "PRIMARY", "REAL",
+    "REFERENCES", "SELECT", "SESSION", "SET", "SIZE", "TABLE", "THEN", "TO", "TRUE", "TYPE",
+    "UNION", "UNIQUE", "UPDATE", "USER", "USING", "VALUES", "VIEW", "WHEN", "WHERE", "WITH"
+  ]
+}

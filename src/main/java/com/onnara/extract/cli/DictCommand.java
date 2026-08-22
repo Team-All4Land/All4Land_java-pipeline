@@ -1,5 +1,6 @@
 package com.onnara.extract.cli;
 
+import com.onnara.extract.docs.DbStandardDoc;
 import com.onnara.extract.docs.ExtrasReport;
 import com.onnara.extract.docs.NoticeTypesReport;
 import com.onnara.extract.docs.SynonymsDoc;
@@ -23,6 +24,9 @@ import java.util.stream.Stream;
  *
  * <p>검토 리포트가 둘인 이유: 두 사전의 구멍이 서로 다른 곳에서 드러난다. 라벨이 모자라면
  * 값이 {@code extras}로 새고, 공고종류가 모자라면 {@code NOTI_KND_CD}가 빈다.
+ *
+ * <p>DB 표준 사전({@code db/standard_terms.json})도 여기서 함께 렌더링한다 — 사전을 고치고
+ * 문서를 따로 갱신하게 두면 반드시 어긋나므로, 생성 지점을 하나로 모은다.
  */
 @Command(name = "dict", description = "동의어 사전·검토 리포트 생성")
 public class DictCommand implements Callable<Integer> {
@@ -49,11 +53,19 @@ public class DictCommand implements Callable<Integer> {
             description = "미분류 제목 리포트 경로 (기본 ${DEFAULT-VALUE})")
     Path typesOutput;
 
+    /** DB 표준 사전 문서 출력 경로. */
+    @Option(names = "--db-standard", defaultValue = "docs/DB_STANDARD.md",
+            description = "DB 표준 사전 문서 경로 (기본 ${DEFAULT-VALUE})")
+    Path dbStandardOutput;
+
     /** 사전 문서를 생성하고, --review가 있으면 검토 리포트도 생성한다. */
     @Override
     public Integer call() throws Exception {
         write(output, SynonymsDoc.render());
         System.out.println("동의어 사전 문서: " + output);
+
+        write(dbStandardOutput, DbStandardDoc.render());
+        System.out.println("DB 표준 사전 문서: " + dbStandardOutput);
 
         if (reviewDir == null) {
             return 0;
