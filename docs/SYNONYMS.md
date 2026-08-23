@@ -14,58 +14,58 @@
 
 | # | 표준 필드 | 표시명 | 저장 계층 | 계열 | 값 형식 | 주요 | 동의어 수 |
 |---:|---|---|---|---|---|:-:|---:|
-| 1 | `BODY_AGNCY_NM` | 고시기관 | 추출만(적재 안 함) | — | text |  | 4 |
-| 2 | `NOTI_NO` | 고시번호 | `TB_ATCH_FILE` 컬럼 | — | text |  | 2 |
-| 3 | `NOTI_YMD` | 고시일자 | `TB_ATCH_FILE` 컬럼 | — | date |  | 6 |
-| 4 | `NOTI_TTL` | 제목 | `TB_ATCH_FILE` 컬럼 | — | text |  | 3 |
-| 5 | `NOTI_PSN` | 고시자 | 추출만(적재 안 함) | — | text |  | 2 |
-| 6 | `LOCATION` | 점용·사용 장소 | `TB_NOTI_ITEM_VAL` 행 | 위치 | text | ● | 17 |
-| 7 | `AREA` | 점용·사용 면적 | `TB_NOTI_ITEM_VAL` 행 | 면적 | text | ● | 12 |
-| 8 | `PURPOSE` | 점용·사용 목적 | `TB_NOTI_ITEM_VAL` 행 | — | text | ● | 8 |
-| 9 | `APPLICANT_NAME` | 허가·승인 대상자 성명 | `TB_NOTI_ITEM_VAL` 행 | 인적 | text | ● | 24 |
-| 10 | `WORK_PERIOD` | 점용·사용 기간 | `TB_NOTI_ITEM_VAL` 행 | 기간 | date_range (가상 필드 · 분리 적재) | ● | 9 |
-| 11 | `APPLICANT_ADDRESS` | 허가·승인 대상자 주소 | `TB_NOTI_ITEM_VAL` 행 | 주소 | text | ● | 6 |
-| 12 | `APPROVAL_NO` | 허가·승인번호 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 7 |
-| 13 | `APPROVAL_DATE` | 허가·승인일자 | `TB_NOTI_ITEM_VAL` 행 | — | date |  | 18 |
-| 14 | `REMARKS` | 비고 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 3 |
-| 15 | `SUBJECT_ADDRESS` | 공고·처분 대상자 주소 | `TB_NOTI_ITEM_VAL` 행 | 주소 | text |  | 0 |
-| 16 | `BUSINESS_CONTENT` | 사업내용 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 5 |
-| 17 | `CONSTRUCTION_PERIOD` | 공사시행 기간 | `TB_NOTI_ITEM_VAL` 행 | 기간 | date_range |  | 3 |
-| 18 | `CHANGED_TO` | 변경 후 값 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 2 |
-| 19 | `CHANGE_SUMMARY` | 변경사항 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 2 |
-| 20 | `SUBJECT_NAME` | 공고·처분 대상자 성명 | `TB_NOTI_ITEM_VAL` 행 | 인적 | text |  | 1 |
-| 21 | `CHANGED_FROM` | 변경 전 값 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 2 |
-| 22 | `WATER_TYPE` | 수면 종류 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 2 |
-| 23 | `STRUCTURE_TYPE` | 공작물 종류 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 2 |
-| 24 | `COMPLETION_DATE` | 준공·완료 처리일자 | `TB_NOTI_ITEM_VAL` 행 | 날짜 | date |  | 4 |
-| 25 | `OPERATOR_NAME` | 사업 시행자 성명 | `TB_NOTI_ITEM_VAL` 행 | 인적 | text |  | 4 |
-| 26 | `PURPOSE_CONTENT_COMBINED` | 점용·사용 목적·사업내용(복합) | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 3 |
-| 27 | `CONTACT_POINT` | 문의처 | `TB_NOTI_ITEM_VAL` 행 | 연락 | text |  | 2 |
-| 28 | `APPROVAL_NO_DATE_COMBINED` | 허가·승인번호·일자(복합) | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 0 |
-| 29 | `CONSTRUCTION_NAME` | 공사명칭 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 3 |
-| 30 | `CONSTRUCTION_LOCATION` | 공사시행 장소 | `TB_NOTI_ITEM_VAL` 행 | 위치 | text |  | 3 |
-| 31 | `CONTACT_NUMBER` | 연락처 | `TB_NOTI_ITEM_VAL` 행 | 연락 | text |  | 3 |
-| 32 | `PROJECT_COST` | 사업비 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 2 |
-| 33 | `APPROVAL_CONTENT` | 허가내용 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 1 |
-| 34 | `CONSTRUCTION_AREA` | 공사시행 면적 | `TB_NOTI_ITEM_VAL` 행 | 면적 | text |  | 2 |
-| 35 | `CONSTRUCTION_TYPE` | 공사종류 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 2 |
-| 36 | `LAND_USE_PLAN` | 토지이용계획 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 2 |
-| 37 | `CANCEL_DATE` | 취소일자 | `TB_NOTI_ITEM_VAL` 행 | 날짜 | date |  | 3 |
-| 38 | `COMPLETION_AREA` | 준공면적 | `TB_NOTI_ITEM_VAL` 행 | 면적 | text |  | 1 |
-| 39 | `CANCEL_REASON` | 취소사유 | `TB_NOTI_ITEM_VAL` 행 | 사유 | text |  | 2 |
-| 40 | `NOTICE_PERIOD` | 공고기간 | `TB_NOTI_ITEM_VAL` 행 | 기간 | date_range |  | 1 |
-| 41 | `DISPOSITION_CONTENT` | 처분내용 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 1 |
-| 42 | `NOTICE_SUBJECT` | 공고대상 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 2 |
-| 43 | `DISPOSITION_REASON` | 처분사유 | `TB_NOTI_ITEM_VAL` 행 | 사유 | text |  | 1 |
-| 44 | `OPINION_SUBMISSION` | 의견제출 기간·방법 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 4 |
-| 45 | `LEGAL_BASIS` | 근거법령 | `TB_NOTI_ITEM_VAL` 행 | — | text |  | 1 |
+| 1 | `BODY_AGNCY_NM` | 고시기관 | 추출만(적재 안 함) | — | TEXT |  | 4 |
+| 2 | `NOTI_NO` | 고시번호 | `ATCH_FILE_DTL` 컬럼 | — | TEXT |  | 2 |
+| 3 | `NOTI_DT` | 고시일자 | `ATCH_FILE_DTL` 컬럼 | — | DATE |  | 6 |
+| 4 | `NOTI_TTL` | 제목 | `ATCH_FILE_DTL` 컬럼 | — | TEXT |  | 3 |
+| 5 | `NOTI_PSN` | 고시자 | 추출만(적재 안 함) | — | TEXT |  | 2 |
+| 6 | `LOCATION` | 점용·사용 장소 | `NOTI_ITEM_VAL_DTL` 행 | 위치 | TEXT | ● | 17 |
+| 7 | `AREA` | 점용·사용 면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT | ● | 12 |
+| 8 | `PURPOSE` | 점용·사용 목적 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT | ● | 8 |
+| 9 | `APPLICANT_NAME` | 허가·승인 대상자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT | ● | 24 |
+| 10 | `WORK_PERIOD` | 점용·사용 기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG (가상 필드 · 분리 적재) | ● | 9 |
+| 11 | `APPLICANT_ADDRESS` | 허가·승인 대상자 주소 | `NOTI_ITEM_VAL_DTL` 행 | 주소 | TEXT | ● | 6 |
+| 12 | `APPROVAL_NO` | 허가·승인번호 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 7 |
+| 13 | `APPROVAL_DATE` | 허가·승인일자 | `NOTI_ITEM_VAL_DTL` 행 | — | DATE |  | 18 |
+| 14 | `REMARKS` | 비고 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
+| 15 | `SUBJECT_ADDRESS` | 공고·처분 대상자 주소 | `NOTI_ITEM_VAL_DTL` 행 | 주소 | TEXT |  | 0 |
+| 16 | `BUSINESS_CONTENT` | 사업내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 5 |
+| 17 | `CONSTRUCTION_PERIOD` | 공사시행 기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG |  | 3 |
+| 18 | `CHANGED_TO` | 변경 후 값 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 19 | `CHANGE_SUMMARY` | 변경사항 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 20 | `SUBJECT_NAME` | 공고·처분 대상자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT |  | 1 |
+| 21 | `CHANGED_FROM` | 변경 전 값 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 22 | `WATER_TYPE` | 수면 종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 23 | `STRUCTURE_TYPE` | 공작물 종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 24 | `COMPLETION_DATE` | 준공·완료 처리일자 | `NOTI_ITEM_VAL_DTL` 행 | 날짜 | DATE |  | 4 |
+| 25 | `OPERATOR_NAME` | 사업 시행자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT |  | 4 |
+| 26 | `PURPOSE_CONTENT_COMBINED` | 점용·사용 목적·사업내용(복합) | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
+| 27 | `CONTACT_POINT` | 문의처 | `NOTI_ITEM_VAL_DTL` 행 | 연락 | TEXT |  | 2 |
+| 28 | `APPROVAL_NO_DATE_COMBINED` | 허가·승인번호·일자(복합) | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 0 |
+| 29 | `CONSTRUCTION_NAME` | 공사명칭 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
+| 30 | `CONSTRUCTION_LOCATION` | 공사시행 장소 | `NOTI_ITEM_VAL_DTL` 행 | 위치 | TEXT |  | 3 |
+| 31 | `CONTACT_NUMBER` | 연락처 | `NOTI_ITEM_VAL_DTL` 행 | 연락 | TEXT |  | 3 |
+| 32 | `PROJECT_COST` | 사업비 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 33 | `APPROVAL_CONTENT` | 허가내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
+| 34 | `CONSTRUCTION_AREA` | 공사시행 면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT |  | 2 |
+| 35 | `CONSTRUCTION_TYPE` | 공사종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 36 | `LAND_USE_PLAN` | 토지이용계획 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 37 | `CANCEL_DATE` | 취소일자 | `NOTI_ITEM_VAL_DTL` 행 | 날짜 | DATE |  | 3 |
+| 38 | `COMPLETION_AREA` | 준공면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT |  | 1 |
+| 39 | `CANCEL_REASON` | 취소사유 | `NOTI_ITEM_VAL_DTL` 행 | 사유 | TEXT |  | 2 |
+| 40 | `NOTICE_PERIOD` | 공고기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG |  | 1 |
+| 41 | `DISPOSITION_CONTENT` | 처분내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
+| 42 | `NOTICE_SUBJECT` | 공고대상 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 43 | `DISPOSITION_REASON` | 처분사유 | `NOTI_ITEM_VAL_DTL` 행 | 사유 | TEXT |  | 1 |
+| 44 | `OPINION_SUBMISSION` | 의견제출 기간·방법 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 4 |
+| 45 | `LEGAL_BASIS` | 근거법령 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
 
 ## 필드별 상세
 
 ### `BODY_AGNCY_NM` — 고시기관
 
 - **저장 계층**: 추출만(적재 안 함)
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 고시·공고를 발령한 행정기관명.
 - **값 예시**: `군산지방해양수산청`, `부산광역시 강서구`
 - **검토 메모**: '관리청'은 방치선박 제거공고 서식에서 관측된다.
@@ -76,8 +76,8 @@
 
 ### `NOTI_NO` — 고시번호
 
-- **저장 계층**: `TB_ATCH_FILE` 컬럼
-- **값 형식**: text
+- **저장 계층**: `ATCH_FILE_DTL` 컬럼
+- **값 형식**: TEXT
 - **설명**: 고시·공고의 문서번호.
 - **값 예시**: `고시 제2026-47호`
 - **검토 메모**: '관리번호'는 방치선박 서식의 별개 필드이므로 등재하지 않는다.
@@ -86,10 +86,10 @@
 
 `고시번호` · `공고번호`
 
-### `NOTI_YMD` — 고시일자
+### `NOTI_DT` — 고시일자
 
-- **저장 계층**: `TB_ATCH_FILE` 컬럼
-- **값 형식**: date
+- **저장 계층**: `ATCH_FILE_DTL` 컬럼
+- **값 형식**: DATE
 - **설명**: 고시·공고가 공표된 날짜.
 - **값 예시**: `2026. 6. 17.`
 - **검토 메모**: 지자체별 표기 차이가 가장 큰 필드다.
@@ -100,8 +100,8 @@
 
 ### `NOTI_TTL` — 제목
 
-- **저장 계층**: `TB_ATCH_FILE` 컬럼
-- **값 형식**: text
+- **저장 계층**: `ATCH_FILE_DTL` 컬럼
+- **값 형식**: TEXT
 - **설명**: 고시문 제목. 라벨이 없으면 고시번호 다음 문단에서 추정한다.
 - **값 예시**: `공유수면 점용·사용 변경허가 고시`
 - **검토 메모**: 공고종류 분류기의 입력값이므로 비면 분류가 불가능하다.
@@ -113,7 +113,7 @@
 ### `NOTI_PSN` — 고시자
 
 - **저장 계층**: 추출만(적재 안 함)
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 고시문 말미의 발령권자 직함.
 - **값 예시**: `군산지방해양수산청장`
 
@@ -123,9 +123,9 @@
 
 ### `LOCATION` — 점용·사용 장소
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 위치 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **주요 항목**: 전수 표본 출현율 60% 이상
 - **설명**: 점용·사용 대상 공유수면의 위치.
 - **값 예시**: `군산시 비응로 107 인근 공유수면`, `가덕도 인근 해역`
@@ -137,9 +137,9 @@
 
 ### `AREA` — 점용·사용 면적
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 면적 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **주요 항목**: 전수 표본 출현율 60% 이상
 - **설명**: 점용·사용 면적. 단위(㎡)와 자릿수 구분기호를 포함한 원문을 그대로 보존한다.
 - **값 예시**: `367,120.2㎡`, `6,060.34㎡`
@@ -151,8 +151,8 @@
 
 ### `PURPOSE` — 점용·사용 목적
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **주요 항목**: 전수 표본 출현율 60% 이상
 - **설명**: 점용·사용의 목적. 공사명칭·사업내용과 값의 역할이 달라 합치지 않는다.
 - **값 예시**: `청소년 해양종합레포츠 교육`, `관측장비 1개소 설치`
@@ -164,9 +164,9 @@
 
 ### `APPLICANT_NAME` — 허가·승인 대상자 성명
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 인적 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **주요 항목**: 전수 표본 출현율 60% 이상
 - **설명**: 점용·사용 허가(승인)를 받은 자의 성명 또는 상호.
 - **값 예시**: `한국해양소년단 전북연맹`, `태항조선㈜ 대표이사`
@@ -178,9 +178,9 @@
 
 ### `WORK_PERIOD` — 점용·사용 기간
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 기간 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: date_range (가상 필드 · 분리 적재)
+- **값 형식**: DTRG (가상 필드 · 분리 적재)
 - **주요 항목**: 전수 표본 출현율 60% 이상
 - **설명**: 점용·사용 기간. 매핑 후 시작/종료로 분리해 daterange로 적재하며, 분리에 실패하면 원문을 보존한다.
 - **값 예시**: `2025. 9. 1. ～ 2028. 8. 31.`, `2026.7.1 ~ 2028.6.30(2년)`
@@ -192,9 +192,9 @@
 
 ### `APPLICANT_ADDRESS` — 허가·승인 대상자 주소
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 주소 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **주요 항목**: 전수 표본 출현율 60% 이상
 - **설명**: 허가(승인)를 받은 자의 주소. 비어 있으면 성명 블록에서 주소 패턴을 보충 추출한다.
 - **값 예시**: `군산시 비응로 107`, `인천광역시 동구 보세로 62(만석동)`
@@ -205,8 +205,8 @@
 
 ### `APPROVAL_NO` — 허가·승인번호
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 처분(허가/승인/신고수리/협의) 번호.
 - **값 예시**: `제2026-26호`, `2018-1`
 
@@ -216,8 +216,8 @@
 
 ### `APPROVAL_DATE` — 허가·승인일자
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: date
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: DATE
 - **설명**: 처분일자. ISO(yyyy-MM-dd)로 정규화한다.
 - **값 예시**: `2026. 6. 5.`
 - **검토 메모**: 고시일(notice_date)과 다른 날짜다 — 처분한 날이지 공표한 날이 아니다.
@@ -228,8 +228,8 @@
 
 ### `REMARKS` — 비고
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 비고·기타 참고사항.
 - **값 예시**: `없음`
 
@@ -239,9 +239,9 @@
 
 ### `SUBJECT_ADDRESS` — 공고·처분 대상자 주소
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 주소 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 공고·처분의 대상이 된 자의 주소. 허가를 받은 자와 구분한다.
 - **검토 메모**: 동의어가 비어 있다 — 관측된 라벨이 머리기호 붙은 "주소"뿐이라 정규화하면 applicant_address와 구별되지 않는다. 전수 표본에서도 52/19,216건(0.27%)이고 워크북조차 라벨이 아니라 처분 문맥으로 갈랐다. 없는 라벨을 지어내면 오매핑이 되므로 정의만 두고 매핑 규칙은 비워 둔다.
 
@@ -251,8 +251,8 @@
 
 ### `BUSINESS_CONTENT` — 사업내용
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 공사·사업의 내용. 점용·사용 목적이나 공사명칭으로 합치지 않는다.
 - **값 예시**: `호안 축조 및 부지 조성`
 
@@ -262,9 +262,9 @@
 
 ### `CONSTRUCTION_PERIOD` — 공사시행 기간
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 기간 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: date_range
+- **값 형식**: DTRG
 - **설명**: 공사를 시행하는 기간. 점용·사용 기간과 효력 범위가 달라 구분한다.
 
 **인식하는 라벨 (3개)**
@@ -273,8 +273,8 @@
 
 ### `CHANGED_TO` — 변경 후 값
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 당초/변경 대비표에서 변경 후에 해당하는 값.
 
 **인식하는 라벨 (2개)**
@@ -283,8 +283,8 @@
 
 ### `CHANGE_SUMMARY` — 변경사항
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 변경의 요지. 같은 표에 변경 전 값이 있으면 그쪽이 우선한다.
 
 **인식하는 라벨 (2개)**
@@ -293,9 +293,9 @@
 
 ### `SUBJECT_NAME` — 공고·처분 대상자 성명
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 인적 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 공고·처분의 대상이 된 자의 성명. 허가를 받은 자와 구분한다.
 
 **인식하는 라벨 (1개)**
@@ -304,8 +304,8 @@
 
 ### `CHANGED_FROM` — 변경 전 값
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 당초/변경 대비표에서 변경 전에 해당하는 값.
 
 **인식하는 라벨 (2개)**
@@ -314,8 +314,8 @@
 
 ### `WATER_TYPE` — 수면 종류
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 공유수면의 종류.
 - **값 예시**: `공유수면(인천북항 내)`
 - **검토 메모**: 인천지방해양수산청 서식에서 주로 관측된다.
@@ -326,8 +326,8 @@
 
 ### `STRUCTURE_TYPE` — 공작물 종류
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 설치하는 공작물의 종류.
 - **값 예시**: `선가대(6기)`
 - **검토 메모**: 인천지방해양수산청 서식에서 주로 관측된다.
@@ -338,9 +338,9 @@
 
 ### `COMPLETION_DATE` — 준공·완료 처리일자
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 날짜 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: date
+- **값 형식**: DATE
 - **설명**: 준공검사확인증 발급일 또는 공사완료신고 수리일.
 
 **인식하는 라벨 (4개)**
@@ -349,9 +349,9 @@
 
 ### `OPERATOR_NAME` — 사업 시행자 성명
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 인적 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 사업·공사를 시행하는 자. 허가를 받은 자와 다를 수 있다.
 
 **인식하는 라벨 (4개)**
@@ -360,8 +360,8 @@
 
 ### `PURPOSE_CONTENT_COMBINED` — 점용·사용 목적·사업내용(복합)
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 목적과 사업내용이 원문 한 항목에 합쳐진 경우. 어느 쪽으로도 단정할 수 없어 별도 항목으로 둔다.
 - **값 예시**: `목적 및 사유`
 
@@ -371,9 +371,9 @@
 
 ### `CONTACT_POINT` — 문의처
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 연락 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 공고 문의처(부서·담당).
 
 **인식하는 라벨 (2개)**
@@ -382,8 +382,8 @@
 
 ### `APPROVAL_NO_DATE_COMBINED` — 허가·승인번호·일자(복합)
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 번호와 일자가 한 셀에 병기된 경우.
 - **값 예시**: `제2026-26호(2026. 6. 11.)`
 - **검토 메모**: 동의어가 비어 있다 — 워크북은 "허가번호(연월일)" 같은 라벨을 이 복합 항목으로 묶지만, 우리 파이프라인은 Mapper.splitApprovalNoDate가 값을 번호와 일자로 실제로 쪼갤 수 있다. 그래서 그 라벨들은 approval_no로 매핑해 분리를 태우고, 이 항목은 정의만 남겨 둔다. 워크북이 복합으로 둔 것은 그쪽 분석이 쪼갤 수 없었기 때문이지 쪼개면 안 되기 때문이 아니다.
@@ -394,8 +394,8 @@
 
 ### `CONSTRUCTION_NAME` — 공사명칭
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 공사·사업의 명칭. 공사종류·사업내용과 분리한다.
 
 **인식하는 라벨 (3개)**
@@ -404,9 +404,9 @@
 
 ### `CONSTRUCTION_LOCATION` — 공사시행 장소
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 위치 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 공사를 시행하는 장소. 점용·사용 장소와 역할이 다를 수 있다.
 
 **인식하는 라벨 (3개)**
@@ -415,9 +415,9 @@
 
 ### `CONTACT_NUMBER` — 연락처
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 연락 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 대상자 또는 담당자의 연락처.
 
 **인식하는 라벨 (3개)**
@@ -426,8 +426,8 @@
 
 ### `PROJECT_COST` — 사업비
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 사업비. 금액 단위는 원문을 보존한다.
 - **값 예시**: `198백만원`
 
@@ -437,8 +437,8 @@
 
 ### `APPROVAL_CONTENT` — 허가내용
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 허가의 내용을 통째로 적은 항목. 개별 목적·장소·면적과 함께 나타날 수 있다.
 
 **인식하는 라벨 (1개)**
@@ -447,9 +447,9 @@
 
 ### `CONSTRUCTION_AREA` — 공사시행 면적
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 면적 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 공사를 시행하는 면적.
 
 **인식하는 라벨 (2개)**
@@ -458,8 +458,8 @@
 
 ### `CONSTRUCTION_TYPE` — 공사종류
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 공사의 종류. 공사명칭·사업내용과 분리한다.
 
 **인식하는 라벨 (2개)**
@@ -468,8 +468,8 @@
 
 ### `LAND_USE_PLAN` — 토지이용계획
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 매립지 등의 토지이용계획.
 
 **인식하는 라벨 (2개)**
@@ -478,9 +478,9 @@
 
 ### `CANCEL_DATE` — 취소일자
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 날짜 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: date
+- **값 형식**: DATE
 - **설명**: 취소 처분일자.
 
 **인식하는 라벨 (3개)**
@@ -489,9 +489,9 @@
 
 ### `COMPLETION_AREA` — 준공면적
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 면적 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 준공 확인된 면적. 허가받은 점용·사용 면적과 다를 수 있다.
 
 **인식하는 라벨 (1개)**
@@ -500,9 +500,9 @@
 
 ### `CANCEL_REASON` — 취소사유
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 사유 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 취소 처분의 사유.
 
 **인식하는 라벨 (2개)**
@@ -511,9 +511,9 @@
 
 ### `NOTICE_PERIOD` — 공고기간
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 기간 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: date_range
+- **값 형식**: DTRG
 - **설명**: 공고·열람 기간. 점용·사용 기간과 효력 범위가 다르다.
 
 **인식하는 라벨 (1개)**
@@ -522,8 +522,8 @@
 
 ### `DISPOSITION_CONTENT` — 처분내용
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 처분의 내용. 처분사유·근거법령과 분리한다.
 
 **인식하는 라벨 (1개)**
@@ -532,8 +532,8 @@
 
 ### `NOTICE_SUBJECT` — 공고대상
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 공고의 대상. 허가·승인 대상자와 구분한다.
 
 **인식하는 라벨 (2개)**
@@ -542,9 +542,9 @@
 
 ### `DISPOSITION_REASON` — 처분사유
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
 - **계열**: 사유 — 누락 검증은 항목이 아니라 계열 단위로 본다
-- **값 형식**: text
+- **값 형식**: TEXT
 - **설명**: 처분의 원인이 되는 사실.
 
 **인식하는 라벨 (1개)**
@@ -553,8 +553,8 @@
 
 ### `OPINION_SUBMISSION` — 의견제출 기간·방법
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 의견제출 기간과 방법. 원문에서 별도 라벨이어도 한 항목군으로 본다.
 
 **인식하는 라벨 (4개)**
@@ -563,8 +563,8 @@
 
 ### `LEGAL_BASIS` — 근거법령
 
-- **저장 계층**: `TB_NOTI_ITEM_VAL` 행
-- **값 형식**: text
+- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **값 형식**: TEXT
 - **설명**: 처분의 근거 법령. 조문 값은 원문을 보존한다.
 
 **인식하는 라벨 (1개)**

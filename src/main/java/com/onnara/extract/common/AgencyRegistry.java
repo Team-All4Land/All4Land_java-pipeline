@@ -47,10 +47,10 @@ public final class AgencyRegistry {
     /**
      * 파일 한 건의 수집처 — 어느 기관의 어느 게시판에서 긁어 왔는가.
      *
-     * @param agncyNo   기관번호({@code TB_NOTI.AGNCY_NO})
-     * @param agncyNm 기관명({@code TB_AGNCY.AGNCY_NM})
-     * @param kndCd   기관 종류({@code TB_AGNCY.KND_CD})
-     * @param boardCd  게시판 구분({@code TB_NOTI.BOARD_CD})
+     * @param agncyNo   기관번호({@code NOTI_BAS.AGNCY_SN})
+     * @param agncyNm 기관명({@code AGNCY_BAS.AGNCY_NM})
+     * @param kndCd   기관 종류({@code AGNCY_BAS.AGNCY_KND_CD})
+     * @param boardCd  게시판 구분({@code NOTI_BAS.BBS_STTS_CD})
      */
     public record SourceBoard(
             @JsonProperty("agncy_no") int agncyNo,

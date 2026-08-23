@@ -38,13 +38,13 @@ TableInterpreter (표 서식 판정 + 라벨:값 추출 + 사전 매핑 판정)
         ▼
 Mapper.mapToSchema (문단 메타·라벨 + 표 해석 결과 적용 + 값 정규화)
         ▼
-LoadPolicy (본문 분량 측정 → 안내문류면 excl_rsn 기록, 적재만 제외)
+LoadPolicy (본문 분량 측정 → 안내문류면 excl_rsn_ctnt 기록, 적재만 제외)
         ▼
-표준 스키마 JSON {"file_nm", "noti_sn", "body_char_cnt", "records": [...], "images": [...]}
+표준 스키마 JSON {"atch_file_nm", "noti_sn", "body_char_cnt", "records": [...], "images": [...]}
         ▼
 DbLoader (PostgreSQL JDBC + HikariCP)
         ▼
-PostgreSQL (TB_AGNCY → TB_NOTI → TB_ATCH_FILE → TB_NOTI_ITEM_VAL) + images/ 폴더
+PostgreSQL (AGNCY_BAS → NOTI_BAS → ATCH_FILE_DTL → NOTI_ITEM_VAL_DTL) + images/ 폴더
 ```
 
 ## 지원 형식
@@ -68,12 +68,12 @@ PostgreSQL (TB_AGNCY → TB_NOTI → TB_ATCH_FILE → TB_NOTI_ITEM_VAL) + images
 - 한글 3.0 파일도 확장자는 똑같이 `.hwp`라, 서명(`HWP Document File V3.00`)으로만 갈립니다.
 
 판정할 수 없는 파일은 지금까지처럼 **확장자로 폴백**합니다 — 새 규칙이 기존 동작을 좁히지
-않습니다. `TB_ATCH_FILE.FILE_EXTN`은 파일명 확장자를 그대로 유지하고, 판정된 실제 형식은
-`TB_ATCH_FILE.REAL_EXTN`에 따로 남깁니다. 둘이 다른 행이 곧 확장자가 어긋난 파일 목록입니다.
+않습니다. `ATCH_FILE_DTL.FILE_EXTN_NM`은 파일명 확장자를 그대로 유지하고, 판정된 실제 형식은
+`ATCH_FILE_DTL.ACTL_FILE_EXTN_NM`에 따로 남깁니다. 둘이 다른 행이 곧 확장자가 어긋난 파일 목록입니다.
 
 ```sql
-SELECT FILE_NM, FILE_EXTN, REAL_EXTN
-  FROM TB_ATCH_FILE WHERE REAL_EXTN IS NOT NULL AND FILE_EXTN <> REAL_EXTN;
+SELECT ATCH_FILE_NM, FILE_EXTN_NM, ACTL_FILE_EXTN_NM
+  FROM ATCH_FILE_DTL WHERE ACTL_FILE_EXTN_NM IS NOT NULL AND FILE_EXTN_NM <> ACTL_FILE_EXTN_NM;
 ```
 
 스캔 판별 기준(다섯 형식 공통):
@@ -112,7 +112,8 @@ src/main/resources/
 ├── application.properties   DB 접속·OCR CLI 실행 설정 (설정의 단일 출처)
 ├── synonyms.json            표준항목 40종 + 문서 메타 5종 사전 (매핑의 단일 출처)
 ├── notice_types.json        공고종류 56종 레지스트리
-└── db/migration/            Flyway 마이그레이션 (V1__init.sql)
+├── db/standard_terms.json   DB 표준 사전 — 표준단어·표준도메인·표준용어·표준코드 (이름의 단일 출처)
+└── db/migration/            Flyway 마이그레이션 (V1__init.sql — 표준 스키마를 세운다)
 
 src/test/java/...   JUnit 5 — detect/engine/common/scan 단위 테스트 + samples/ 기반 회귀 테스트
 samples/             실제 고시문 픽스처 (형식·스캔 여부별)
@@ -165,7 +166,7 @@ java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
 | `render raw.json...\|폴더 -o out/` | **표 복원 전용 (raw JSON → HTML, 검수용)** |
 | `map raw.json... -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
 | `load schema.json...` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
-| `dict [-o docs/SYNONYMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 |
+| `dict [-o docs/SYNONYMS.md] [--review out/]` | 동의어 사전·DB 표준 사전·미매핑 라벨 검토 문서 생성 |
 
 공통 옵션: `--raw`(원시 결과도 저장), `--tables`(표 해석 중간 결과도 저장),
 `--no-images`(이미지 저장 생략), `--failures <경로>`(실패 건만 JSON으로 저장),
@@ -173,7 +174,7 @@ java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
 DB 접속·OCR 실행 정보는 CLI 옵션이 아니라 `application.properties` 및
 `.env`에서 읽습니다(우선순위: OS 환경변수 > `.env` > `application.properties`).
 파일 단위 실패는 `[실패] <파일>: (<단계>) <사유>` 로그만 남기고 배치는 계속
-진행합니다(배치 격리). `TB_ATCH_IMG.FILE_PATH`에는 저장된 이미지의 **절대경로**가
+진행합니다(배치 격리). `ATCH_IMG_DTL.IMG_FILE_PATH`에는 저장된 이미지의 **절대경로**가
 기록됩니다(리눅스 서버에서 파일을 절대경로로 참조).
 
 ### 예시
@@ -226,6 +227,7 @@ java -jar target/extract-pipeline-1.0.0.jar render out/ -o out/
 |---|---|
 | `docs/SYNONYMS.md` | 필드별 설명·값 예시·인식하는 라벨 전체 목록, 정규화 규칙, 보강 절차 |
 | `docs/EXTRAS_REVIEW.md` | 미매핑 라벨 빈도순 집계(예시 값·출현 문서), 표준 필드 채움률, 판단 기준 |
+| `docs/DB_STANDARD.md` | DB 표준 사전 — 표준단어·표준도메인·표준용어(논리명↔물리명)·표준코드 |
 
 사전 보강은 **표본이 아니라 전량 집계**로 판단합니다 — 라벨 표기 습관이 기관 단위로
 몰려 다니기 때문에, 일부만 표본으로 보면 특정 기관의 표기가 통째로 누락됩니다.
@@ -456,8 +458,8 @@ DB 적재: 첨부 7건, 항목값 9행, 이미지 3행 (적재제외 1건)
 같은 파일이 같은 결정을 받습니다.
 
 ```json
-{"file_nm": "전자문서 이용안내.pdf", "body_char_cnt": 8355,
- "excl_rsn": "본문 8,355자 (임계 5,000자 초과)", "records": [...]}
+{"atch_file_nm": "전자문서 이용안내.pdf", "body_char_cnt": 8355,
+ "excl_rsn_ctnt": "본문 8,355자 (임계 5,000자 초과)", "records": [...]}
 ```
 
 ### 적재 임계치 보정
@@ -571,7 +573,7 @@ input/
 실제 첨부순번은 1~4뿐입니다.
 
 앞자리 순번은 기관을 넘어 하나의 크롤 시퀀스입니다 — 기관마다 연속 블록을 차지하고
-(인천 1~1108, 군산 1109~1660 …) 폴더 간 충돌이 없어 `TB_NOTI.NOTI_SN`을 전역 PK로 둡니다.
+(인천 1~1108, 군산 1109~1660 …) 폴더 간 충돌이 없어 `NOTI_BAS.NOTI_SN`을 전역 PK로 둡니다.
 규약에 맞지 않는 파일(수동 수집분, `samples/`)은 **음수** 순번을 발급받아 크롤 순번과
 겹치지 않습니다.
 
@@ -582,21 +584,21 @@ input/
 
 | 조각 | 규칙 |
 |---|---|
-| 번호 | `TB_AGNCY.AGNCY_NO`의 후보. 한 기관이 게시판을 여럿 운영하면 하위번호로 갈립니다 |
+| 번호 | `AGNCY_BAS.AGNCY_SN`의 후보. 한 기관이 게시판을 여럿 운영하면 하위번호로 갈립니다 |
 | 기관명 | 남은 조각을 공백으로 잇습니다 — `57_경상남도_고성군청` → `경상남도 고성군청` |
 | 게시판구분 | **마지막 조각**만 봅니다. `지난`·`이전`·`완료`·`종료`·`만료`가 들어 있으면 `게시완료`, `게시중`·`고시공고`·`공고`·`고시`·`자료`로 시작하면 `게시중`, 꼬리표가 아예 없어도 `게시중` |
 
 **모르는 낱말은 기관명으로 남깁니다.** 마지막 조각을 무조건 꼬리표로 보면
 경상남도 고성군청과 강원도 고성군청이 한 기관으로 뭉칩니다.
 
-`전자관보`로 시작하는 폴더는 그 조각을 이름에서 빼고 `KND_CD = 'gazette'`로 옮깁니다.
+`전자관보`로 시작하는 폴더는 그 조각을 이름에서 빼고 `AGNCY_KND_CD = 'GZT'`로 옮깁니다.
 같은 부처를 자체 게시판(`central`)과 전자관보 양쪽에서 긁으므로, 이름이 같은 두 행을
 이 값으로 가릅니다.
 
 ### 기관번호를 언제 새로 발급하는가
 
 보통은 폴더명 앞 번호가 곧 기관번호입니다. `12_1_목포시청`과 `12_2_목포시청_지난자료`는
-이름이 같으니 **기관 12 하나**이고 `BOARD_CD`만 갈립니다.
+이름이 같으니 **기관 12 하나**이고 `BBS_STTS_CD`만 갈립니다.
 
 한 번호 아래 기관이 갈리면 그 번호는 아무도 쓰지 않고 최대번호 뒤로 새로 발급합니다:
 
@@ -613,7 +615,7 @@ input/
 ### 규약 밖의 파일
 
 규약에 맞지 않는 폴더와 입력 루트 직속 파일은 경고 한 줄을 남기고 기관 없이 적재됩니다
-(`TB_NOTI.AGNCY_NO`·`BOARD_CD`가 NULL). 첨부와 항목값은 그대로 들어갑니다 —
+(`NOTI_BAS.AGNCY_SN`·`BBS_STTS_CD`가 NULL). 첨부와 항목값은 그대로 들어갑니다 —
 기관을 모른다고 적재를 거르면 그 파일의 값이 통째로 사라집니다.
 
 ```
@@ -628,87 +630,149 @@ input/
 
 ## 데이터베이스 스키마 (PostgreSQL)
 
-Flyway 마이그레이션(`src/main/resources/db/migration/V1__init.sql`)이 7테이블을 만듭니다.
+Flyway 마이그레이션 `V1__init.sql` 하나가 [DB 표준 사전](docs/DB_STANDARD.md)에 맞춰
+표준도메인 18개와 7테이블을 만듭니다. 스키마를 고칠 때도 파일을 얹지 않고 이 파일을 고친 뒤
+DB를 다시 만듭니다([개발 DB 초기화](#개발-db-초기화)).
+
+**ERD는 논리명으로 그립니다.** 물리명은 영문 약어 조합이라 한눈에 뜻이 잡히지 않고,
+어차피 논리명과 1:1로 대응하므로 둘 중 읽히는 쪽을 그림에 둡니다. 각 속성 오른쪽 주석에
+물리명(코드성 속성은 허용값)이 있고, 타입 자리의 `D_*`는 [표준도메인](docs/DB_STANDARD.md)입니다.
 
 ```mermaid
 erDiagram
-    TB_AGNCY      ||--o{ TB_NOTI : "발령"
-    TB_NOTI       ||--o{ TB_ATCH_FILE : "첨부"
-    TB_ATCH_FILE  ||--o{ TB_ATCH_IMG : "포함"
-    TB_ATCH_FILE  ||--o{ TB_NOTI_ITEM_VAL : "보유"
-    TB_NOTI_KND   ||--o{ TB_ATCH_FILE : "분류"
-    TB_NOTI_ITEM  ||--o{ TB_NOTI_ITEM_VAL : "정의"
+    기관 ||--o{ 고시공고게시물 : "발령"
+    고시공고게시물 ||--o{ 첨부파일 : "첨부"
+    첨부파일 ||--o{ 첨부이미지 : "포함"
+    첨부파일 ||--o{ 공고항목값 : "보유"
+    공고종류 ||--o{ 첨부파일 : "분류"
+    공고항목 ||--o{ 공고항목값 : "정의"
 
-    TB_AGNCY {
-        int AGNCY_NO PK "기관번호"
-        text AGNCY_NM "기관명"
-        text KND_CD "mof / local / central / gazette"
+    기관 {
+        D_SN 기관일련번호 PK "AGNCY_SN"
+        D_NM 기관명 "AGNCY_NM"
+        D_CD 기관종류코드 "MOF / LOCL / CNTL / GZT"
+        D_DTM 최초등록일시 "FRST_REG_DTM"
+        D_DTM 최종변경일시 "LAST_CHG_DTM"
     }
-    TB_NOTI {
-        int NOTI_SN PK "고시공고 일련번호 = 크롤 순번"
-        int AGNCY_NO FK "기관번호 - 입력 폴더명에서"
-        text BOARD_CD "게시중 / 게시완료 - 폴더명 꼬리표에서"
+    고시공고게시물 {
+        D_SN 고시공고일련번호 PK "NOTI_SN"
+        D_SN 기관일련번호 FK "AGNCY_SN"
+        D_CD 게시상태코드 "POST / CLSD"
+        D_DTM 최초등록일시 "FRST_REG_DTM"
+        D_DTM 최종변경일시 "LAST_CHG_DTM"
     }
-    TB_NOTI_KND {
-        text NOTI_KND_CD PK "공고종류코드"
-        text NOTI_KND_NM "공고종류명 - 56종"
-        text UPPER_KND_NM "상위분류"
+    첨부파일 {
+        D_SN 고시공고일련번호 PK,FK "NOTI_SN"
+        D_SN 첨부일련번호 PK "ATCH_SN"
+        D_NM 첨부파일명 "ATCH_FILE_NM"
+        D_CD 처리상태코드 "OK / FAIL / SKIP"
+        D_CD 실패단계코드 "DTCT / EXTC / TBIT / MAPP / SAVE"
+        D_CD 실패종류코드 "FAIL_KND_CD"
+        D_CTNT 실패메시지내용 "FAIL_MSG_CTNT"
+        D_CTNT 적재제외사유내용 "EXCL_RSN_CTNT"
+        D_NM 파일확장자명 "hwp / hwp3 / hwpx / hml / pdf"
+        D_NM 실제파일확장자명 "hwp / hwp3 / hwpx / hml / pdf"
+        D_YN 스캔여부 "SCAN_YN"
+        D_NM 추출엔진명 "EXTC_ENGN_NM"
+        D_CD 공고종류코드 FK "NOTI_KND_CD"
+        D_NO 고시번호 "NOTI_NO"
+        D_DT 고시일자 "NOTI_DT"
+        D_TTL 고시제목 "NOTI_TTL"
+        D_DTM 최초등록일시 "FRST_REG_DTM"
+        D_DTM 최종변경일시 "LAST_CHG_DTM"
     }
-    TB_ATCH_FILE {
-        int NOTI_SN PK "고시공고 일련번호"
-        int ATCH_SN PK "첨부 순번"
-        text FILE_NM "첨부파일명"
-        text STTS_CD "ok / failed / skipped"
-        text FAIL_STEP "실패 단계"
-        text FAIL_KND "실패 갈래"
-        text EXCL_RSN "적재제외 사유"
-        text FILE_EXTN "확장자 기준 형식"
-        text REAL_EXTN "내용 판정 형식"
-        bool SCAN_YN "스캔 여부"
-        text ENGN_NM "추출 엔진"
-        text NOTI_KND_CD FK "공고종류 - 제목으로 판정"
-        text NOTI_NO "고시번호 - 본문"
-        date NOTI_YMD "고시일자"
-        text NOTI_TTL "제목"
+    첨부이미지 {
+        D_SN 고시공고일련번호 PK,FK "NOTI_SN"
+        D_SN 첨부일련번호 PK,FK "ATCH_SN"
+        D_SN 이미지일련번호 PK "IMG_SN"
+        D_CTNT 이미지캡션내용 "IMG_CPTN_CTNT"
+        D_PATH 이미지파일경로 "IMG_FILE_PATH"
+        D_DTM 최초등록일시 "FRST_REG_DTM"
+        D_DTM 최종변경일시 "LAST_CHG_DTM"
     }
-    TB_ATCH_IMG {
-        int NOTI_SN PK "고시공고 일련번호"
-        int ATCH_SN PK "첨부 순번"
-        int IMG_SN PK "이미지 순번"
-        text IMG_CPTN "이미지 캡션"
-        text FILE_PATH "저장 절대경로"
+    공고항목값 {
+        D_SN 고시공고일련번호 PK,FK "NOTI_SN"
+        D_SN 첨부일련번호 PK,FK "ATCH_SN"
+        D_SN 처분일련번호 PK "DSPS_SN"
+        D_CD 공고항목코드 PK,FK "NOTI_ITEM_CD"
+        D_SN 반복일련번호 PK "RPT_SN"
+        D_CTNT 항목값내용 "ITEM_VAL_CTNT"
+        D_DTM 최초등록일시 "FRST_REG_DTM"
+        D_DTM 최종변경일시 "LAST_CHG_DTM"
     }
-    TB_NOTI_ITEM {
-        text ITEM_CD PK "표준항목코드"
-        text ITEM_NM "표준항목명 - 40종"
-        text SRS_NM "계열"
-        text VAL_TY_CD "text/date/date_range/number"
-        bool CORE_YN "주요 항목 여부"
+    공고종류 {
+        D_CD 공고종류코드 PK "NOTI_KND_CD"
+        D_NM 공고종류명 "NOTI_KND_NM"
+        D_NM 상위공고종류명 "HRNK_NOTI_KND_NM"
+        D_DTM 최초등록일시 "FRST_REG_DTM"
+        D_DTM 최종변경일시 "LAST_CHG_DTM"
     }
-    TB_NOTI_ITEM_VAL {
-        int NOTI_SN PK "고시공고 일련번호"
-        int ATCH_SN PK "첨부 순번"
-        int DSPS_SN PK "처분 순번"
-        text ITEM_CD PK "표준항목코드"
-        int RPT_SN PK "반복 순번"
-        text ITEM_VAL "정규화 값"
+    공고항목 {
+        D_CD 공고항목코드 PK "NOTI_ITEM_CD"
+        D_NM 공고항목명 "NOTI_ITEM_NM"
+        D_NM 항목계열명 "ITEM_SRS_NM"
+        D_CD 항목값유형코드 "TEXT / DATE / DTRG / NUM"
+        D_YN 주요항목여부 "CORE_ITEM_YN"
+        D_DTM 최초등록일시 "FRST_REG_DTM"
+        D_DTM 최종변경일시 "LAST_CHG_DTM"
     }
 ```
 
-| 테이블 | 무엇의 단위인가 |
-|---|---|
-| `TB_AGNCY` | 기관 게시판. 입력 폴더 하나가 한 행이다([입력 폴더 규약](#입력-폴더-규약-기관게시판)) |
-| `TB_NOTI` | 게시물 = 크롤 순번. 같은 게시물의 첨부를 묶는 키로만 쓴다 |
-| `TB_ATCH_FILE` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목·고시자)와 추출 상태 |
-| `TB_ATCH_IMG` | 첨부에 딸린 이미지 |
-| `TB_NOTI_KND` | 공고종류 56종 (`notice_types.json`이 정의처) |
-| `TB_NOTI_ITEM` | 표준항목 40종 (`synonyms.json`이 정의처) |
-| `TB_NOTI_ITEM_VAL` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
+| 논리명 | 물리명 | 무엇의 단위인가 |
+|---|---|---|
+| 기관 | `AGNCY_BAS` | 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다 |
+| 고시공고게시물 | `NOTI_BAS` | 게시물. 크롤링 대상이 첨부파일뿐이라 게시물 자체의 정보는 없고 같은 게시물의 첨부를 묶는 키로만 쓴다 |
+| 공고종류 | `NOTI_KND_TC` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
+| 공고항목 | `NOTI_ITEM_TC` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다 |
+| 첨부파일 | `ATCH_FILE_DTL` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
+| 첨부이미지 | `ATCH_IMG_DTL` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다 |
+| 공고항목값 | `NOTI_ITEM_VAL_DTL` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
+
+컬럼 단위 논리명↔물리명 대응표는 [`docs/DB_STANDARD.md`](docs/DB_STANDARD.md)에 있습니다 —
+`db/standard_terms.json`에서 생성되므로 손으로 옮겨 적은 사본과 달리 어긋날 수 없습니다.
 
 > **식별자 표기.** DDL은 대문자로 적지만 PostgreSQL이 따옴표 없는 식별자를 소문자로 접으므로
-> DBeaver에는 `tb_agncy`·`agncy_no`로 보입니다. 큰따옴표로 대문자를 강제하지 않습니다 —
+> DBeaver에는 `agncy_bas`·`agncy_sn`으로 보입니다. 큰따옴표로 대문자를 강제하지 않습니다 —
 > 한 번 강제하면 이후 모든 질의가 영원히 따옴표를 달아야 하고, 하나만 빠뜨려도
 > `relation does not exist`로 죽습니다.
+
+### 이름은 표준 사전이 정합니다
+
+테이블·컬럼 이름은 사람이 그때그때 짓지 않고 `src/main/resources/db/standard_terms.json`의
+4단 사전에서 조합해 만듭니다.
+
+| 단계 | 무엇인가 | 예 |
+|---|---|---|
+| 표준단어 | 더 이상 쪼개지지 않는 의미 단위 + 영문약어 | 실제=`ACTL` · 파일=`FILE` · 확장자=`EXTN` · 명=`NM` |
+| 표준도메인 | 분류어가 지시하는 데이터타입·길이·제약 | `NM` → `D_NM` = `VARCHAR(300)` |
+| 표준용어 | 낱말을 조합한 실제 이름(논리명↔물리명 1:1) | 실제파일확장자명 ↔ `ACTL_FILE_EXTN_NM` |
+| 표준코드 | 코드성 속성의 허용값 집합 | 처리상태코드: `OK` 정상 / `FAIL` 실패 / `SKIP` 적재제외 |
+
+```
+[수식어] + [수식어] + … + [분류어]
+ 실제      파일      확장자   명
+ ACTL   +  FILE   +  EXTN  +  NM     →  ACTL_FILE_EXTN_NM
+```
+
+**마지막 낱말(분류어)이 반드시 도메인을 지시합니다.** 분류어만 보고 타입과 길이를 알 수
+있어야 하므로 `FAIL_STEP`·`IMG_CPTN`처럼 분류어 없이 끝나는 이름은 표준 위반이고,
+`AGNCY_NO`가 `INT`인 것도 위반입니다 — 번호(`NO`)는 문자 번호이고 숫자 순번은
+일련번호(`SN`)입니다. 도메인은 문서가 아니라 PostgreSQL `CREATE DOMAIN`으로 실제
+강제되므로, `SCAN_YN`에 `'X'`를 넣으면 DB가 거부합니다.
+
+테이블은 접두사 없이 `[의미] + [유형 접미사]`입니다 — 기준 `_BAS`, 명세 `_DTL`, 코드 `_TC`.
+업무영역 접두사는 두지 않습니다. 이 저장소가 단일 업무영역이라 모든 테이블에 같은 접두사가
+붙어 아무것도 가르지 못하기 때문입니다. 코드 테이블이 `_CD`가 아니라 `_TC`인 이유는
+`_CD`로 하면 `SELECT NOTI_KND_CD FROM NOTI_KND_CD`가 되기 때문입니다.
+
+`DbStandardTest`가 사전과 DDL을 대조합니다 — 모든 컬럼이 사전의 낱말로만 분해되는지,
+분류어가 지시하는 도메인과 DDL 선언이 같은지, 감사 컬럼이 전 테이블에 있는지, 예약어를
+쓰지 않았는지, 그리고 표준화 이전 이름이 소스에 남아 있지 않은지 검사합니다. 사전을
+지나치고 컬럼을 보태면 빌드가 막힙니다.
+
+> **웹 개발 관행과 갈리는 지점.** 웹에서는 "테이블명을 컬럼에 반복하지 마라(`users.name`)"가
+> 원칙이지만, 표준용어 체계에서는 컬럼명이 전사에서 유일한 뜻을 가져야 하므로 `AGNCY_NM`처럼
+> 수식어를 붙이는 쪽이 정석입니다. 어느 한쪽이 맞다기보다 체계가 다릅니다.
 
 ### 왜 값 컬럼이 아니라 EAV인가
 
@@ -723,11 +787,11 @@ erDiagram
 
 ```sql
 -- 2026년에 만료되는 점용·사용 허가
-SELECT F.FILE_NM, V.ITEM_VAL
-  FROM TB_NOTI_ITEM_VAL V
-  JOIN TB_ATCH_FILE F USING (NOTI_SN, ATCH_SN)
- WHERE V.ITEM_CD = 'WORK_PERIOD'
-   AND iso_daterange(V.ITEM_VAL) && '[2026-01-01,2027-01-01)'::daterange;
+SELECT F.ATCH_FILE_NM, V.ITEM_VAL_CTNT
+  FROM NOTI_ITEM_VAL_DTL V
+  JOIN ATCH_FILE_DTL F USING (NOTI_SN, ATCH_SN)
+ WHERE V.NOTI_ITEM_CD = 'WORK_PERIOD'
+   AND iso_daterange(V.ITEM_VAL_CTNT) && '[2026-01-01,2027-01-01)'::daterange;
 ```
 
 ### 고시번호와 허가번호는 다른 것입니다
@@ -736,8 +800,8 @@ SELECT F.FILE_NM, V.ITEM_VAL
 
 | | 예 | 어디서 | 어디로 |
 |---|---|---|---|
-| 고시번호 | `고시 제2008-42호` | 본문 문단 `인천지방해양항만청 고시 제2008-42호` | `TB_ATCH_FILE.NOTI_NO` |
-| 허가번호 | `제2008-46호` | 표의 `허가번호` 라벨 행 | `TB_NOTI_ITEM_VAL` (`ITEM_CD='APPROVAL_NO'`) |
+| 고시번호 | `고시 제2008-42호` | 본문 문단 `인천지방해양항만청 고시 제2008-42호` | `ATCH_FILE_DTL.NOTI_NO` |
+| 허가번호 | `제2008-46호` | 표의 `허가번호` 라벨 행 | `NOTI_ITEM_VAL_DTL` (`NOTI_ITEM_CD='APPROVAL_NO'`) |
 
 앞은 이 고시문이 실린 번호이고 뒤는 신청인이 받은 허가의 번호입니다.
 전수에서 **둘이 같은 행은 0 / 1,067**입니다.
@@ -756,14 +820,14 @@ APPROVAL_NO  동의어 = 허가번호, 승인번호, 협의번호, 신고번호,
 문단에 허가번호가 있어도 문단 스캐너(`Heuristics.agencyAndNoticeNo`, 정규식에 `고시|공고`가
 박혀 있습니다)가 집지 않습니다.
 
-> **날짜 한 축은 규칙이 약합니다.** `NOTI_YMD`만은 낱말이 아니라 "라벨이 아니면서 숫자·구두점만
+> **날짜 한 축은 규칙이 약합니다.** `NOTI_DT`만은 낱말이 아니라 "라벨이 아니면서 숫자·구두점만
 > 남는 줄"이라는 형태 추측으로 잡습니다. 그래서 고시일자와 허가일자는 **1,262 / 1,444 (87%)가
 > 같은 값**입니다 — 같은 날 처분하고 같은 날 고시하는 경우가 많아서지만, 번호처럼 깨끗하게
 > 갈리지는 않습니다. 나머지 13%는 진짜로 다르므로 어느 쪽도 지우지 않습니다.
 
 ### 공고종류는 제목으로 판정합니다
 
-`TB_ATCH_FILE.NOTI_KND_CD`는 제목 키워드 규칙으로 채웁니다. 규칙은
+`ATCH_FILE_DTL.NOTI_KND_CD`는 제목 키워드 규칙으로 채웁니다. 규칙은
 `notice_types.json`의 `keywords`·`priority`에 있고 `NoticeTypes.classify`가 읽습니다.
 
 ```json
@@ -791,7 +855,7 @@ APPROVAL_NO  동의어 = 허가번호, 승인번호, 협의번호, 신고번호,
 함께 냅니다. **자동 등록은 하지 않습니다** — 제목에서 코드를 만들어 넣으면 오타와 서식 변형이
 각각 새 종류가 되어 종류별 집계가 무너집니다.
 
-### 계열(`SRS_NM`)이 필요한 이유
+### 계열(`ITEM_SRS_NM`)이 필요한 이유
 
 준공·완료 수리 문서에는 `점용·사용 면적`이 아니라 `준공면적`이 옵니다. 누락 검증을
 항목 단위로 하면 "면적 누락"으로 오탐하므로, **계열 단위로** 봐야 합니다.
@@ -802,41 +866,41 @@ APPROVAL_NO  동의어 = 허가번호, 승인번호, 협의번호, 신고번호,
 - **멱등 단위는 첨부파일**(`NOTI_SN`, `ATCH_SN`)입니다. 재적재 시 첨부 행을 지우면
   이미지와 항목값이 CASCADE로 함께 정리됩니다. 게시물 단위로 지우면 파일을 한 건씩
   처리하는 도중 같은 게시물의 앞선 첨부가 함께 날아갑니다.
-- **실패·적재제외도 행으로 남깁니다**(`STTS_CD`). 성공만 넣으면 "첨부 401건 중
+- **실패·적재제외도 행으로 남깁니다**(`PROC_STTS_CD`). 성공만 넣으면 "첨부 401건 중
   추출 0건"인 기관이 DB에서 아예 보이지 않아, 추출 누락과 애초에 없던 자료를 구분할 수 없습니다.
 - 첨부 단위로 세이브포인트를 잡아 한 건의 실패가 배치 전체를 막지 않습니다.
-- 사전 동기화(`ReferenceSync`)가 적재보다 **먼저** 돕니다 — `TB_NOTI_ITEM_VAL`이
-  `TB_NOTI_ITEM`을 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패합니다.
-- **기관도 첨부보다 먼저** 넣습니다 — `TB_NOTI.AGNCY_NO`가 FK라 같은 이유로 깨집니다.
+- 사전 동기화(`ReferenceSync`)가 적재보다 **먼저** 돕니다 — `NOTI_ITEM_VAL_DTL`이
+  `NOTI_ITEM_TC`을 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패합니다.
+- **기관도 첨부보다 먼저** 넣습니다 — `NOTI_BAS.AGNCY_SN`가 FK라 같은 이유로 깨집니다.
 
 미수집 첨부는 컬럼이 아니라 **첨부순번 결번**으로 잡습니다:
 
 ```sql
 SELECT NOTI_SN, count(*) AS 수집, max(ATCH_SN) AS 최대순번
-  FROM TB_ATCH_FILE GROUP BY NOTI_SN HAVING count(*) <> max(ATCH_SN);
+  FROM ATCH_FILE_DTL GROUP BY NOTI_SN HAVING count(*) <> max(ATCH_SN);
 ```
 
-기관별 수집 현황은 폴더명이 채운 `AGNCY_NO`로 봅니다:
+기관별 수집 현황은 폴더명이 채운 `AGNCY_SN`로 봅니다:
 
 ```sql
 -- 기관·게시판별 수집·성공 건수
-SELECT A.AGNCY_NM, A.KND_CD, N.BOARD_CD,
-       count(*) AS 첨부, count(*) FILTER (WHERE F.STTS_CD = 'ok') AS 성공
-  FROM TB_ATCH_FILE F JOIN TB_NOTI N USING (NOTI_SN) JOIN TB_AGNCY A USING (AGNCY_NO)
+SELECT A.AGNCY_NM, A.AGNCY_KND_CD, N.BBS_STTS_CD,
+       count(*) AS 첨부, count(*) FILTER (WHERE F.PROC_STTS_CD = 'OK') AS 성공
+  FROM ATCH_FILE_DTL F JOIN NOTI_BAS N USING (NOTI_SN) JOIN AGNCY_BAS A USING (AGNCY_SN)
  GROUP BY 1, 2, 3 ORDER BY 1, 3;
 
 -- 긁긴 했는데 첨부가 한 건도 없는 기관
-SELECT A.AGNCY_NM FROM TB_AGNCY A
-  LEFT JOIN TB_NOTI N USING (AGNCY_NO) WHERE N.NOTI_SN IS NULL;
+SELECT A.AGNCY_NM FROM AGNCY_BAS A
+  LEFT JOIN NOTI_BAS N USING (AGNCY_SN) WHERE N.NOTI_SN IS NULL;
 
 -- 기관이 안 붙은 게시물 = 입력 루트 직속이거나 폴더명 규약 위반
-SELECT count(*) FROM TB_NOTI WHERE AGNCY_NO IS NULL;
+SELECT count(*) FROM NOTI_BAS WHERE AGNCY_SN IS NULL;
 ```
 
 ### DB에 아무것도 못 넣은 첨부 찾기 (`--unmapped`)
 
-추출은 됐는데 **값이 한 줄도 안 들어간** 첨부가 있습니다. 실패(`STTS_CD='failed'`)는 왜 못
-읽었는지가 `FAIL_*`에, 적재제외는 왜 뺐는지가 `EXCL_RSN`에 남지만, 이 갈래만은 DB에 흔적이
+추출은 됐는데 **값이 한 줄도 안 들어간** 첨부가 있습니다. 실패(`PROC_STTS_CD='FAIL'`)는 왜 못
+읽었는지가 `FAIL_*`에, 적재제외는 왜 뺐는지가 `EXCL_RSN_CTNT`에 남지만, 이 갈래만은 DB에 흔적이
 없습니다 — 첨부 행은 `ok`로 멀쩡히 서 있고 항목값만 0건이라 그냥 값 없는 문서와 구분되지 않습니다.
 
 ```bash
@@ -848,8 +912,8 @@ java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out --unmapped
 
 ```json
 {
-  "file_nm": "148_고시양식 (3).hml", "noti_sn": 148, "atch_sn": 1,
-  "engn_nm": "hml-dom", "body_char_cnt": 389,
+  "atch_file_nm": "148_고시양식 (3).hml", "noti_sn": 148, "atch_sn": 1,
+  "extc_engn_nm": "hml-dom", "body_char_cnt": 389,
   "extras": { "ㅇ처분사유": "「공유수면 관리 및 …」제17조제1항 …", "ㅇ근거법령": "…" },
   "body_excerpt": "인천지방해양수산청 고시 제2024-8호 …"
 }
@@ -863,9 +927,9 @@ java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out --unmapped
 DB 쪽 건수와 대조할 수 있습니다. 어긋나면 적재 판정(`AttributeRows`)이 갈린 것입니다:
 
 ```sql
-SELECT count(*) FROM TB_ATCH_FILE F
-  LEFT JOIN TB_NOTI_ITEM_VAL V USING (NOTI_SN, ATCH_SN)
- WHERE F.STTS_CD = 'ok' AND F.EXCL_RSN IS NULL AND V.ITEM_CD IS NULL;
+SELECT count(*) FROM ATCH_FILE_DTL F
+  LEFT JOIN NOTI_ITEM_VAL_DTL V USING (NOTI_SN, ATCH_SN)
+ WHERE F.PROC_STTS_CD = 'OK' AND F.EXCL_RSN_CTNT IS NULL AND V.NOTI_ITEM_CD IS NULL;
 ```
 
 > `--no-db`로도 동작합니다 — 판정이 DB가 아니라 스키마 JSON만 보기 때문입니다.
@@ -873,22 +937,61 @@ SELECT count(*) FROM TB_ATCH_FILE F
 
 ### 개발 DB 초기화
 
-스키마가 이전 버전(`documents`/`ref_files`, `agencies`/`notices`)과 호환되지 않습니다. 전건 재적재가 전제이므로
-이관 SQL은 없고, 기존 개발 DB는 스키마를 비우고 다시 만듭니다.
+스키마를 고쳤거나(=`V1__init.sql`을 손댔거나) 이전 버전 스키마가 남아 있으면 DB를 비우고
+다시 만듭니다. 이관 SQL은 없습니다 — 파이프라인이 원본 파일에서 전건을 다시 만들어 내므로
+DB는 파생물입니다.
 
 ```bash
+# 1) 스키마를 통째로 비우고 다시 만든다
 psql -U extract -d extract -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+
+# 2) 파이프라인이 기동하면서 Flyway가 V1을 적용한다 (DDL을 손으로 돌릴 일은 없습니다)
 java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out
 ```
 
-`V1__init.sql`은 새 마이그레이션을 얹지 않고 제자리에서 고칩니다. 이미 V1이 적용된 DB에
-붙으면 Flyway가 체크섬 불일치로 **적재 전에** 멈추므로(데이터는 건드리지 않습니다),
-위 명령으로 다시 만들면 됩니다.
+**테이블만 지우면 안 됩니다.** 표준도메인(`D_SN`·`D_CD` …)과 `iso_daterange` 함수는 테이블이
+아니라 스키마 객체라 `DROP TABLE`로는 사라지지 않고, 남아 있으면 재적용이 이렇게 죽습니다:
 
 ```
-Validate failed: Migrations have failed validation
-Migration checksum mismatch for migration version 1
+ERROR: type "d_sn" already exists
 ```
+
+Flyway 이력 테이블(`flyway_schema_history`)도 함께 지워져야 `V1`이 다시 돕니다.
+`DROP SCHEMA public CASCADE`는 이 셋을 한 번에 처리합니다.
+
+비었는지 확인하려면:
+
+```
+\dt    -- 테이블 0개 ("Did not find any relations.")
+\dD    -- 도메인 0개
+\df    -- 함수 0개
+```
+
+**`must be owner of schema public`이 나면** 스키마 소유자가 아닙니다. 슈퍼유저로 한 번
+넘겨주거나, 아래처럼 DB를 통째로 다시 만듭니다.
+
+```bash
+psql -U postgres -d extract -c 'ALTER SCHEMA public OWNER TO extract;'
+```
+
+**DB를 통째로 다시 만들 때**는 접속 세션이 남아 있으면 `DROP DATABASE`가 실패하므로 먼저
+끊습니다.
+
+```bash
+psql -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+                      WHERE datname = 'extract' AND pid <> pg_backend_pid();"
+psql -U postgres -c 'DROP DATABASE extract;' \
+                 -c 'CREATE DATABASE extract OWNER extract;'
+```
+
+> **되돌리기는 없습니다.** Flyway Community에는 undo가 없으므로 스키마를 고치는 길은 위
+> 재생성 하나뿐입니다. `V1`을 고쳤는데 DB를 안 지우면 Flyway가 체크섬 불일치로 **적재 전에**
+> 멈추므로 데이터는 건드리지 않습니다 — 아래 메시지를 보면 DB를 다시 만들면 됩니다.
+>
+> ```
+> Validate failed: Migrations have failed validation
+> Migration checksum mismatch for migration version 1
+> ```
 
 ## 테스트
 

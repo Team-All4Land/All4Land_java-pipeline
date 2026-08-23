@@ -1,6 +1,7 @@
 package com.onnara.extract.db;
 
 import com.onnara.extract.common.AgencyRegistry;
+import com.onnara.extract.common.DbStandard;
 import com.onnara.extract.common.AttributeRows;
 import com.onnara.extract.common.Errors;
 import com.onnara.extract.common.SourceFileName;
@@ -30,19 +31,19 @@ import java.util.Map;
  * 파일을 한 건씩 처리하는 도중 같은 게시물의 앞선 첨부가 함께 날아간다. 첨부 행을 지우면
  * CASCADE로 이미지와 항목값이 함께 정리되므로 재적재가 안전하다.
  *
- * <p>성공한 파일만 넣지 않는다 — 실패·적재제외도 {@code STTS_CD}를 달아 행으로 남긴다.
+ * <p>성공한 파일만 넣지 않는다 — 실패·적재제외도 {@code PROC_STTS_CD}를 달아 행으로 남긴다.
  * 성공만 적재하면 "첨부 401건 중 추출 0건"인 기관이 DB에서 아예 보이지 않는다.
  *
- * <p>기관은 첨부보다 <b>먼저</b> 한 번에 넣는다 — {@code TB_NOTI.AGNCY_NO}가 FK라
+ * <p>기관은 첨부보다 <b>먼저</b> 한 번에 넣는다 — {@code NOTI_BAS.AGNCY_SN}가 FK라
  * 순서가 뒤바뀌면 첫 적재가 FK 위반으로 죽는다({@link ReferenceSync}를 앞세우는 것과 같은 이유).
  */
 public final class DbLoader implements AutoCloseable {
 
     /** 기관 행 — 입력 폴더명에서 확정한 목록을 배치 시작에 한 번 반영한다. */
     private static final String UPSERT_AGENCY = """
-            INSERT INTO TB_AGNCY (AGNCY_NO, AGNCY_NM, KND_CD) VALUES (?, ?, ?)
-            ON CONFLICT (AGNCY_NO) DO UPDATE SET
-                AGNCY_NM = EXCLUDED.AGNCY_NM, KND_CD = EXCLUDED.KND_CD
+            INSERT INTO AGNCY_BAS (AGNCY_SN, AGNCY_NM, AGNCY_KND_CD) VALUES (?, ?, ?)
+            ON CONFLICT (AGNCY_SN) DO UPDATE SET
+                AGNCY_NM = EXCLUDED.AGNCY_NM, AGNCY_KND_CD = EXCLUDED.AGNCY_KND_CD
             """;
 
     /**
@@ -53,15 +54,15 @@ public final class DbLoader implements AutoCloseable {
      * 이미 채운 값이 날아가면 안 된다. 새 정보가 있으면 이기고, 없으면 기존을 지킨다.
      */
     private static final String INSERT_NOTICE = """
-            INSERT INTO TB_NOTI (NOTI_SN, AGNCY_NO, BOARD_CD) VALUES (?, ?, ?)
+            INSERT INTO NOTI_BAS (NOTI_SN, AGNCY_SN, BBS_STTS_CD) VALUES (?, ?, ?)
             ON CONFLICT (NOTI_SN) DO UPDATE SET
-                AGNCY_NO = COALESCE(EXCLUDED.AGNCY_NO, TB_NOTI.AGNCY_NO),
-                BOARD_CD = COALESCE(EXCLUDED.BOARD_CD, TB_NOTI.BOARD_CD)
+                AGNCY_SN = COALESCE(EXCLUDED.AGNCY_SN, NOTI_BAS.AGNCY_SN),
+                BBS_STTS_CD = COALESCE(EXCLUDED.BBS_STTS_CD, NOTI_BAS.BBS_STTS_CD)
             """;
 
     /** 멱등 재적재를 위한 기존 첨부 삭제(이미지·항목값은 CASCADE로 함께 정리). */
     private static final String DELETE_ATTACHMENT =
-            "DELETE FROM TB_ATCH_FILE WHERE NOTI_SN = ? AND ATCH_SN = ?";
+            "DELETE FROM ATCH_FILE_DTL WHERE NOTI_SN = ? AND ATCH_SN = ?";
 
     /**
      * 첨부 1행 — 파일 메타 + 문서 단위 메타 + 추출 상태.
@@ -70,34 +71,34 @@ public final class DbLoader implements AutoCloseable {
      * 값을 적재 로직과 따로 동기화하면 언젠가 둘이 어긋난다.
      */
     private static final String INSERT_ATTACHMENT = """
-            INSERT INTO TB_ATCH_FILE (
-                NOTI_SN, ATCH_SN, FILE_NM, STTS_CD,
-                FAIL_STEP, FAIL_KND, FAIL_MSG, EXCL_RSN,
-                FILE_EXTN, REAL_EXTN, SCAN_YN, ENGN_NM,
-                NOTI_KND_CD, NOTI_NO, NOTI_YMD, NOTI_TTL
+            INSERT INTO ATCH_FILE_DTL (
+                NOTI_SN, ATCH_SN, ATCH_FILE_NM, PROC_STTS_CD,
+                FAIL_STEP_CD, FAIL_KND_CD, FAIL_MSG_CTNT, EXCL_RSN_CTNT,
+                FILE_EXTN_NM, ACTL_FILE_EXTN_NM, SCAN_YN, EXTC_ENGN_NM,
+                NOTI_KND_CD, NOTI_NO, NOTI_DT, NOTI_TTL
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
     /** 이미지 1행(첨부당 N건, 배치 실행). */
     private static final String INSERT_IMAGE = """
-            INSERT INTO TB_ATCH_IMG (NOTI_SN, ATCH_SN, IMG_SN, IMG_CPTN, FILE_PATH)
+            INSERT INTO ATCH_IMG_DTL (NOTI_SN, ATCH_SN, IMG_SN, IMG_CPTN_CTNT, IMG_FILE_PATH)
             VALUES (?, ?, ?, ?, ?)
             """;
 
     /** 항목값 1행(레코드당 N건, 배치 실행). */
     private static final String INSERT_ATTRIBUTE = """
-            INSERT INTO TB_NOTI_ITEM_VAL (NOTI_SN, ATCH_SN, DSPS_SN, ITEM_CD, RPT_SN, ITEM_VAL)
+            INSERT INTO NOTI_ITEM_VAL_DTL (NOTI_SN, ATCH_SN, DSPS_SN, NOTI_ITEM_CD, RPT_SN, ITEM_VAL_CTNT)
             VALUES (?, ?, ?, ?, ?, ?)
             """;
 
-    /** 적재 상태 — 추출 성공. */
-    private static final String STATUS_OK = "ok";
+    /** 처리상태코드(CD_PROC_STTS) — 추출 성공. */
+    private static final String STATUS_OK = "OK";
 
-    /** 적재 상태 — 판별·추출·매핑 실패. */
-    private static final String STATUS_FAILED = "failed";
+    /** 처리상태코드(CD_PROC_STTS) — 판별·추출·매핑 실패. */
+    private static final String STATUS_FAILED = "FAIL";
 
-    /** 적재 상태 — 안내문류로 보고 항목 적재를 건너뜀. */
-    private static final String STATUS_SKIPPED = "skipped";
+    /** 처리상태코드(CD_PROC_STTS) — 안내문류로 보고 항목 적재를 건너뜀. */
+    private static final String STATUS_SKIPPED = "SKIP";
 
     /** 배치 전체에서 공유하는 커넥션(수동 커밋). */
     private final Connection conn;
@@ -112,7 +113,7 @@ public final class DbLoader implements AutoCloseable {
      * 판별·추출 단계에서 실패한 첨부 1건 — 성공 산출물이 없어 {@link SchemaResult}로 표현할 수 없다.
      *
      * @param fileName 첨부파일명
-     * @param stage    실패한 단계(판별 / 추출 / 표해석 / 매핑)
+     * @param stage    실패한 단계의 표준코드(CD_FAIL_STEP: DTCT / EXTC / TBIT / MAPP / SAVE)
      * @param kind     실패 갈래({@link com.onnara.extract.detect.FailureKind})
      * @param message  원인 체인까지 담은 사유 문장
      * @param board    수집처 — 실패해도 게시물 행은 만들어지므로 기관이 붙어야 한다. 모르면 null
@@ -143,8 +144,8 @@ public final class DbLoader implements AutoCloseable {
                 conn.releaseSavepoint(savepoint);
                 if (file.isExcluded()) {
                     filesSkipped++;
-                    System.out.println("[적재제외] " + file.getFileNm() + ": "
-                            + file.getExclRsn() + " — 안내문류로 보고 항목 적재를 건너뜁니다");
+                    System.out.println("[적재제외] " + file.getAtchFileNm() + ": "
+                            + file.getExclRsnCtnt() + " — 안내문류로 보고 항목 적재를 건너뜁니다");
                 } else {
                     filesOk++;
                 }
@@ -153,7 +154,7 @@ public final class DbLoader implements AutoCloseable {
             } catch (Exception e) {
                 conn.rollback(savepoint);
                 filesFailed++;
-                System.out.println("[실패] " + file.getFileNm() + ": " + Errors.describe(e));
+                System.out.println("[실패] " + file.getAtchFileNm() + ": " + Errors.describe(e));
             }
         }
 
@@ -273,14 +274,14 @@ public final class DbLoader implements AutoCloseable {
             ps.setString(5, failure.stage());
             ps.setString(6, failure.kind());
             ps.setString(7, failure.message());
-            ps.setNull(8, Types.VARCHAR);        // EXCL_RSN
+            ps.setNull(8, Types.VARCHAR);        // EXCL_RSN_CTNT
             ps.setString(9, extensionOf(failure.fileName()));
-            ps.setNull(10, Types.VARCHAR);       // REAL_EXTN — 판별에 실패했으면 알 수 없다
-            ps.setBoolean(11, false);            // SCAN_YN — 위와 같은 이유로 단정하지 않는다
-            ps.setNull(12, Types.VARCHAR);       // ENGN_NM
+            ps.setNull(10, Types.VARCHAR);       // ACTL_FILE_EXTN_NM — 판별에 실패했으면 알 수 없다
+            ps.setString(11, DbStandard.yn(false));  // SCAN_YN — 위와 같은 이유로 단정하지 않는다
+            ps.setNull(12, Types.VARCHAR);       // EXTC_ENGN_NM
             ps.setNull(13, Types.VARCHAR);       // NOTI_KND_CD — 제목을 못 읽었으니 분류할 수 없다
             ps.setNull(14, Types.VARCHAR);       // NOTI_NO
-            ps.setNull(15, Types.DATE);          // NOTI_YMD
+            ps.setNull(15, Types.DATE);          // NOTI_DT
             ps.setNull(16, Types.VARCHAR);       // NOTI_TTL
             ps.executeUpdate();
         }
@@ -328,16 +329,16 @@ public final class DbLoader implements AutoCloseable {
             int i = 1;
             ps.setInt(i++, name.notiSn());
             ps.setInt(i++, name.atchSn());
-            ps.setString(i++, file.getFileNm());
+            ps.setString(i++, file.getAtchFileNm());
             ps.setString(i++, file.isExcluded() ? STATUS_SKIPPED : STATUS_OK);
-            ps.setNull(i++, Types.VARCHAR);                    // FAIL_STEP
-            ps.setNull(i++, Types.VARCHAR);                    // FAIL_KND
-            ps.setNull(i++, Types.VARCHAR);                    // FAIL_MSG
-            ps.setString(i++, file.getExclRsn());
-            ps.setString(i++, file.getFileExtn());
-            ps.setString(i++, file.getRealExtn());
-            ps.setBoolean(i++, file.isScanYn());
-            ps.setString(i++, file.getEngnNm());
+            ps.setNull(i++, Types.VARCHAR);                    // FAIL_STEP_CD
+            ps.setNull(i++, Types.VARCHAR);                    // FAIL_KND_CD
+            ps.setNull(i++, Types.VARCHAR);                    // FAIL_MSG_CTNT
+            ps.setString(i++, file.getExclRsnCtnt());
+            ps.setString(i++, file.getFileExtnNm());
+            ps.setString(i++, file.getActlFileExtnNm());
+            ps.setString(i++, DbStandard.yn(file.isScanYn()));
+            ps.setString(i++, file.getExtcEngnNm());
             ps.setString(i++, file.getNotiKndCd());
             ps.setString(i++, meta == null ? null : meta.notiNo());
             setDate(ps, i++, meta == null ? null : meta.notiYmd());
@@ -431,8 +432,8 @@ public final class DbLoader implements AutoCloseable {
     /**
      * 첨부 1건을 적재한 결과.
      *
-     * @param records TB_NOTI_ITEM_VAL에 넣은 항목값 행 수
-     * @param images  TB_ATCH_IMG에 넣은 이미지 행 수
+     * @param records NOTI_ITEM_VAL_DTL에 넣은 항목값 행 수
+     * @param images  ATCH_IMG_DTL에 넣은 이미지 행 수
      */
     public record Counts(int records, int images) {
     }

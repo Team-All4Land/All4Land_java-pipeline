@@ -2,6 +2,7 @@ package com.onnara.extract.cli;
 
 import com.onnara.extract.common.AppProperties;
 import com.onnara.extract.common.LoadPolicy;
+import com.onnara.extract.common.LoadStep;
 import com.onnara.extract.common.Mapper;
 import com.onnara.extract.common.model.SchemaResult;
 import com.onnara.extract.engine.Extractor;
@@ -67,16 +68,16 @@ public class ExtractCommand implements Callable<Integer> {
         int ok = 0;
         List<Map<String, Object>> failures = new ArrayList<>();
         for (Path file : files) {
-            String stage = "추출";
+            LoadStep step = LoadStep.EXTRACT;
             try {
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
                         file, forcedExtractor, outputDir, !noImages, scanRunner);
 
-                stage = "매핑";
+                step = LoadStep.MAP;
                 SchemaResult schema = loadPolicy.apply(
                         Mapper.mapToSchema(result.raw(), result.engine()), result.raw());
 
-                stage = "저장";
+                step = LoadStep.SAVE;
                 String stem = PipelineSupport.stem(file);
                 if (raw) {
                     PipelineSupport.writeJson(result.raw(), outputDir.resolve(stem + ".raw.json"));
@@ -84,7 +85,7 @@ public class ExtractCommand implements Callable<Integer> {
                 PipelineSupport.writeJson(schema, outputDir.resolve(stem + ".schema.json"));
                 ok++;
             } catch (Throwable t) {
-                failures.add(PipelineSupport.reportFailure(file, stage, t, stacktrace));
+                failures.add(PipelineSupport.reportFailure(file, step, t, stacktrace));
             }
         }
         if (failuresFile != null) {

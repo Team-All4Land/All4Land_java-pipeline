@@ -85,7 +85,7 @@ public final class LoadPolicy {
      */
     public SchemaResult apply(SchemaResult schema, RawDocument raw) {
         schema.setBodyCharCnt(DocumentSize.bodyCharCnt(raw));
-        schema.setExclRsn(skipReasonFor(schema.getBodyCharCnt()));
+        schema.setExclRsnCtnt(skipReasonFor(schema.getBodyCharCnt()));
         return schema;
     }
 

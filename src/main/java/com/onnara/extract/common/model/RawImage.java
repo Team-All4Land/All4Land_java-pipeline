@@ -9,7 +9,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  * {"name", "path", "size", "caption", "ocr_text"}.
  *
  * <ul>
- *   <li>{@code path}: 저장 절대경로 — DB 적재(TB_ATCH_IMG)에 필요. saveImages 실행 시 채워진다.</li>
+ *   <li>{@code path}: 저장 절대경로 — DB 적재(ATCH_IMG_DTL)에 필요. saveImages 실행 시 채워진다.</li>
  *   <li>{@code caption}: 그림에 달린 설명("[그림 2] 위치도" 등). 없으면 키가 빠진다.</li>
  *   <li>{@code ocr_text}: 선택 필드 — 현재 Java 파이프라인은 채우지 않지만
  *       raw JSON 계약(Python 산출물 호환) 유지를 위해 남겨둔다.</li>

@@ -42,7 +42,7 @@ public final class TableInterpreter {
 
     /** raw 문서의 표들을 해석해 중간 산출물 문서를 만든다. */
     public static TableDoc interpret(RawDocument raw, String engine) {
-        return TableDoc.of(raw.getFileNm(), raw.getFileExtn(), raw.isScanYn(), engine,
+        return TableDoc.of(raw.getAtchFileNm(), raw.getFileExtnNm(), raw.isScanYn(), engine,
                 interpret(tablesOf(raw)));
     }
 

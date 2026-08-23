@@ -48,9 +48,9 @@ class MapperTest {
     void mapsSample8Fields() {
         SchemaResult result = Mapper.mapToSchema(sample8Like(), "hml-dom");
 
-        assertEquals("고시문.hml", result.getFileNm());
-        assertEquals("hml", result.getFileExtn());
-        assertEquals("hml-dom", result.getEngnNm());
+        assertEquals("고시문.hml", result.getAtchFileNm());
+        assertEquals("hml", result.getFileExtnNm());
+        assertEquals("hml-dom", result.getExtcEngnNm());
         assertEquals(1, result.getRecords().size());
 
         NoticeRecord record = result.getRecords().get(0);
@@ -287,14 +287,14 @@ class MapperTest {
     @Test
     void schemaJsonUsesSnakeCaseKeys() throws Exception {
         String json = Json.MAPPER.writeValueAsString(Mapper.mapToSchema(sample8Like(), "hml-dom"));
-        assertTrue(json.contains("\"file_nm\""));
-        assertTrue(json.contains("\"file_extn\""));
+        assertTrue(json.contains("\"atch_file_nm\""));
+        assertTrue(json.contains("\"file_extn_nm\""));
         assertTrue(json.contains("\"scan_yn\""));
         assertTrue(json.contains("\"noti_sn\""), "게시물 일련번호는 구조 키다");
         assertTrue(json.contains("\"WORK_PERIOD_START\""), "사전 코드는 대문자다");
         assertTrue(json.contains("\"APPLICANT_ADDRESS\""));
         assertTrue(json.contains("\"ocr_text\"") || !json.contains("ocrText"));
-        assertTrue(!json.contains("\"fileNm\""));
+        assertTrue(!json.contains("\"atchFileNm\""));
     }
 
     /** raw 문서가 snake_case JSON으로 직렬화·역직렬화 왕복되는지 검증한다. */
@@ -302,10 +302,10 @@ class MapperTest {
     void rawJsonRoundTripsSnakeCase() throws Exception {
         RawDocument raw = sample8Like();
         String json = Json.MAPPER.writeValueAsString(raw);
-        assertTrue(json.contains("\"file_nm\""));
+        assertTrue(json.contains("\"atch_file_nm\""));
         assertTrue(json.contains("\"scan_yn\""));
         RawDocument back = Json.MAPPER.readValue(json, RawDocument.class);
-        assertEquals(raw.getFileNm(), back.getFileNm());
+        assertEquals(raw.getAtchFileNm(), back.getAtchFileNm());
         assertEquals(raw.getContent().size(), back.getContent().size());
     }
 }

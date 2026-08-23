@@ -52,10 +52,12 @@ class ScanOcrRunnerTest {
         return script;
     }
 
-    private Path rawJsonFile(String fileNm, String fileExtn) throws IOException {
+    private Path rawJsonFile(String atchFileNm, String fileExtnNm) throws IOException {
         Path json = tempDir.resolve("prepared-raw.json");
-        Files.writeString(json, "{\"source_file\":\"" + fileNm + "\",\"file_type\":\"" + fileExtn + "\","
-                + "\"is_scanned\":false,\"content\":[],\"images\":[],\"markdown\":\"# ignored\"}");
+        // ocr-cli/paddleocr_vl_cli.py가 실제로 쓰는 키 그대로다. 여기가 어긋나면 실물에서는
+        // 파일명이 null로 들어오는데 테스트만 초록으로 남는다.
+        Files.writeString(json, "{\"atch_file_nm\":\"" + atchFileNm + "\",\"file_extn_nm\":\"" + fileExtnNm + "\","
+                + "\"scan_yn\":false,\"content\":[],\"images\":[],\"markdown\":\"# ignored\"}");
         return json;
     }
 
@@ -74,7 +76,7 @@ class ScanOcrRunnerTest {
         assertTrue(args.contains("--file-type hwpx"), "인자 전달: " + args);
         assertTrue(args.contains(image.toAbsolutePath().toString()), "입력 이미지 경로 전달: " + args);
         assertTrue(raw.isScanYn(), "결과 JSON의 is_scanned=false여도 true로 강제되어야 함");
-        assertEquals("scan.hwpx", raw.getFileNm());
+        assertEquals("scan.hwpx", raw.getAtchFileNm());
     }
 
     @Test
@@ -89,7 +91,7 @@ class ScanOcrRunnerTest {
         String args = Files.readString(argsDump);
         assertTrue(args.contains("--file-type pdf"), "인자 전달: " + args);
         assertTrue(args.contains(pdf.toAbsolutePath().toString()), "PDF 경로 전달: " + args);
-        assertEquals("scan.pdf", raw.getFileNm());
+        assertEquals("scan.pdf", raw.getAtchFileNm());
     }
 
     @Test

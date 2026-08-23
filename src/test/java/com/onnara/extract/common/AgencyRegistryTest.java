@@ -32,7 +32,7 @@ class AgencyRegistryTest {
         folders(root, "12_1_목포시청", "12_2_목포시청_지난자료");
         AgencyRegistry registry = AgencyRegistry.scan(root);
 
-        assertEquals(List.of(new AgencyRegistry.Agency(12, "목포시청", "local")),
+        assertEquals(List.of(new AgencyRegistry.Agency(12, "목포시청", "LOCL")),
                 registry.agencies());
 
         AgencyRegistry.SourceBoard open =
@@ -42,8 +42,8 @@ class AgencyRegistryTest {
 
         assertEquals(12, open.agncyNo());
         assertEquals(12, closed.agncyNo());
-        assertEquals("게시중", open.boardCd());
-        assertEquals("게시완료", closed.boardCd());
+        assertEquals("POST", open.boardCd());
+        assertEquals("CLSD", closed.boardCd());
     }
 
     /**
@@ -60,10 +60,10 @@ class AgencyRegistryTest {
         AgencyRegistry registry = AgencyRegistry.scan(root);
 
         assertEquals(List.of(
-                        new AgencyRegistry.Agency(70, "새만금개발청", "central"),
-                        new AgencyRegistry.Agency(71, "농림축산식품부", "central"),
-                        new AgencyRegistry.Agency(73, "농림축산식품부", "gazette"),
-                        new AgencyRegistry.Agency(74, "새만금개발청", "gazette")),
+                        new AgencyRegistry.Agency(70, "새만금개발청", "CNTL"),
+                        new AgencyRegistry.Agency(71, "농림축산식품부", "CNTL"),
+                        new AgencyRegistry.Agency(73, "농림축산식품부", "GZT"),
+                        new AgencyRegistry.Agency(74, "새만금개발청", "GZT")),
                 registry.agencies());
 
         // 충돌한 번호 72는 비워 둔다 — 둘 중 하나에 주면 나머지 하나만 새 번호를 받아
@@ -90,7 +90,7 @@ class AgencyRegistryTest {
     void registersAgenciesWithNoAttachments(@TempDir Path root) throws IOException {
         folders(root, "48_포항시청");
 
-        assertEquals(List.of(new AgencyRegistry.Agency(48, "포항시청", "local")),
+        assertEquals(List.of(new AgencyRegistry.Agency(48, "포항시청", "LOCL")),
                 AgencyRegistry.scan(root).agencies());
     }
 

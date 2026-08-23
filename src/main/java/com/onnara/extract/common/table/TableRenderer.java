@@ -34,7 +34,7 @@ public final class TableRenderer {
      */
     public static String toHtmlDocument(RawDocument raw) {
         List<RawTable> tables = tablesOf(raw);
-        String title = raw.getFileNm() == null ? "표" : raw.getFileNm();
+        String title = raw.getAtchFileNm() == null ? "표" : raw.getAtchFileNm();
 
         StringBuilder out = new StringBuilder();
         out.append("<!DOCTYPE html>\n<html lang=\"ko\">\n<head>\n")
@@ -44,7 +44,7 @@ public final class TableRenderer {
                 .append("</head>\n<body>\n");
 
         out.append("<h1>").append(escape(title)).append("</h1>\n")
-                .append("<p class=\"meta\">형식 ").append(escape(nullToDash(raw.getFileExtn())))
+                .append("<p class=\"meta\">형식 ").append(escape(nullToDash(raw.getFileExtnNm())))
                 .append(" · 스캔본 ").append(raw.isScanYn() ? "예" : "아니오")
                 .append(" · 표 ").append(tables.size()).append("개</p>\n");
 

@@ -21,26 +21,26 @@ class SourceFolderTest {
      */
     @ParameterizedTest(name = "{0}")
     @CsvSource(delimiter = '|', value = {
-            // 폴더명                            | 번호 | 하위 | 기관명             | 종류    | 게시판
-            "1_인천지방해양수산청                | 1  | 0 | 인천지방해양수산청 | mof     | 게시중",
-            "10_동해지방해양수산청               | 10 | 0 | 동해지방해양수산청 | mof     | 게시중",
-            "12_1_목포시청                       | 12 | 1 | 목포시청           | local   | 게시중",
-            "12_2_목포시청_지난자료              | 12 | 2 | 목포시청           | local   | 게시완료",
-            "13_2_여수시청_완료된 고시공고       | 13 | 2 | 여수시청           | local   | 게시완료",
-            "17_2_보성군청_이전 공고             | 17 | 2 | 보성군청           | local   | 게시완료",
-            "18_1_장흥군청_고시공고              | 18 | 1 | 장흥군청           | local   | 게시중",
-            "20_1_해남군청_고시공고(새울)        | 20 | 1 | 해남군청           | local   | 게시중",
-            "29_1_수영구                         | 29 | 1 | 수영구             | local   | 게시중",
-            "29_3_수영구_09.01.11 이전 공고      | 29 | 3 | 수영구             | local   | 게시완료",
-            "30_1_기장군                         | 30 | 1 | 기장군             | local   | 게시중",
-            "51_1_울진군청_게시중                | 51 | 1 | 울진군청           | local   | 게시중",
-            "51_2_울진군청_완료된                | 51 | 2 | 울진군청           | local   | 게시완료",
-            "54_2_통영시청_지난고시              | 54 | 2 | 통영시청           | local   | 게시완료",
-            "56_2_거제시청_이전고시              | 56 | 2 | 거제시청           | local   | 게시완료",
-            "65_2_양양군청_이전공고              | 65 | 2 | 양양군청           | local   | 게시완료",
-            "69_제주특별자치도청                 | 69 | 0 | 제주특별자치도청   | local   | 게시중",
-            "70_새만금개발청                     | 70 | 0 | 새만금개발청       | central | 게시중",
-            "71_농림축산식품부                   | 71 | 0 | 농림축산식품부     | central | 게시중",
+            // 폴더명                         | 번호 | 하위 | 기관명             | 종류 | 게시판
+            "1_인천지방해양수산청           | 1    | 0    | 인천지방해양수산청 | MOF  | POST",
+            "10_동해지방해양수산청          | 10   | 0    | 동해지방해양수산청 | MOF  | POST",
+            "12_1_목포시청                  | 12   | 1    | 목포시청           | LOCL | POST",
+            "12_2_목포시청_지난자료         | 12   | 2    | 목포시청           | LOCL | CLSD",
+            "13_2_여수시청_완료된 고시공고  | 13   | 2    | 여수시청           | LOCL | CLSD",
+            "17_2_보성군청_이전 공고        | 17   | 2    | 보성군청           | LOCL | CLSD",
+            "18_1_장흥군청_고시공고         | 18   | 1    | 장흥군청           | LOCL | POST",
+            "20_1_해남군청_고시공고(새울)   | 20   | 1    | 해남군청           | LOCL | POST",
+            "29_1_수영구                    | 29   | 1    | 수영구             | LOCL | POST",
+            "29_3_수영구_09.01.11 이전 공고 | 29   | 3    | 수영구             | LOCL | CLSD",
+            "30_1_기장군                    | 30   | 1    | 기장군             | LOCL | POST",
+            "51_1_울진군청_게시중           | 51   | 1    | 울진군청           | LOCL | POST",
+            "51_2_울진군청_완료된           | 51   | 2    | 울진군청           | LOCL | CLSD",
+            "54_2_통영시청_지난고시         | 54   | 2    | 통영시청           | LOCL | CLSD",
+            "56_2_거제시청_이전고시         | 56   | 2    | 거제시청           | LOCL | CLSD",
+            "65_2_양양군청_이전공고         | 65   | 2    | 양양군청           | LOCL | CLSD",
+            "69_제주특별자치도청            | 69   | 0    | 제주특별자치도청   | LOCL | POST",
+            "70_새만금개발청                | 70   | 0    | 새만금개발청       | CNTL | POST",
+            "71_농림축산식품부              | 71   | 0    | 농림축산식품부     | CNTL | POST",
     })
     void parsesRealCrawlerFolderNames(String folderName, int folderNo, int subNo,
                                       String name, String kind, String board) {
@@ -78,8 +78,8 @@ class SourceFolderTest {
         assertEquals(72, parsed.folderNo());
         assertEquals(1, parsed.subNo());
         assertEquals("농림축산식품부", parsed.agncyNm());
-        assertEquals("gazette", parsed.kndCd());
-        assertEquals("게시중", parsed.boardCd());
+        assertEquals("GZT", parsed.kndCd());
+        assertEquals("POST", parsed.boardCd());
 
         assertEquals("새만금개발청",
                 SourceFolder.parse("72_2_전자관보_새만금개발청").orElseThrow().agncyNm());

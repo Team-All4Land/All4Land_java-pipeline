@@ -42,7 +42,7 @@ public final class Synonyms {
     /** 문서 단위 메타 — attachments 테이블의 컬럼이 된다(고시번호·고시일자·제목·고시자·기관). */
     public static final String SCOPE_ATTACHMENT = "attachment";
 
-    /** 처분 단위 값 — TB_NOTI_ITEM_VAL 테이블의 행이 된다(표준항목 40종). */
+    /** 처분 단위 값 — NOTI_ITEM_VAL_DTL 테이블의 행이 된다(표준항목 40종). */
     public static final String SCOPE_ATTRIBUTE = "attribute";
 
     /** 사전 리소스 경로 — 클래스패스 기준. */
@@ -84,12 +84,13 @@ public final class Synonyms {
      * @param itemCd   표준 필드명(= NoticeRecord 필드 키)
      * @param itemNm     사람이 읽는 필드 표시명
      * @param scope       저장 계층: {@link #SCOPE_ATTACHMENT}(문서 메타 → attachments 컬럼) 또는
-     *                    {@link #SCOPE_ATTRIBUTE}(처분 단위 값 → TB_NOTI_ITEM_VAL 행).
-     *                    TB_NOTI_ITEM 테이블로 동기화되는 것은 후자뿐이다
+     *                    {@link #SCOPE_ATTRIBUTE}(처분 단위 값 → NOTI_ITEM_VAL_DTL 행).
+     *                    NOTI_ITEM_TC 테이블로 동기화되는 것은 후자뿐이다
      * @param series      같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음(면적/기간/위치/인적/주소/
      *                    날짜/연락/사유). 누락 검증을 항목이 아니라 계열 단위로 하기 위한 축이며,
      *                    계열이 없는 단독 항목은 null
-     * @param type        값의 성격(text / date / date_range / number) — 정규화 방식을 정한다
+     * @param valTyCd     값의 성격 — 표준코드 CD_ITEM_VAL_TY(TEXT / DATE / DTRG / NUM).
+     *                    정규화 방식을 정하고 NOTI_ITEM_TC.ITEM_VAL_TY_CD로 동기화된다
      * @param core        전역 주요 항목(전수 표본 출현율 60% 이상) 여부 — 누락 검증 가중치용
      * @param virtual     NoticeRecord에 대응 필드가 없는 가상 필드 여부(work_period)
      * @param description 필드가 무엇을 담는지에 대한 설명
@@ -104,7 +105,7 @@ public final class Synonyms {
                             List<String> synonyms, List<String> rawSynonyms,
                             List<String> examples, String notes) {
 
-        /** 이 필드가 처분 단위 값인지 — TB_NOTI_ITEM 동기화 대상 판정에 쓴다. */
+        /** 이 필드가 처분 단위 값인지 — NOTI_ITEM_TC 동기화 대상 판정에 쓴다. */
         public boolean isAttribute() {
             return SCOPE_ATTRIBUTE.equals(scope);
         }
@@ -213,7 +214,7 @@ public final class Synonyms {
                     node.path("display").asText(itemCd),
                     node.path("scope").asText(SCOPE_ATTRIBUTE),
                     series.isMissingNode() || series.isNull() ? null : series.asText(),
-                    node.path("value_type").asText("text"),
+                    node.path("value_type").asText("TEXT"),
                     node.path("is_core").asBoolean(false),
                     node.path("virtual").asBoolean(false),
                     node.path("stored").asBoolean(true),

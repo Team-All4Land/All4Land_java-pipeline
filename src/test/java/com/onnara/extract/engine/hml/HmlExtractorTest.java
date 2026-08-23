@@ -33,7 +33,7 @@ class HmlExtractorTest {
                 "1_공유수면 점용·사용 실시계획 준공검사확인증 발급 고시(인천시종합건설본부, 영종도 해안순환도로).hml");
         RawDocument raw = extractor.extractRaw(file);
 
-        assertEquals("hml", raw.getFileExtn());
+        assertEquals("hml", raw.getFileExtnNm());
         assertFalse(raw.isScanYn());
         assertFalse(raw.getContent().isEmpty());
 

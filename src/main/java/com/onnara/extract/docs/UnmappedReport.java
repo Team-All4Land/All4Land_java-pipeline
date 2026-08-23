@@ -19,8 +19,8 @@ import java.util.Optional;
 /**
  * 추출은 됐는데 DB에 <b>한 줄도</b> 들어가지 못한 첨부를 파일 단위로 남긴다.
  *
- * <p>세 갈래를 갈라 봐야 한다. 실패({@code STTS_CD='failed'})는 왜 못 읽었는지가 {@code FAIL_*}에
- * 남고, 적재제외({@code EXCL_RSN})는 왜 뺐는지가 그 컬럼에 남는다. 둘 다 이유가 DB에 있다.
+ * <p>세 갈래를 갈라 봐야 한다. 실패({@code PROC_STTS_CD='failed'})는 왜 못 읽었는지가 {@code FAIL_*}에
+ * 남고, 적재제외({@code EXCL_RSN_CTNT})는 왜 뺐는지가 그 컬럼에 남는다. 둘 다 이유가 DB에 있다.
  * 남는 것이 <b>"읽히기는 했는데 값이 하나도 안 들어간"</b> 첨부인데, 이것만은 DB에 흔적이 없다 —
  * 첨부 행은 {@code ok}로 멀쩡히 서 있고 항목값만 0건이라, 질의로는 그냥 값 없는 문서와 구분되지 않는다.
  *
@@ -39,21 +39,21 @@ public final class UnmappedReport {
     /**
      * 첨부 1건의 미적재 내역.
      *
-     * @param fileNm       첨부파일명
+     * @param atchFileNm       첨부파일명
      * @param notiSn       게시물 일련번호
      * @param atchSn       첨부 순번
-     * @param engnNm       추출 엔진 — 엔진별로 쏠리면 엔진 문제이지 사전 문제가 아니다
+     * @param extcEngnNm       추출 엔진 — 엔진별로 쏠리면 엔진 문제이지 사전 문제가 아니다
      * @param bodyCharCnt  본문 글자 수
      * @param extras       표준항목으로 매핑되지 못한 라벨:값. 사전 보강 후보다
      * @param bodyExcerpt  본문 앞부분 — extras마저 없을 때 무슨 문서인지 알 유일한 단서다
      */
-    @JsonPropertyOrder({"file_nm", "noti_sn", "atch_sn", "engn_nm", "body_char_cnt",
+    @JsonPropertyOrder({"atch_file_nm", "noti_sn", "atch_sn", "extc_engn_nm", "body_char_cnt",
             "extras", "body_excerpt"})
     public record Unmapped(
-            @JsonProperty("file_nm") String fileNm,
+            @JsonProperty("atch_file_nm") String atchFileNm,
             @JsonProperty("noti_sn") int notiSn,
             @JsonProperty("atch_sn") int atchSn,
-            @JsonProperty("engn_nm") String engnNm,
+            @JsonProperty("extc_engn_nm") String extcEngnNm,
             @JsonProperty("body_char_cnt") int bodyCharCnt,
             @JsonProperty("extras") @JsonInclude(JsonInclude.Include.NON_EMPTY)
             Map<String, String> extras,
@@ -79,8 +79,8 @@ public final class UnmappedReport {
             return Optional.empty();
         }
         return Optional.of(new Unmapped(
-                schema.getFileNm(), schema.getNotiSn(), schema.getAtchSn(),
-                schema.getEngnNm(), schema.getBodyCharCnt(),
+                schema.getAtchFileNm(), schema.getNotiSn(), schema.getAtchSn(),
+                schema.getExtcEngnNm(), schema.getBodyCharCnt(),
                 extrasOf(schema.getRecords()), excerptOf(raw)));
     }
 

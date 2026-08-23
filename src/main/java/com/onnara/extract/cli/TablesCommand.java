@@ -68,7 +68,7 @@ public class TablesCommand implements Callable<Integer> {
     private static void printSummary(TableDoc doc) {
         TableDoc.Summary s = doc.summary();
         System.out.printf("%s: 표 %d개, 라벨 %d건(매핑 %d / 미매핑 %d)%n",
-                doc.fileNm(), s.tableCount(), s.factCount(), s.mappedCount(), s.unmappedCount());
+                doc.atchFileNm(), s.tableCount(), s.factCount(), s.mappedCount(), s.unmappedCount());
         if (!s.unmappedLabels().isEmpty()) {
             System.out.println("  미매핑 라벨: " + String.join(", ", s.unmappedLabels()));
         }

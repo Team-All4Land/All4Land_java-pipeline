@@ -42,11 +42,11 @@ TableInterpreter.interpret (표 서식 판정 + 라벨:값 추출 + 사전 매�
         ▼
 Mapper.mapToSchema (문단 메타·라벨 + 표 해석 결과 적용 + 값 정규화)
         ▼
-표준 스키마 JSON {"source_file", "records": [...], "images": [...]}
+표준 스키마 JSON {"atch_file_nm", "records": [...], "images": [...]}
         ▼
 DbLoader (PostgreSQL JDBC + HikariCP)
         ▼
-PostgreSQL (documents / ref_files 2테이블) + images/ 폴더
+PostgreSQL (AGNCY_BAS → NOTI_BAS → ATCH_FILE_DTL → NOTI_ITEM_VAL_DTL) + images/ 폴더
 ```
 
 핵심 원칙 유지: **판별(detect) → 추출(engine) → 매핑(common) → 적재(db) 4계층 분리**.
@@ -89,10 +89,10 @@ extract-java/
 │   │
 │   ├── common/                  # ★ 형식 공통 계층
 │   │   ├── model/               #   Jackson DTO — 계약의 단일 정의처
-│   │   │   ├── RawDocument.java #     source_file / file_type / is_scanned / content / images
+│   │   │   ├── RawDocument.java #     atch_file_nm / file_extn_nm / scan_yn / content / images
 │   │   │   ├── RawParagraph.java, RawTable.java, RawCell.java, RawImage.java
 │   │   │   ├── NoticeRecord.java#     15개 표준 필드 + extras (java record)
-│   │   │   └── SchemaResult.java#     source_file / records / images / body_chars / db_skip_reason
+│   │   │   └── SchemaResult.java#     atch_file_nm / records / images / body_char_cnt / excl_rsn_ctnt
 │   │   ├── table/               #   표 해석 중간 단계 (§5.1)
 │   │   │   ├── TableInterpreter.java # raw 표 → 서식 판정 + 라벨:값 추출
 │   │   │   ├── TableGrid.java   #     병합(span) 반영 논리 격자 — 없으면 연속 중복 근사
@@ -140,8 +140,8 @@ extract-java/
 │   └── db/                      # ★ 최종 적재 계층
 │       ├── DataSourceFactory.java #  HikariCP 커넥션 풀 생성 (환경변수/.env/application.properties)
 │       ├── DbSchema.java        #   DDL(§6) 실행 (Flyway 사용 시 마이그레이션은 resources/db/migration/)
-│       ├── DbLoader.java        #   SchemaResult → documents/ref_files 적재 (PostgreSQL JDBC)
-│       │                        #   db_skip_reason이 있는 파일은 [적재제외]로 건너뜀
+│       ├── DbLoader.java        #   SchemaResult → 7테이블 적재 (PostgreSQL JDBC)
+│       │                        #   excl_rsn_ctnt이 있는 파일은 [적재제외]로 건너뜀
 │       └── LoadStats.java       #   적재 요약 (성공/실패/적재제외 건수)
 │
 ├── .env.example                # 리눅스 서버 배포용 환경변수 예시 (.env로 복사; 우선순위 OS 환경변수 > .env > properties)
@@ -151,7 +151,7 @@ extract-java/
 ├── src/main/resources/
 │   ├── application.properties   # db.url=jdbc:postgresql://... , 풀 설정, ocr.cli.* 등 (기본값)
 │   ├── synonyms.json           # ★ 동의어 사전 본문 (단일 정의처 — 설명·예시 포함)
-│   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL, V2 = ref_files 절대경로, 이후 누적)
+│   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL — 도메인 18 + 7테이블)
 │
 ├── src/test/java/...            # JUnit 5 — detect / mapper / 각 extractor / scan / db
 ├── src/test/resources/fixtures/ # 실제 고시문 픽스처 (형식·스캔 여부별, Python 버전과 공유)
@@ -269,9 +269,9 @@ Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 �
 
 ```json
 {
-  "source_file": "원본파일명.ext",
-  "file_type": "hwp",
-  "is_scanned": false,
+  "atch_file_nm": "원본파일명.ext",
+  "file_extn_nm": "hwp",
+  "scan_yn": false,
   "content": [
     {"type": "paragraph", "text": "문단 텍스트"},
     {"type": "table", "n_rows": 2, "n_cols": 8,
@@ -291,7 +291,7 @@ Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 �
 - `caption`(표·이미지)은 선택 필드다. **캡션이 없으면 키 자체가 나오지 않는다**
   (`@JsonInclude(NON_NULL)`) — 그래야 캡션 없는 문서의 산출물이 이 필드가 생기기 전과
   바이트 단위로 같아 Python 호환이 유지된다(§4.2).
-- 이미지 `path`(저장된 이미지의 절대경로)는 DB 적재(`ref_files.file_path`)에 필요하므로 필수.
+- 이미지 `path`(저장된 이미지의 절대경로)는 DB 적재(`ATCH_IMG_DTL.IMG_FILE_PATH`)에 필요하므로 필수.
   `ocr_text`는 선택 필드 — 현재 Java 파이프라인은 채우지 않지만 계약 호환을 위해 유지.
 - 이미지 추출 대상 판정(§4.1): 정보가 없는 이미지·도장은 저장하지 않는다.
   스캔본은 CLI 측 seal 레이블에 맡긴다.
@@ -428,7 +428,7 @@ hwp3 엔진만 읽고 있었고, 담을 곳이 없어 일반 문단으로 흘려
 
 ## 5. 표준 스키마 (common/model/NoticeRecord.java)
 
-`Mapper.mapToSchema(raw)`의 출력은 `{"source_file", "records": [...], "images": [...]}`.
+`Mapper.mapToSchema(raw)`의 출력은 `{"atch_file_nm", "records": [...], "images": [...]}`.
 레코드는 15개 표준 필드 + `extras`로 구성된다 (Python 버전과 동일).
 
 | 필드 | 의미 |
@@ -445,8 +445,8 @@ hwp3 엔진만 읽고 있었고, 담을 곳이 없어 일반 문단으로 흘려
 
 | 필드 | 의미 |
 |---|---|
-| `body_chars` | 본문 글자 수 (`common/DocumentSize.bodyChars` — 문단 + 표 셀, 공백 제외) |
-| `db_skip_reason` | 적재를 건너뛰는 사유. 없으면 필드 자체가 빠진다(적재 대상) |
+| `body_char_cnt` | 본문 글자 수 (`common/DocumentSize.bodyChars` — 문단 + 표 셀, 공백 제외) |
+| `excl_rsn_ctnt` | 적재를 건너뛰는 사유. 없으면 필드 자체가 빠진다(적재 대상) |
 
 판단을 매핑 단계(`common/LoadPolicy`)에 두고 결과를 스키마 JSON에 남기는 이유는,
 `pipeline`으로 한 번에 돌리든 `map` → `load`로 나눠 돌리든 **같은 파일이 같은 결정**을
@@ -472,7 +472,7 @@ hwp3 엔진만 읽고 있었고, 담을 곳이 없어 일반 문단으로 흘려
 
 ```json
 {
-  "source_file": "고시양식.hml", "file_type": "hml", "engine": "hml-dom",
+  "atch_file_nm": "고시양식.hml", "file_extn_nm": "hml", "engine": "hml-dom",
   "summary": { "table_count": 2, "fact_count": 9,
                "mapped_count": 7, "unmapped_count": 2,
                "unmapped_labels": ["공작물의종류", "수면의종류"] },
@@ -539,79 +539,130 @@ span이 없으면(PDF·OCR) 옆 칸과 내용이 같은 것을 병합으로 간�
 서브커맨드 이름이 `table`이 아니라 `render`인 이유: 기존 `tables`와 한 글자 차이면 오타 한
 번에 엉뚱한 명령이 돈다.
 
-## 6. DB 스키마 (PostgreSQL — resources/db/migration/V1__init.sql)
+## 6. DB 스키마 (PostgreSQL — resources/db/migration/)
 
-Python 버전과 동일한 2테이블 구조를 **PostgreSQL 문법**으로 정의한다.
-`DbLoader`가 PostgreSQL JDBC 드라이버로 적재한다.
+기관 → 게시물 → 첨부파일 → (처분) 항목값의 4계층 EAV 스키마다. `DbLoader`가 PostgreSQL
+JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
+(`resources/db/standard_terms.json`)에 맞춰 표준도메인과 7테이블을 세운다. 스키마를 고칠
+때는 파일을 얹지 않고 `V1`을 고친 뒤 DB를 다시 만든다(README "개발 DB 초기화").
 
-```sql
--- 문서 원본 테이블: 시퀀스 + 표준 필드
-CREATE TABLE IF NOT EXISTS documents (
-    seq                BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- 시퀀스
-    source_file        TEXT NOT NULL,        -- 원본 파일명
-    file_type          TEXT NOT NULL,        -- hwp / hwpx / hml / pdf
-    is_scanned         BOOLEAN NOT NULL DEFAULT FALSE,
-    engine             TEXT,                 -- hwplib / owpml / hml-stax / pdfbox / paddleocr-vl
-    agency             TEXT,
-    notice_no          TEXT,
-    notice_date        DATE,                 -- ISO 날짜 (native DATE 타입)
-    title              TEXT,
-    signer             TEXT,
-    approval_no        TEXT,
-    approval_date      DATE,
-    location           TEXT,
-    area               TEXT,
-    work_description   TEXT,
-    work_period_start  DATE,
-    work_period_end    DATE,
-    applicant_name     TEXT,
-    applicant_address  TEXT,
-    remarks            TEXT,
-    extras             JSONB,                -- 매핑 안 된 라벨:값 (native JSONB)
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+**ERD와 컬럼별 설명은 [README의 데이터베이스 스키마 절](README.md#데이터베이스-스키마-postgresql)에
+있다.** 여기서는 구성만 적는다 — 같은 표를 두 문서에 옮겨 적으면 반드시 한쪽이 뒤처진다.
 
-CREATE INDEX IF NOT EXISTS idx_documents_source_file ON documents(source_file);
-CREATE INDEX IF NOT EXISTS idx_documents_agency      ON documents(agency);
-CREATE INDEX IF NOT EXISTS idx_documents_extras_gin  ON documents USING GIN (extras);
+### 6.1 이름 규칙
 
--- 참조 파일 테이블: 참조 시퀀스 + 이미지명 + 저장 경로
-CREATE TABLE IF NOT EXISTS ref_files (
-    seq           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    document_seq  BIGINT NOT NULL REFERENCES documents(seq) ON DELETE CASCADE,  -- 참조 시퀀스
-    image_name    TEXT NOT NULL,   -- 이미지명
-    file_path     TEXT NOT NULL    -- 저장 이미지의 절대경로 (V2 마이그레이션에서 상대→절대로 의미 변경)
-);
-CREATE INDEX IF NOT EXISTS idx_ref_files_doc ON ref_files(document_seq);
-```
+물리명은 `[수식어] + … + [분류어]` 조합이고 마지막 낱말(분류어)이 도메인을 지시한다
+(`NM` → `D_NM` = `VARCHAR(300)`). 테이블은 접두사 없이 `[의미] + [유형 접미사]`이며
+기준 `_BAS` · 명세 `_DTL` · 코드 `_TC`를 쓴다. 낱말·도메인·용어·코드는 전부
+`standard_terms.json`이 단일 정의처이고, `DbStandardTest`가 DDL과 대조한다.
 
-**SQLite 대비 달라진 점:**
+### 6.2 구성
 
-- `INTEGER PRIMARY KEY AUTOINCREMENT` → `BIGINT GENERATED ALWAYS AS IDENTITY`
-  (표준 SQL 시퀀스. `SERIAL`도 가능하나 최신 권장은 IDENTITY).
-- 날짜 필드는 `TEXT`(ISO 문자열) → 네이티브 `DATE`. 매퍼가 이미 ISO로 정규화하므로
-  `LocalDate`로 바인딩하면 된다. 파싱 실패·부분 날짜는 `NULL` 허용.
-- `is_scanned`: `INTEGER 0/1` → `BOOLEAN`.
-- `extras_json TEXT` → `extras JSONB`. GIN 인덱스로 매핑 안 된 라벨을 직접 질의 가능
-  (예: 새 지자체 라벨 빈도 분석).
-- `created_at`: 문자열 → `TIMESTAMPTZ DEFAULT now()`.
-- 외래키에 `ON DELETE CASCADE` 추가 — documents 재적재(삭제 후 삽입) 시
-  연결된 ref_files가 자동 정리된다.
+**기관** `AGNCY_BAS` — 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다
 
-적재 규칙 (Python 버전과 동일):
+| 논리명 | 물리명 | 도메인 | |
+|---|---|---|---|
+| 기관일련번호 | `AGNCY_SN` | `D_SN` | PK
+| 기관명 | `AGNCY_NM` | `D_NM` |
+| 기관종류코드 | `AGNCY_KND_CD` | `D_CD` |
+| 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
+| 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-- **documents 1행 = NoticeRecord 1건.** 한 파일에서 레코드 N건이면 N행,
-  `source_file`로 파일 단위 묶임.
-- **ref_files**는 이미지가 나온 파일의 첫 레코드 행(대표 행) `seq`에 연결.
-  파일 단위 이미지 조회는 `documents.source_file` 조인.
-- 삽입 시 생성된 시퀀스 값은 `INSERT ... RETURNING seq`로 받아 ref_files에 연결
-  (SQLite의 `last_insert_rowid()` 대체).
-- **스키마 마이그레이션은 Flyway**로 관리 (`resources/db/migration/V*.sql`).
-  SQLite처럼 런타임에 `ALTER TABLE`로 컬럼을 자동 추가하지 않고, 버전 파일을
-  추가하는 방식으로 이력을 남긴다.
-- 같은 `source_file` 재적재 시 기존 행 삭제 후 재삽입 (멱등). CASCADE로 ref_files 자동 정리.
-- 배치 적재는 **트랜잭션 + `addBatch`/`executeBatch`**로 수행, 파일 단위 실패는
-  세이브포인트 롤백 후 다음 파일로 계속 진행 (배치 격리).
+**고시공고게시물** `NOTI_BAS` — 게시물. 크롤링 대상이 첨부파일뿐이라 게시물 자체의 정보는 없고 같은 게시물의 첨부를 묶는 키로만 쓴다
+
+| 논리명 | 물리명 | 도메인 | |
+|---|---|---|---|
+| 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK
+| 기관일련번호 | `AGNCY_SN` | `D_SN` |
+| 게시상태코드 | `BBS_STTS_CD` | `D_CD` |
+| 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
+| 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
+
+**공고종류** `NOTI_KND_TC` — 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다
+
+| 논리명 | 물리명 | 도메인 | |
+|---|---|---|---|
+| 공고종류코드 | `NOTI_KND_CD` | `D_CD` | PK
+| 공고종류명 | `NOTI_KND_NM` | `D_NM` |
+| 상위공고종류명 | `HRNK_NOTI_KND_NM` | `D_NM` |
+| 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
+| 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
+
+**공고항목** `NOTI_ITEM_TC` — 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다
+
+| 논리명 | 물리명 | 도메인 | |
+|---|---|---|---|
+| 공고항목코드 | `NOTI_ITEM_CD` | `D_CD` | PK
+| 공고항목명 | `NOTI_ITEM_NM` | `D_NM` |
+| 항목계열명 | `ITEM_SRS_NM` | `D_NM` |
+| 항목값유형코드 | `ITEM_VAL_TY_CD` | `D_CD` |
+| 주요항목여부 | `CORE_ITEM_YN` | `D_YN` |
+| 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
+| 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
+
+**첨부파일** `ATCH_FILE_DTL` — 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
+
+| 논리명 | 물리명 | 도메인 | |
+|---|---|---|---|
+| 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK
+| 첨부일련번호 | `ATCH_SN` | `D_SN` | PK
+| 첨부파일명 | `ATCH_FILE_NM` | `D_NM` |
+| 처리상태코드 | `PROC_STTS_CD` | `D_CD` |
+| 실패단계코드 | `FAIL_STEP_CD` | `D_CD` |
+| 실패종류코드 | `FAIL_KND_CD` | `D_CD` |
+| 실패메시지내용 | `FAIL_MSG_CTNT` | `D_CTNT` |
+| 적재제외사유내용 | `EXCL_RSN_CTNT` | `D_CTNT` |
+| 파일확장자명 | `FILE_EXTN_NM` | `D_NM` |
+| 실제파일확장자명 | `ACTL_FILE_EXTN_NM` | `D_NM` |
+| 스캔여부 | `SCAN_YN` | `D_YN` |
+| 추출엔진명 | `EXTC_ENGN_NM` | `D_NM` |
+| 공고종류코드 | `NOTI_KND_CD` | `D_CD` |
+| 고시번호 | `NOTI_NO` | `D_NO` |
+| 고시일자 | `NOTI_DT` | `D_DT` |
+| 고시제목 | `NOTI_TTL` | `D_TTL` |
+| 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
+| 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
+
+**첨부이미지** `ATCH_IMG_DTL` — 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다
+
+| 논리명 | 물리명 | 도메인 | |
+|---|---|---|---|
+| 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK
+| 첨부일련번호 | `ATCH_SN` | `D_SN` | PK
+| 이미지일련번호 | `IMG_SN` | `D_SN` | PK
+| 이미지캡션내용 | `IMG_CPTN_CTNT` | `D_CTNT` |
+| 이미지파일경로 | `IMG_FILE_PATH` | `D_PATH` |
+| 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
+| 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
+
+**공고항목값** `NOTI_ITEM_VAL_DTL` — 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다
+
+| 논리명 | 물리명 | 도메인 | |
+|---|---|---|---|
+| 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK
+| 첨부일련번호 | `ATCH_SN` | `D_SN` | PK
+| 처분일련번호 | `DSPS_SN` | `D_SN` | PK
+| 공고항목코드 | `NOTI_ITEM_CD` | `D_CD` | PK
+| 반복일련번호 | `RPT_SN` | `D_SN` | PK
+| 항목값내용 | `ITEM_VAL_CTNT` | `D_CTNT` |
+| 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
+| 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
+
+### 6.3 적재 규칙
+
+- **멱등 단위는 첨부파일이다.** 게시물 단위로 지우면 파일을 한 건씩 처리하는 도중 같은
+  게시물의 앞선 첨부가 함께 날아간다. 첨부 행을 지우면 CASCADE로 이미지와 항목값이 함께
+  정리되므로 재적재가 안전하다.
+- **실패·적재제외도 행으로 남긴다**(`PROC_STTS_CD`). 성공만 적재하면 "첨부 401건 중 추출
+  0건"인 기관이 DB에서 아예 보이지 않는다.
+- **사전 동기화(`ReferenceSync`)가 적재보다 먼저** 돈다 — `NOTI_ITEM_VAL_DTL`이
+  `NOTI_ITEM_TC`를 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
+  기관도 같은 이유로 첨부보다 먼저 넣는다(`NOTI_BAS.AGNCY_SN`가 FK).
+- **스키마 마이그레이션은 Flyway**로 관리한다(`resources/db/migration/V*.sql`). 런타임에
+  `ALTER TABLE`로 컬럼을 자동 추가하지 않고 버전 파일을 얹어 이력을 남긴다.
+- 배치 적재는 **트랜잭션 + `addBatch`/`executeBatch`**로 수행하고, 파일 단위 실패는
+  세이브포인트 롤백 후 다음 파일로 계속 진행한다(배치 격리).
+
 
 ## 7. OCR CLI 계약 (PaddleOCR-VL CLI ↔ ScanOcrRunner)
 
@@ -631,7 +682,7 @@ Java가 직접 구동할 수 없는 PaddleOCR-VL만 Python CLI 스크립트로 �
   · 스캔 HWP/HWPX/HML에서 Java Extractor가 추출한 임베디드 이미지 경로 N개
 
 종료 코드 0 → --output 경로에 §4 raw JSON 계약 그대로 생성
-              (도장은 seal 레이블로 제외된 상태. is_scanned는 Java가 true로
+              (도장은 seal 레이블로 제외된 상태. scan_yn는 Java가 true로
                강제하고, markdown 등 계약 외 필드는 무시)
 종료 코드 ≠0 → stdout/stderr 로그 꼬리를 오류 메시지로 노출, 해당 파일만 [실패]
 ```
@@ -657,12 +708,12 @@ Python 의존성을 최소화한다.
 
 **OCR 경로는 스캔 판정(§3) 파일 전용이다.** 네이티브 문서에 붙임 현장사진·위치도·표
 캡처가 들어 있어도 `PipelineSupport`는 그 이미지를 `images/`에 저장하고 `images` 메타
-(`ref_files` 적재용)만 기록한다 — 서브프로세스를 띄우지 않는다.
+(`ATCH_IMG_DTL` 적재용)만 기록한다 — 서브프로세스를 띄우지 않는다.
 
 한동안은 네이티브 경로에서도 삽입 이미지를 OCR해 본문 뒤에 이어 붙였다. 그 방식은
 다음을 대가로 치렀고, 그래서 걷어냈다.
 
-- **스캔이 아닌 문서가 OCR을 탄다**: `is_scanned=false`로 적재된 문서인데 처리 중에는
+- **스캔이 아닌 문서가 OCR을 탄다**: `scan_yn=false`로 적재된 문서인데 처리 중에는
   Python VLM이 돌아, 로그·소요 시간만 보면 스캔 오판처럼 보인다. 판정 결과와 실제
   실행 경로가 어긋나는 상태였다.
 - **배치 시간이 문서 내용에 좌우된다**: 이미지가 있는 모든 네이티브 문서가 대상이라
@@ -673,7 +724,7 @@ Python 의존성을 최소화한다.
 
 그 대가로 포기하는 것은 분명히 적어 둔다: **본문이 사진 안에만 있는 네이티브 문서는 그
 내용이 추출되지 않는다.** 사진 속 텍스트가 필요해지면 별도 단계로 다루고(적재된
-`ref_files.file_path`로 이미지에 접근할 수 있다), 추출 본문에 섞지 않는다.
+`ATCH_IMG_DTL.IMG_FILE_PATH`로 이미지에 접근할 수 있다), 추출 본문에 섞지 않는다.
 
 - **실패 등급**: 스캔본은 이미지가 유일한 본문 출처라 OCR 실패를 `[실패]`로 격리한다.
   네이티브 경로에는 OCR이 없으므로 스크립트 부재가 영향을 주지 않는다.
@@ -729,7 +780,7 @@ java -jar extract.jar <서브커맨드> [옵션]
                 + 임베디드 이미지가 있으면 같은 경로로 OCR해 본문 뒤에 이어 붙임 (§7.1)
 5) TableInterpreter.interpret → (--tables 시) out/<이름>.tables.json 저장
 6) Mapper.mapToSchema(표 해석 결과 재사용) → LoadPolicy.apply → out/<이름>.schema.json 저장
-7) DbLoader로 documents/ref_files 적재 (db_skip_reason이 있는 파일은 [적재제외])
+7) DbLoader로 7테이블 적재 (excl_rsn_ctnt이 있는 파일은 [적재제외])
 
 단계마다 실패를 `[실패] <파일>: (<단계>) <사유>`로 격리한다. 단계는 판별/추출/표해석/매핑/저장
 다섯이고, 사유는 `Errors.describe`로 원인 체인까지 담는다(§3.1). `Exception`이 아니라
