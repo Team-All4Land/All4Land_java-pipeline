@@ -66,6 +66,9 @@ public final class SynonymsDoc {
         if (f.isAttribute()) {
             return "`NOTI_ITEM_VAL_DTL` 행";
         }
+        if (f.isNotice()) {
+            return "`NOTI_BAS` 컬럼";
+        }
         // 추출은 하되 어디에도 넣지 않는 필드가 있다. 컬럼으로 적으면 없는 컬럼을 찾게 된다
         return f.isExtractOnly() ? "추출만(적재 안 함)" : "`ATCH_FILE_DTL` 컬럼";
     }

@@ -39,8 +39,11 @@ public final class Synonyms {
     /** {@link #WORK_PERIOD} 분리 결과 — 종료일(ISO). 사전에는 없는 파생 필드다. */
     public static final String WORK_PERIOD_END = "WORK_PERIOD_END";
 
-    /** 문서 단위 메타 — attachments 테이블의 컬럼이 된다(고시번호·고시일자·제목·고시자·기관). */
+    /** 첨부 문서 단위 메타 — ATCH_FILE_DTL 컬럼이 된다. */
     public static final String SCOPE_ATTACHMENT = "attachment";
+
+    /** 게시물 단위 메타 — NOTI_BAS 테이블의 컬럼이 된다. */
+    public static final String SCOPE_NOTICE = "notice";
 
     /** 처분 단위 값 — NOTI_ITEM_VAL_DTL 테이블의 행이 된다(표준항목 40종). */
     public static final String SCOPE_ATTRIBUTE = "attribute";
@@ -83,7 +86,8 @@ public final class Synonyms {
      *
      * @param itemCd   표준 필드명(= NoticeRecord 필드 키)
      * @param itemNm     사람이 읽는 필드 표시명
-     * @param scope       저장 계층: {@link #SCOPE_ATTACHMENT}(문서 메타 → attachments 컬럼) 또는
+     * @param scope       저장 계층: {@link #SCOPE_NOTICE}(게시물 메타 → NOTI_BAS 컬럼),
+     *                    {@link #SCOPE_ATTACHMENT}(문서 메타 → ATCH_FILE_DTL 컬럼) 또는
      *                    {@link #SCOPE_ATTRIBUTE}(처분 단위 값 → NOTI_ITEM_VAL_DTL 행).
      *                    NOTI_ITEM_TC 테이블로 동기화되는 것은 후자뿐이다
      * @param series      같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음(면적/기간/위치/인적/주소/
@@ -108,6 +112,11 @@ public final class Synonyms {
         /** 이 필드가 처분 단위 값인지 — NOTI_ITEM_TC 동기화 대상 판정에 쓴다. */
         public boolean isAttribute() {
             return SCOPE_ATTRIBUTE.equals(scope);
+        }
+
+        /** 이 필드가 게시물 단위 메타인지 — NOTI_BAS 컬럼 적재 대상 판정에 쓴다. */
+        public boolean isNotice() {
+            return SCOPE_NOTICE.equals(scope);
         }
 
         /**

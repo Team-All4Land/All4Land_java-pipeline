@@ -23,15 +23,18 @@ class SchemaResultTest {
         SchemaResult schema = new SchemaResult("6034_1_고시문.hml", "hml", false, "hml-dom");
         schema.setNotiSn(6034);
         schema.setAtchSn(1);
+        schema.setAtchFilePath("/srv/input/6034_1_고시문.hml");
         schema.setSourceBoard(
                 new AgencyRegistry.SourceBoard(12, "목포시청", "LOCL", "CLSD"));
 
         String json = Json.MAPPER.writeValueAsString(schema);
         assertTrue(json.contains("\"source_board\""), json);
+        assertTrue(json.contains("\"atch_file_path\""), json);
         assertTrue(json.contains("\"agncy_no\":12"), "레코드 컴포넌트는 snake_case로 나가야 한다");
 
         SchemaResult reloaded = Json.MAPPER.readValue(json, SchemaResult.class);
         assertEquals(schema.getSourceBoard(), reloaded.getSourceBoard());
+        assertEquals(schema.getAtchFilePath(), reloaded.getAtchFilePath());
     }
 
     /** 수집처를 모르는 파일은 키 자체를 내보내지 않는다 — 옛 스키마 JSON과 바이트가 같아진다. */

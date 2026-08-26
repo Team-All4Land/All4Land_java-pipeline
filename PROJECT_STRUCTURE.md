@@ -568,12 +568,16 @@ JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**고시공고게시물** `NOTI_BAS` — 게시물. 크롤링 대상이 첨부파일뿐이라 게시물 자체의 정보는 없고 같은 게시물의 첨부를 묶는 키로만 쓴다
+**고시공고게시물** `NOTI_BAS` — 같은 게시물의 첨부를 묶고 담당부서·담당자·전화번호·고시공고번호를 보관한다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
 | 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK
 | 기관일련번호 | `AGNCY_SN` | `D_SN` |
+| 담당부서명 | `CHRG_DEPT_NM` | `D_NM` |
+| 담당자명 | `CHRGR_NM` | `D_NM` |
+| 전화번호 | `TEL_NO` | `D_NO` |
+| 고시공고번호 | `NOTI_NO` | `D_NO` |
 | 게시상태코드 | `BBS_STTS_CD` | `D_CD` |
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
@@ -607,6 +611,7 @@ JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
 | 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK
 | 첨부일련번호 | `ATCH_SN` | `D_SN` | PK
 | 첨부파일명 | `ATCH_FILE_NM` | `D_NM` |
+| 첨부파일경로 | `ATCH_FILE_PATH` | `D_PATH` |
 | 처리상태코드 | `PROC_STTS_CD` | `D_CD` |
 | 실패단계코드 | `FAIL_STEP_CD` | `D_CD` |
 | 실패종류코드 | `FAIL_KND_CD` | `D_CD` |
@@ -617,7 +622,7 @@ JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
 | 스캔여부 | `SCAN_YN` | `D_YN` |
 | 추출엔진명 | `EXTC_ENGN_NM` | `D_NM` |
 | 공고종류코드 | `NOTI_KND_CD` | `D_CD` |
-| 고시번호 | `NOTI_NO` | `D_NO` |
+| 고시공고번호 | `NOTI_NO` | `D_NO` |
 | 고시일자 | `NOTI_DT` | `D_DT` |
 | 고시제목 | `NOTI_TTL` | `D_TTL` |
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |

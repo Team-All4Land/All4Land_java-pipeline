@@ -76,11 +76,26 @@ public record NoticeRecord(
     }
 
     // ── 편의 접근자 ──────────────────────────────────────────────────
-    // 문서 메타(ATCH_FILE_DTL 컬럼이 되는 5개)와 자주 쓰는 처분 값들.
+    // 게시물·문서 메타와 자주 쓰는 처분 값들.
 
     /** 고시·공고를 발령한 행정기관명. */
     public String bodyAgncyNm() {
         return fields.get("BODY_AGNCY_NM");
+    }
+
+    /** 게시물 담당부서명. */
+    public String chrgDeptNm() {
+        return fields.get("CHRG_DEPT_NM");
+    }
+
+    /** 게시물 담당자명. */
+    public String chrgrNm() {
+        return fields.get("CHRGR_NM");
+    }
+
+    /** 게시물 담당 전화번호. */
+    public String telNo() {
+        return fields.get("TEL_NO");
     }
 
     /** 고시·공고의 문서번호. */

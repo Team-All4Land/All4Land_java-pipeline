@@ -141,8 +141,9 @@ class SynonymsTest {
             assertFalse(field.itemNm().isBlank(), field.itemCd() + ": 표시명 없음");
             assertFalse(field.description().isBlank(), field.itemCd() + ": 설명 없음");
             assertTrue(Synonyms.SCOPE_ATTACHMENT.equals(field.scope())
+                            || Synonyms.SCOPE_NOTICE.equals(field.scope())
                             || Synonyms.SCOPE_ATTRIBUTE.equals(field.scope()),
-                    field.itemCd() + ": 저장 계층이 attachment/attribute가 아님");
+                    field.itemCd() + ": 저장 계층이 notice/attachment/attribute가 아님");
             assertFalse(field.valTyCd().isBlank(), field.itemCd() + ": 값 형식 없음");
             if (field.synonyms().isEmpty()) {
                 assertNotNull(field.notes(),
@@ -165,7 +166,7 @@ class SynonymsTest {
     }
 
     /**
-     * 워크북 전수 통계가 확정한 구성 — 문서 메타 5 + 표준항목 40.
+     * 워크북 전수 통계가 확정한 구성 — 게시물·문서 메타 8 + 표준항목 40.
      *
      * <p>주요 항목 6개는 전역 출현율 60% 이상이며, 이 집합이 바뀌면 누락 검증의 기준선이
      * 함께 바뀌므로 사전을 손볼 때 의식적으로 고치게 못 박아 둔다.
@@ -175,7 +176,7 @@ class SynonymsTest {
         List<Synonyms.FieldSpec> attributes = Synonyms.fields().stream()
                 .filter(Synonyms.FieldSpec::isAttribute).toList();
         assertEquals(40, attributes.size(), "표준항목은 40종이어야 함");
-        assertEquals(5, Synonyms.fields().size() - attributes.size(), "문서 메타는 5종이어야 함");
+        assertEquals(8, Synonyms.fields().size() - attributes.size(), "게시물·문서 메타는 8종이어야 함");
 
         List<String> core = attributes.stream()
                 .filter(Synonyms.FieldSpec::coreYn).map(Synonyms.FieldSpec::itemCd).sorted().toList();

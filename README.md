@@ -92,7 +92,7 @@ Mapper.mapToSchema (문단 메타·라벨 + 표 해석 결과 적용 + 값 정�
         ▼
 LoadPolicy (본문 분량 측정 → 안내문류면 excl_rsn_ctnt 기록, 적재만 제외)
         ▼
-표준 스키마 JSON {"atch_file_nm", "noti_sn", "body_char_cnt", "records": [...], "images": [...]}
+표준 스키마 JSON {"atch_file_nm", "atch_file_path", "noti_sn", "body_char_cnt", "records": [...], "images": [...]}
         ▼
 DbLoader (PostgreSQL JDBC + HikariCP)
         ▼
@@ -112,7 +112,7 @@ src/main/java/com/onnara/extract/
 
 src/main/resources/
 ├── application.properties   DB 접속·OCR CLI 실행 설정 (설정의 단일 출처)
-├── synonyms.json            표준항목 40종 + 문서 메타 5종 사전 (매핑의 단일 출처)
+├── synonyms.json            표준항목 40종 + 게시물·문서 메타 8종 사전 (매핑의 단일 출처)
 ├── notice_types.json        공고종류 56종 레지스트리
 ├── db/standard_terms.json   DB 표준 사전 — 표준단어·표준도메인·표준용어·표준코드 (이름의 단일 출처)
 └── db/migration/            Flyway 마이그레이션 (V1__init.sql — 표준 스키마를 세운다)
@@ -370,10 +370,10 @@ erDiagram
 | 논리명 | 물리명 | 무엇의 단위인가 |
 |---|---|---|
 | 기관 | `AGNCY_BAS` | 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다 |
-| 고시공고게시물 | `NOTI_BAS` | 게시물. 크롤링 대상이 첨부파일뿐이라 게시물 자체의 정보는 없고 같은 게시물의 첨부를 묶는 키로만 쓴다 |
+| 고시공고게시물 | `NOTI_BAS` | 같은 게시물의 첨부를 묶고 담당부서·담당자·전화번호·고시공고번호를 보관한다 |
 | 공고종류 | `NOTI_KND_TC` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
 | 공고항목 | `NOTI_ITEM_TC` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다 |
-| 첨부파일 | `ATCH_FILE_DTL` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
+| 첨부파일 | `ATCH_FILE_DTL` | 파일 1건. 원본 절대경로, 문서 단위 메타(고시번호·고시일자·제목), 추출 상태 |
 | 첨부이미지 | `ATCH_IMG_DTL` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다 |
 | 공고항목값 | `NOTI_ITEM_VAL_DTL` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
 

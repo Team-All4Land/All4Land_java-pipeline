@@ -273,6 +273,7 @@ public class PipelineCommand implements Callable<Integer> {
             Path file = Path.of(String.valueOf(failure.get("file")));
             rows.add(new DbLoader.FailedAttachment(
                     file.getFileName().toString(),
+                    file.toAbsolutePath().normalize().toString().replace('\\', '/'),
                     text(failure.get("stage")),
                     text(failure.get("kind")),
                     text(failure.get("message")),

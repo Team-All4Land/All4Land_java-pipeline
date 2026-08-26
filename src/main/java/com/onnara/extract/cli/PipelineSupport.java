@@ -117,6 +117,7 @@ final class PipelineSupport {
      * 정책을 몰라도 되게 한다.
      */
     private static RawDocument tagFormats(RawDocument raw, Path file, String format) {
+        raw.setAtchFilePath(absolutePath(file));
         raw.setFileExtnNm(extensionOf(file));
         raw.setActlFileExtnNm(format);
         return raw;

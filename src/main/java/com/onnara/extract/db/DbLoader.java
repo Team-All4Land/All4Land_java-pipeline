@@ -54,9 +54,15 @@ public final class DbLoader implements AutoCloseable {
      * 이미 채운 값이 날아가면 안 된다. 새 정보가 있으면 이기고, 없으면 기존을 지킨다.
      */
     private static final String INSERT_NOTICE = """
-            INSERT INTO NOTI_BAS (NOTI_SN, AGNCY_SN, BBS_STTS_CD) VALUES (?, ?, ?)
+            INSERT INTO NOTI_BAS (
+                NOTI_SN, AGNCY_SN, CHRG_DEPT_NM, CHRGR_NM, TEL_NO, NOTI_NO, BBS_STTS_CD
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (NOTI_SN) DO UPDATE SET
                 AGNCY_SN = COALESCE(EXCLUDED.AGNCY_SN, NOTI_BAS.AGNCY_SN),
+                CHRG_DEPT_NM = COALESCE(EXCLUDED.CHRG_DEPT_NM, NOTI_BAS.CHRG_DEPT_NM),
+                CHRGR_NM = COALESCE(EXCLUDED.CHRGR_NM, NOTI_BAS.CHRGR_NM),
+                TEL_NO = COALESCE(EXCLUDED.TEL_NO, NOTI_BAS.TEL_NO),
+                NOTI_NO = COALESCE(EXCLUDED.NOTI_NO, NOTI_BAS.NOTI_NO),
                 BBS_STTS_CD = COALESCE(EXCLUDED.BBS_STTS_CD, NOTI_BAS.BBS_STTS_CD)
             """;
 
@@ -72,11 +78,11 @@ public final class DbLoader implements AutoCloseable {
      */
     private static final String INSERT_ATTACHMENT = """
             INSERT INTO ATCH_FILE_DTL (
-                NOTI_SN, ATCH_SN, ATCH_FILE_NM, PROC_STTS_CD,
+                NOTI_SN, ATCH_SN, ATCH_FILE_NM, ATCH_FILE_PATH, PROC_STTS_CD,
                 FAIL_STEP_CD, FAIL_KND_CD, FAIL_MSG_CTNT, EXCL_RSN_CTNT,
                 FILE_EXTN_NM, ACTL_FILE_EXTN_NM, SCAN_YN, EXTC_ENGN_NM,
                 NOTI_KND_CD, NOTI_NO, NOTI_DT, NOTI_TTL
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
     /** 이미지 1행(첨부당 N건, 배치 실행). */
@@ -113,12 +119,13 @@ public final class DbLoader implements AutoCloseable {
      * 판별·추출 단계에서 실패한 첨부 1건 — 성공 산출물이 없어 {@link SchemaResult}로 표현할 수 없다.
      *
      * @param fileName 첨부파일명
+     * @param filePath 첨부파일의 정규화된 절대경로
      * @param stage    실패한 단계의 표준코드(CD_FAIL_STEP: DTCT / EXTC / TBIT / MAPP / SAVE)
      * @param kind     실패 갈래({@link com.onnara.extract.detect.FailureKind})
      * @param message  원인 체인까지 담은 사유 문장
      * @param board    수집처 — 실패해도 게시물 행은 만들어지므로 기관이 붙어야 한다. 모르면 null
      */
-    public record FailedAttachment(String fileName, String stage, String kind, String message,
+    public record FailedAttachment(String fileName, String filePath, String stage, String kind, String message,
                                    AgencyRegistry.SourceBoard board) {
     }
 
@@ -244,12 +251,11 @@ public final class DbLoader implements AutoCloseable {
      */
     public Counts loadOne(SchemaResult file) throws SQLException {
         SourceFileName.Parsed name = file.attachmentKey();
-        prepareSlot(name, file.getSourceBoard());
-
         List<NoticeRecord> records = file.getRecords();
         // 적재제외 파일은 첨부 메타만 남기고 항목값은 넣지 않는다
         boolean loadValues = !file.isExcluded();
         NoticeRecord meta = records.isEmpty() ? null : records.get(0);
+        prepareSlot(name, file.getSourceBoard(), meta);
 
         insertAttachment(file, name, meta);
 
@@ -264,25 +270,26 @@ public final class DbLoader implements AutoCloseable {
     /** 판별·추출 실패 건을 첨부 행으로만 남긴다(항목값 없음). */
     private void loadFailure(FailedAttachment failure) throws SQLException {
         SourceFileName.Parsed name = SourceFileName.parse(failure.fileName());
-        prepareSlot(name, failure.board());
+        prepareSlot(name, failure.board(), null);
 
         try (PreparedStatement ps = conn.prepareStatement(INSERT_ATTACHMENT)) {
             ps.setInt(1, name.notiSn());
             ps.setInt(2, name.atchSn());
             ps.setString(3, failure.fileName());
-            ps.setString(4, STATUS_FAILED);
-            ps.setString(5, failure.stage());
-            ps.setString(6, failure.kind());
-            ps.setString(7, failure.message());
-            ps.setNull(8, Types.VARCHAR);        // EXCL_RSN_CTNT
-            ps.setString(9, extensionOf(failure.fileName()));
-            ps.setNull(10, Types.VARCHAR);       // ACTL_FILE_EXTN_NM — 판별에 실패했으면 알 수 없다
-            ps.setString(11, DbStandard.yn(false));  // SCAN_YN — 위와 같은 이유로 단정하지 않는다
-            ps.setNull(12, Types.VARCHAR);       // EXTC_ENGN_NM
-            ps.setNull(13, Types.VARCHAR);       // NOTI_KND_CD — 제목을 못 읽었으니 분류할 수 없다
-            ps.setNull(14, Types.VARCHAR);       // NOTI_NO
-            ps.setNull(15, Types.DATE);          // NOTI_DT
-            ps.setNull(16, Types.VARCHAR);       // NOTI_TTL
+            ps.setString(4, failure.filePath());
+            ps.setString(5, STATUS_FAILED);
+            ps.setString(6, failure.stage());
+            ps.setString(7, failure.kind());
+            ps.setString(8, failure.message());
+            ps.setNull(9, Types.VARCHAR);        // EXCL_RSN_CTNT
+            ps.setString(10, extensionOf(failure.fileName()));
+            ps.setNull(11, Types.VARCHAR);       // ACTL_FILE_EXTN_NM — 판별에 실패했으면 알 수 없다
+            ps.setString(12, DbStandard.yn(false));  // SCAN_YN — 위와 같은 이유로 단정하지 않는다
+            ps.setNull(13, Types.VARCHAR);       // EXTC_ENGN_NM
+            ps.setNull(14, Types.VARCHAR);       // NOTI_KND_CD — 제목을 못 읽었으니 분류할 수 없다
+            ps.setNull(15, Types.VARCHAR);       // NOTI_NO
+            ps.setNull(16, Types.DATE);          // NOTI_DT
+            ps.setNull(17, Types.VARCHAR);       // NOTI_TTL
             ps.executeUpdate();
         }
     }
@@ -302,17 +309,21 @@ public final class DbLoader implements AutoCloseable {
      * @param board 수집처. null이면 기관·게시판을 비운 채로 게시물만 만든다 — 폴더 규약 밖에서
      *              온 파일(수동 수집분)도 첨부는 적재돼야 한다
      */
-    private void prepareSlot(SourceFileName.Parsed name, AgencyRegistry.SourceBoard board)
+    private void prepareSlot(SourceFileName.Parsed name, AgencyRegistry.SourceBoard board,
+                             NoticeRecord meta)
             throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(INSERT_NOTICE)) {
             ps.setInt(1, name.notiSn());
             if (board == null) {
                 ps.setNull(2, Types.INTEGER);
-                ps.setNull(3, Types.VARCHAR);
             } else {
                 ps.setInt(2, board.agncyNo());
-                ps.setString(3, board.boardCd());
             }
+            ps.setString(3, meta == null ? null : meta.chrgDeptNm());
+            ps.setString(4, meta == null ? null : meta.chrgrNm());
+            ps.setString(5, meta == null ? null : meta.telNo());
+            ps.setString(6, meta == null ? null : meta.notiNo());
+            ps.setString(7, board == null ? null : board.boardCd());
             ps.executeUpdate();
         }
         try (PreparedStatement ps = conn.prepareStatement(DELETE_ATTACHMENT)) {
@@ -330,6 +341,7 @@ public final class DbLoader implements AutoCloseable {
             ps.setInt(i++, name.notiSn());
             ps.setInt(i++, name.atchSn());
             ps.setString(i++, file.getAtchFileNm());
+            ps.setString(i++, file.getAtchFilePath());
             ps.setString(i++, file.isExcluded() ? STATUS_SKIPPED : STATUS_OK);
             ps.setNull(i++, Types.VARCHAR);                    // FAIL_STEP_CD
             ps.setNull(i++, Types.VARCHAR);                    // FAIL_KND_CD

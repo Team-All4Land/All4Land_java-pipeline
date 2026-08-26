@@ -286,8 +286,11 @@ class MapperTest {
      */
     @Test
     void schemaJsonUsesSnakeCaseKeys() throws Exception {
-        String json = Json.MAPPER.writeValueAsString(Mapper.mapToSchema(sample8Like(), "hml-dom"));
+        RawDocument raw = sample8Like();
+        raw.setAtchFilePath("/srv/input/고시.hml");
+        String json = Json.MAPPER.writeValueAsString(Mapper.mapToSchema(raw, "hml-dom"));
         assertTrue(json.contains("\"atch_file_nm\""));
+        assertTrue(json.contains("\"atch_file_path\":\"/srv/input/고시.hml\""));
         assertTrue(json.contains("\"file_extn_nm\""));
         assertTrue(json.contains("\"scan_yn\""));
         assertTrue(json.contains("\"noti_sn\""), "게시물 일련번호는 구조 키다");
@@ -295,6 +298,35 @@ class MapperTest {
         assertTrue(json.contains("\"APPLICANT_ADDRESS\""));
         assertTrue(json.contains("\"ocr_text\"") || !json.contains("ocrText"));
         assertTrue(!json.contains("\"atchFileNm\""));
+    }
+
+    /** 게시물 헤더형 라벨은 NOTI_BAS 적재용 표준 필드로 매핑돼야 한다. */
+    @Test
+    void mapsNoticeContactMetadata() {
+        RawDocument raw = new RawDocument("고시공고.hwp", "hwp", false);
+        raw.getContent().add(Tables.gridToTable(List.of(
+                List.of("담당부서", "해양수산과"),
+                List.of("담당자", "홍길동"),
+                List.of("전화번호", "033-123-4567"),
+                List.of("고시공고번호", "동해시 고시 제2023-74호"))));
+
+        NoticeRecord record = Mapper.mapToSchema(raw).getRecords().get(0);
+        assertEquals("해양수산과", record.chrgDeptNm());
+        assertEquals("홍길동", record.chrgrNm());
+        assertEquals("033-123-4567", record.telNo());
+        assertEquals("동해시 고시 제2023-74호", record.notiNo());
+    }
+
+    /** 담당 메타가 없는 전화번호는 기존 처분 대상자 연락처 의미를 유지해야 한다. */
+    @Test
+    void keepsStandalonePhoneNumberAsAnAttribute() {
+        RawDocument raw = new RawDocument("허가.hml", "hml", false);
+        raw.getContent().add(Tables.gridToTable(List.of(
+                List.of("전화번호", "010-1234-5678"))));
+
+        NoticeRecord record = Mapper.mapToSchema(raw).getRecords().get(0);
+        assertEquals("010-1234-5678", record.get("CONTACT_NUMBER"));
+        assertNull(record.telNo());
     }
 
     /** raw 문서가 snake_case JSON으로 직렬화·역직렬화 왕복되는지 검증한다. */
