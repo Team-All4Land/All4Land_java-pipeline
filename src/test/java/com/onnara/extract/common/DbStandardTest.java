@@ -85,7 +85,7 @@ class DbStandardTest {
         assertFalse(DbStandard.domains().isEmpty(), "표준도메인이 비어 있습니다");
         assertFalse(DbStandard.terms().isEmpty(), "표준용어가 비어 있습니다");
         assertFalse(DbStandard.codes().isEmpty(), "표준코드가 비어 있습니다");
-        assertEquals(8, DbStandard.tables().size(), "테이블 수가 스키마와 다릅니다");
+        assertEquals(9, DbStandard.tables().size(), "테이블 수가 스키마와 다릅니다");
     }
 
     @Test

@@ -4,7 +4,9 @@
 텍스트·표·이미지를 추출하고, 표준 필드 스키마로 정규화한 뒤 **PostgreSQL DB에 적재**하는
 파이프라인의 **Java 구현** 구조.
 
-파이프라인 흐름·계약(raw JSON, 표준 스키마, DB 2테이블)은 Python 버전과 동일하다.
+파이프라인 흐름·계약(raw JSON, 표준 스키마, DB 적재)은 Python 버전과 동일하다.
+앞단에는 크롤러가 붙어 게시물 목록 엑셀과 첨부파일 폴더를 내놓는다 — 엑셀이 게시물
+계층(`NOTI_BAS`·`CRWL_LOG_DTL`)을, 첨부파일 폴더가 그 아래를 채운다.
 단, **PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 Python CLI 스크립트로
 분리**하고, Java 파이프라인이 **서브프로세스로 실행**한다.
 
@@ -47,6 +49,7 @@ Mapper.mapToSchema (문단 메타·라벨 + 표 해석 결과 적용 + 값 정�
 DbLoader (PostgreSQL JDBC + HikariCP)
         ▼
 PostgreSQL (AGNCY_BAS → NOTI_BAS → ATCH_FILE_DTL → NOTI_ITEM_VAL_DTL) + images/ 폴더
+                    └ 크롤 실행 기록은 CRWL_LOG_DTL (기관 FK 없음)
 ```
 
 핵심 원칙 유지: **판별(detect) → 추출(engine) → 매핑(common) → 적재(db) 4계층 분리**.
@@ -541,9 +544,9 @@ span이 없으면(PDF·OCR) 옆 칸과 내용이 같은 것을 병합으로 간�
 
 ## 6. DB 스키마 (PostgreSQL — resources/db/migration/)
 
-기관 → 게시물 → 첨부파일 → (처분) 항목값의 4계층 EAV 스키마다. `DbLoader`가 PostgreSQL
-JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
-(`resources/db/standard_terms.json`)에 맞춰 표준도메인과 7테이블을 세운다. 스키마를 고칠
+기관 → 게시물 → 첨부파일 → (처분) 항목값의 4계층 EAV 스키마이고, 옆에 크롤 실행 기록이
+하나 붙는다. `DbLoader`가 PostgreSQL JDBC 드라이버로 적재하고, `V1__init.sql` 하나가
+DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 20개와 9테이블을 세운다. 스키마를 고칠
 때는 파일을 얹지 않고 `V1`을 고친 뒤 DB를 다시 만든다(README "개발 DB 초기화").
 
 **ERD와 컬럼별 설명은 [README의 데이터베이스 스키마 절](README.md#데이터베이스-스키마-postgresql)에
@@ -568,15 +571,47 @@ JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**고시공고게시물** `NOTI_BAS` — 게시물. 크롤링 대상이 첨부파일뿐이라 게시물 자체의 정보는 없고 같은 게시물의 첨부를 묶는 키로만 쓴다
+**고시공고게시물** `NOTI_BAS` — 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
-| 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK
+| 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK · 엑셀의 번호
 | 기관일련번호 | `AGNCY_SN` | `D_SN` |
 | 게시상태코드 | `BBS_STTS_CD` | `D_CD` |
+| 원문키내용 | `SRC_KEY_CTNT` | `D_CTNT` |
+| 원문키해시 | `SRC_KEY_HASH` | `D_HASH` | UNIQUE · 중복 수집 차단
+| 게시물URL | `BBS_URL` | `D_URL` |
+| 게시물제목 | `BBS_TTL` | `D_TTL` |
+| 크롤종류코드 | `CRWL_KND_CD` | `D_CD` |
+| 담당부서명 | `CHRG_DEPT_NM` | `D_NM` |
+| 담당자명 | `CHRG_PSN_NM` | `D_NM` |
+| 전화번호 | `TEL_NO` | `D_NO` |
+| 고시번호 | `NOTI_NO` | `D_NO` | 게시판이 표기한 값
+| 고시일자 | `NOTI_DT` | `D_DT` | 게시판이 표기한 값
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
+
+크롤러가 준 컬럼에는 `NOT NULL`이 없다 — 크롤 산출물이 아닌 파일은 음수 `NOTI_SN`으로
+같은 테이블에 들어오고 그 행에는 원문키도 URL도 없다.
+
+**크롤로그** `CRWL_LOG_DTL` — 크롤 실행 1건의 완료·실패 기록
+
+| 논리명 | 물리명 | 도메인 | |
+|---|---|---|---|
+| 크롤로그일련번호 | `CRWL_LOG_SN` | `D_SN` | PK
+| 크롤종류코드 | `CRWL_KND_CD` | `D_CD` |
+| 크롤상태코드 | `CRWL_STTS_CD` | `D_CD` |
+| 크롤단계코드 | `CRWL_STEP_CD` | `D_CD` |
+| 기관일련번호 | `AGNCY_SN` | `D_SN` | FK 아님
+| 기관명 | `AGNCY_NM` | `D_NM` |
+| 게시물URL | `BBS_URL` | `D_URL` |
+| 실패메시지내용 | `FAIL_MSG_CTNT` | `D_CTNT` |
+| 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
+| 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
+
+`AGNCY_BAS`로 가는 FK를 두지 않는 것이 이 테이블의 전부다. 로그를 남기는 이유가 정확히
+"그 기관에서 아무것도 못 건졌다"인데, FK가 있으면 기관 행이 없는 실패 로그가 거부된다 —
+남겨야 할 바로 그 행이 사라진다. 그래서 `AGNCY_NM`을 함께 담아 행이 스스로를 설명하게 둔다.
 
 **공고종류** `NOTI_KND_TC` — 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다
 

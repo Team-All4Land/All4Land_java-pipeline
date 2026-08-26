@@ -8,10 +8,10 @@
 |---|---|
 | **하는 일** | 고시문 → 텍스트·표·이미지 추출 → 표준 스키마 정규화 → PostgreSQL 적재 |
 | **입력** | HWP 5.0 · 한글 3.0 · HWPX · HML · PDF — 네이티브·스캔본 모두 |
-| **산출물** | `*.raw.json` · `*.tables.json` · `*.schema.json` · PostgreSQL 8테이블 · `images/` |
+| **산출물** | `*.raw.json` · `*.tables.json` · `*.schema.json` · PostgreSQL 9테이블 · `images/` |
 | **스택** | JDK 17 · Maven · picocli · hwplib / hwpxlib / PDFBox · HikariCP + Flyway · PaddleOCR-VL(Python 서브프로세스) |
 | **핵심 원칙** | **판별(detect) → 추출(engine) → 매핑(common) → 적재(db)** 4계층 분리 |
-| **DB** | PostgreSQL — 표준도메인 18개 + 8테이블. Flyway `V1__init.sql` 하나가 세웁니다 |
+| **DB** | PostgreSQL — 표준도메인 20개 + 9테이블. Flyway `V1__init.sql` 하나가 세웁니다 |
 
 PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 스캔본 처리만 Python CLI
 스크립트(`ocr-cli/`)에 맡기고, Java 파이프라인이 **서브프로세스로 실행**합니다.
@@ -22,7 +22,7 @@ PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 스캔본 처리만
 |---|---|
 | **시작하기** | [빠른 시작](#빠른-시작) · [전체 흐름](#전체-흐름) · [디렉터리 구조](#디렉터리-구조) · [지원 형식](#지원-형식) |
 | **사용법** | [CLI 사용법](#cli-사용법) · [설정 — `application.properties` + `.env`](#설정-applicationproperties--env) |
-| **데이터** | [데이터베이스 스키마 (ERD)](#데이터베이스-스키마-postgresql) · [입력 폴더 규약](#입력-폴더-규약-기관게시판) · [매핑 정교화](#매핑-정교화--표-해석과-동의어-사전) |
+| **데이터** | [데이터베이스 스키마 (ERD)](#데이터베이스-스키마-postgresql) · [크롤러 → 파이프라인](#크롤러--파이프라인) · [입력 폴더 규약](#입력-폴더-규약-기관게시판) · [매핑 정교화](#매핑-정교화--표-해석과-동의어-사전) |
 | **운영** | [스캔본 OCR](#스캔본-ocr--paddleocr-vl-cli-ocr-cli) · [실패 사유 읽기](#실패-사유-읽기) · [적재 제외(안내문류)](#긴-문서는-적재에서-뺀다-안내문류-차단) · [진단과 검수](#진단과-검수) |
 | **배경·확장** | [설계 근거](#설계-근거--왜-이렇게-정했는가) · [테스트](#테스트) · [새 형식·엔진 통합 절차](#새-형식엔진-통합-절차) · [관련 문서](#관련-문서) |
 
@@ -270,7 +270,7 @@ MAP_MAX_BODY_CHARS=5000            # 안내문류 적재 제외 임계치 (0이�
 ## 데이터베이스 스키마 (PostgreSQL)
 
 Flyway 마이그레이션 `V1__init.sql` 하나가 [DB 표준 사전](docs/DB_STANDARD.md)에 맞춰
-표준도메인 18개와 8테이블을 만듭니다. 스키마를 고칠 때도 파일을 얹지 않고 이 파일을 고친 뒤
+표준도메인 20개와 9테이블을 만듭니다. 스키마를 고칠 때도 파일을 얹지 않고 이 파일을 고친 뒤
 DB를 다시 만듭니다([개발 DB 초기화](#개발-db-초기화)).
 
 **ERD는 논리명과 물리명을 함께 적습니다.** 물리명은 영문 약어 조합이라 한눈에 뜻이 잡히지
@@ -291,6 +291,7 @@ erDiagram
     NOTI_KND_TC       ||--o{ ATCH_FILE_DTL     : "분류"
     NOTI_ITEM_TC      ||--o{ NOTI_ITEM_VAL_DTL : "정의"
     ATCH_FILE_DTL     ||--o{ NOTI_LBL_VAL_DTL  : "보유"
+    AGNCY_BAS         |o..o{ CRWL_LOG_DTL      : "크롤기록"
 
     AGNCY_BAS["기관 · AGNCY_BAS"] {
         D_SN   AGNCY_SN     PK "기관일련번호"
@@ -300,11 +301,33 @@ erDiagram
         D_DTM  LAST_CHG_DTM    "최종변경일시"
     }
     NOTI_BAS["고시공고게시물 · NOTI_BAS"] {
-        D_SN   NOTI_SN      PK "고시공고일련번호 · 크롤 순번"
+        D_SN   NOTI_SN      PK "고시공고일련번호 · 크롤러 게시물목록 엑셀의 번호"
         D_SN   AGNCY_SN     FK "기관일련번호"
         D_CD   BBS_STTS_CD     "게시상태코드 · POST 게시중 / CLSD 게시완료"
+        D_CTNT SRC_KEY_CTNT    "원문키내용 · 지자체 홈페이지가 게시물을 식별하는 키 원문"
+        D_HASH SRC_KEY_HASH UK "원문키해시 · 원문키의 SHA-256, 중복 수집 차단"
+        D_URL  BBS_URL         "게시물URL · 고시공고 상세 페이지"
+        D_TTL  BBS_TTL         "게시물제목 · 게시판 목록의 제목"
+        D_CD   CRWL_KND_CD     "크롤종류코드 · SAMPLE 표본 / FULL_CRAWL 전수 / DAILY_NEW 일일신규"
+        D_NM   CHRG_DEPT_NM    "담당부서명"
+        D_NM   CHRG_PSN_NM     "담당자명"
+        D_NO   TEL_NO          "전화번호"
+        D_NO   NOTI_NO         "고시번호 · 게시판이 표기한 값"
+        D_DT   NOTI_DT         "고시일자 · 게시판이 표기한 값"
         D_DTM  FRST_REG_DTM    "최초등록일시"
         D_DTM  LAST_CHG_DTM    "최종변경일시"
+    }
+    CRWL_LOG_DTL["크롤로그 · CRWL_LOG_DTL"] {
+        D_SN   CRWL_LOG_SN   PK "크롤로그일련번호"
+        D_CD   CRWL_KND_CD      "크롤종류코드 · SAMPLE / FULL_CRAWL / DAILY_NEW"
+        D_CD   CRWL_STTS_CD     "크롤상태코드 · OK 수집완료 / FAIL 실패"
+        D_CD   CRWL_STEP_CD     "크롤단계코드 · 넘어진 단계, 완료 행은 비어 있음"
+        D_SN   AGNCY_SN         "기관일련번호 · FK 아님"
+        D_NM   AGNCY_NM         "기관명"
+        D_URL  BBS_URL          "게시물URL · 실패한 요청 주소"
+        D_CTNT FAIL_MSG_CTNT    "실패메시지내용 · 실패 원인 또는 완료 메시지"
+        D_DTM  FRST_REG_DTM     "최초등록일시"
+        D_DTM  LAST_CHG_DTM     "최종변경일시"
     }
     ATCH_FILE_DTL["첨부파일 · ATCH_FILE_DTL"] {
         D_SN   NOTI_SN            PK,FK "고시공고일련번호"
@@ -320,8 +343,8 @@ erDiagram
         D_YN   SCAN_YN                  "스캔여부"
         D_NM   EXTC_ENGN_NM             "추출엔진명"
         D_CD   NOTI_KND_CD        FK    "공고종류코드"
-        D_NO   NOTI_NO                  "고시번호 · 본문의 고시 제2026-47호"
-        D_DT   NOTI_DT                  "고시일자"
+        D_NO   NOTI_NO                  "고시번호 · 문서 본문에서 추출한 고시 제2026-47호"
+        D_DT   NOTI_DT                  "고시일자 · 문서 본문에서 추출한 값"
         D_TTL  NOTI_TTL                 "고시제목"
         D_DTM  FRST_REG_DTM             "최초등록일시"
         D_DTM  LAST_CHG_DTM             "최종변경일시"
@@ -375,7 +398,8 @@ erDiagram
 | 논리명 | 물리명 | 무엇의 단위인가 |
 |---|---|---|
 | 기관 | `AGNCY_BAS` | 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다 |
-| 고시공고게시물 | `NOTI_BAS` | 게시물. 크롤링 대상이 첨부파일뿐이라 게시물 자체의 정보는 없고 같은 게시물의 첨부를 묶는 키로만 쓴다 |
+| 고시공고게시물 | `NOTI_BAS` | 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다 |
+| 크롤로그 | `CRWL_LOG_DTL` | 크롤 실행 1건의 완료·실패 기록. "이 기관 게시물이 왜 하나도 없나"를 DB에서 설명하는 유일한 자리다 — 기관 FK를 두지 않는 것이 이 테이블의 전부다 |
 | 공고종류 | `NOTI_KND_TC` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
 | 공고항목 | `NOTI_ITEM_TC` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다 |
 | 첨부파일 | `ATCH_FILE_DTL` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
@@ -407,6 +431,12 @@ erDiagram
 - 사전 동기화(`ReferenceSync`)가 적재보다 **먼저** 돕니다 — `NOTI_ITEM_VAL_DTL`이
   `NOTI_ITEM_TC`을 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패합니다.
 - **기관도 첨부보다 먼저** 넣습니다 — `NOTI_BAS.AGNCY_SN`가 FK라 같은 이유로 깨집니다.
+- **같은 게시물을 두 번 담지 않습니다** — `NOTI_BAS.SRC_KEY_HASH`가 UNIQUE입니다.
+  크롤 산출물이 아닌 행은 이 값이 NULL이고, PostgreSQL의 UNIQUE는 NULL을 서로 다른
+  값으로 보므로 음수 `NOTI_SN` 행이 여럿 있어도 부딪히지 않습니다.
+- **크롤로그(`CRWL_LOG_DTL`)에는 기관 FK가 없습니다.** 있으면 `AGNCY_BAS`에 행이 없는
+  기관의 실패 로그가 FK 위반으로 거부되는데, 남겨야 할 것이 바로 그 행입니다
+  (`NOTI_LBL_VAL_DTL`이 `NOTI_ITEM_TC` FK를 두지 않는 것과 같은 판단입니다).
 
 미수집 첨부는 컬럼이 아니라 **첨부순번 결번**으로 잡습니다:
 
@@ -438,6 +468,21 @@ SELECT A.AGNCY_NM FROM AGNCY_BAS A
 
 -- 기관이 안 붙은 게시물 = 입력 루트 직속이거나 폴더명 규약 위반
 SELECT count(*) FROM NOTI_BAS WHERE AGNCY_SN IS NULL;
+```
+
+"긁긴 했는데 아무것도 못 건진 기관"과 "아예 못 긁은 기관"은 크롤로그로 갈립니다 —
+첨부 테이블만 봐서는 둘이 똑같이 0건으로 보입니다:
+
+```sql
+-- 어느 단계에서 몇 번 넘어졌나
+SELECT AGNCY_NM, CRWL_STEP_CD, count(*) AS 실패
+  FROM CRWL_LOG_DTL WHERE CRWL_STTS_CD = 'FAIL'
+ GROUP BY 1, 2 ORDER BY 3 DESC;
+
+-- 크롤은 완료됐는데 게시물이 한 건도 안 생긴 기관
+SELECT DISTINCT L.AGNCY_NM
+  FROM CRWL_LOG_DTL L LEFT JOIN NOTI_BAS N USING (AGNCY_SN)
+ WHERE L.CRWL_STTS_CD = 'OK' AND N.NOTI_SN IS NULL;
 ```
 
 ### 개발 DB 초기화
@@ -498,10 +543,52 @@ psql -U postgres -c 'DROP DATABASE extract;' \
 > Migration checksum mismatch for migration version 1
 > ```
 
+## 크롤러 → 파이프라인
+
+파이프라인 앞에 크롤러가 붙습니다. 크롤러는 스케줄에 따라 돌면서 **이미 긁은 게시물은
+건너뛰고 새 게시물만** 산출물로 내놓으며, 산출물은 두 가지입니다.
+
+| 산출물 | 무엇이 들어 있나 | 어느 테이블로 |
+|---|---|---|
+| **게시물 목록 엑셀** | 게시물 한 줄 — 번호·기관·제목·URL·담당자·고시번호·고시일자·원문키 | `AGNCY_BAS` · `NOTI_BAS` · `CRWL_LOG_DTL` |
+| **첨부파일 폴더** | 게시물에 딸린 실제 파일 | `ATCH_FILE_DTL` 이하 (아래 폴더 규약 그대로) |
+
+**엑셀의 번호가 곧 `NOTI_BAS.NOTI_SN`입니다.** 실행마다 1로 되돌아가지 않고 마지막에
+쓴 번호 뒤로 이어지므로, 기관을 넘어 하나의 크롤 시퀀스가 되고 첨부파일명 앞자리와도
+같은 값입니다.
+
+**중복 수집은 `SRC_KEY_HASH`가 막습니다.** 지자체 홈페이지가 게시물을 식별하는 키
+(`[기관번호:게시물 식별 방식:게시물 번호]`)를 SHA-256으로 줄인 값이고, `NOTI_BAS`에
+UNIQUE로 걸려 있어 같은 게시물이 두 번 들어오면 적재가 거부됩니다. 해시 전 원문도
+`SRC_KEY_CTNT`에 함께 담습니다 — 해시는 되돌릴 수 없어서, 중복 오판이 났을 때
+"이 행이 어느 게시물인가"를 댈 근거가 그것뿐입니다.
+
+> **해시는 소문자 16진 64자여야 합니다.** `D_HASH` 도메인이 `CHECK (VALUE ~ '^[0-9a-f]{64}$')`로
+> 형태를 강제합니다. `CHAR(64)`만으로는 부족합니다 — `character(n)`은 짧은 값을 거부하지 않고
+> 공백으로 채워 넣어서, **잘린 해시가 조용히 들어옵니다.** 소문자로 못 박은 것도 일부러입니다:
+> 같은 해시가 대소문자 두 벌로 저장되면 UNIQUE가 중복을 못 잡습니다.
+
+**크롤러가 준 컬럼에는 `NOT NULL`을 걸지 않았습니다.** 크롤 산출물이 아닌 파일
+(수동 수집분, `samples/`)은 음수 `NOTI_SN`을 발급받아 같은 테이블에 들어오는데,
+그 행에는 원문키도 URL도 없습니다. `NOT NULL`을 걸면 수동 수집분 적재가 통째로
+막힙니다. PostgreSQL의 UNIQUE는 NULL을 서로 다른 값으로 보므로, 그런 행이 여럿
+있어도 `SRC_KEY_HASH` UNIQUE와 부딪히지 않습니다.
+
+**고시번호·고시일자는 두 곳에 있고 근거가 다릅니다.** `NOTI_BAS` 쪽은 게시판이 목록에
+표기한 값, `ATCH_FILE_DTL` 쪽은 문서 본문에서 추출한 값입니다. 이름을 일부러 같게 둔
+것이며, **두 값이 어긋난 행이 곧 추출 검증 대상**입니다:
+
+```sql
+SELECT N.NOTI_SN, N.NOTI_NO AS 게시판, F.NOTI_NO AS 본문, N.BBS_URL
+  FROM NOTI_BAS N JOIN ATCH_FILE_DTL F USING (NOTI_SN)
+ WHERE F.NOTI_NO IS DISTINCT FROM N.NOTI_NO AND N.NOTI_NO IS NOT NULL;
+```
+
 ## 입력 폴더 규약 (기관·게시판)
 
 크롤러는 **기관 게시판 하나당 폴더 하나**를 만들고 그 안에 첨부파일을 떨어뜨립니다.
-첨부파일 안에는 "어디서 긁어 왔는가"가 없으므로, **이 폴더명이 유일한 근거**입니다.
+첨부파일 안에는 "어디서 긁어 왔는가"가 없으므로, 첨부파일만 놓고 보면
+**이 폴더명이 유일한 근거**입니다.
 
 ```
 input/
@@ -528,8 +615,9 @@ input/
 시작하는 파일(전수 1,825건 중 134건)이 첨부순번 `20130409174438859`로 읽힙니다.
 실제 첨부순번은 1~4뿐입니다.
 
-앞자리 순번은 기관을 넘어 하나의 크롤 시퀀스입니다 — 기관마다 연속 블록을 차지하고
-(인천 1~1108, 군산 1109~1660 …) 폴더 간 충돌이 없어 `NOTI_BAS.NOTI_SN`을 전역 PK로 둡니다.
+앞자리 순번은 기관을 넘어 하나의 크롤 시퀀스이고, **크롤러 게시물 목록 엑셀의 번호와
+같은 값**입니다 — 기관마다 연속 블록을 차지하고(인천 1~1108, 군산 1109~1660 …) 폴더 간
+충돌이 없어 `NOTI_BAS.NOTI_SN`을 전역 PK로 둡니다.
 규약에 맞지 않는 파일(수동 수집분, `samples/`)은 **음수** 순번을 발급받아 크롤 순번과
 겹치지 않습니다.
 
@@ -553,7 +641,12 @@ input/
 
 ### 기관번호를 언제 새로 발급하는가
 
-보통은 폴더명 앞 번호가 곧 기관번호입니다. `12_1_목포시청`과 `12_2_목포시청_지난자료`는
+**기관번호의 정의처는 크롤러입니다.** 크롤러가 엑셀에 실어 보낸 기관번호를 그대로
+`AGNCY_BAS.AGNCY_SN`으로 씁니다 — 그래야 크롤러와 DB의 기관번호가 영원히 같습니다.
+아래 폴더명 규칙은 **크롤 산출물이 아닌 파일**(수동 수집분)에만 남는 폴백이며,
+`AgencyRegistry`가 그 경로를 맡습니다.
+
+폴백 경로에서는 폴더명 앞 번호가 곧 기관번호입니다. `12_1_목포시청`과 `12_2_목포시청_지난자료`는
 이름이 같으니 **기관 12 하나**이고 `BBS_STTS_CD`만 갈립니다.
 
 한 번호 아래 기관이 갈리면 그 번호는 아무도 쓰지 않고 최대번호 뒤로 새로 발급합니다:
@@ -977,15 +1070,20 @@ SELECT F.ATCH_FILE_NM, V.ITEM_VAL_CTNT
 
 ### 고시번호와 허가번호는 다른 것입니다
 
-한 고시문에 번호가 둘 나옵니다. 같아 보이지만 다른 값입니다.
+한 고시문에 번호가 둘 나옵니다. 같아 보이지만 다른 값입니다. 크롤러가 붙으면서
+**같은 고시번호를 게시판이 표기한 값**이 하나 더 생겼습니다 — 셋이 사는 자리가 다릅니다.
 
 | | 예 | 어디서 | 어디로 |
 |---|---|---|---|
-| 고시번호 | `고시 제2008-42호` | 본문 문단 `인천지방해양항만청 고시 제2008-42호` | `ATCH_FILE_DTL.NOTI_NO` |
+| 고시번호 (본문) | `고시 제2008-42호` | 본문 문단 `인천지방해양항만청 고시 제2008-42호` | `ATCH_FILE_DTL.NOTI_NO` |
+| 고시번호 (게시판) | `고시 제2008-42호` | 크롤러가 긁은 게시판 목록 칸 | `NOTI_BAS.NOTI_NO` |
 | 허가번호 | `제2008-46호` | 표의 `허가번호` 라벨 행 | `NOTI_ITEM_VAL_DTL` (`NOTI_ITEM_CD='APV_NO'`) |
 
-앞은 이 고시문이 실린 번호이고 뒤는 신청인이 받은 허가의 번호입니다.
-전수에서 **둘이 같은 행은 0 / 1,067**입니다.
+앞의 둘은 이 고시문이 실린 번호를 서로 다른 근거로 읽은 것이고, 마지막은 신청인이 받은
+허가의 번호입니다. 전수에서 **고시번호와 허가번호가 같은 행은 0 / 1,067**입니다.
+
+앞의 둘은 **같은 값이어야 정상이고, 어긋나면 그것이 신호**입니다 — 이름을 일부러 같게 둔
+이유이며, [크롤러 → 파이프라인](#크롤러--파이프라인)에 대조 질의가 있습니다.
 
 무엇이 가르는가 — **위치가 아니라 낱말**입니다. 두 필드의 동의어가 한 낱말도 겹치지 않습니다.
 

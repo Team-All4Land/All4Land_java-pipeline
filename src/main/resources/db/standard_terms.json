@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-22",
+  "version": "2026-08-26",
   "description": "DB 표준화 사전 — 표준단어·표준도메인·표준용어·표준코드. DbStandard가 로드하고 DbStandardDoc이 docs/DB_STANDARD.md로 렌더링하며, DbStandardTest가 실제 DDL과 대조한다.",
   "conventions": {
     "composition": "물리명은 [수식어]+…+[분류어] 조합이다. 마지막 낱말(분류어)이 반드시 도메인을 지시하므로, 분류어만 보고도 타입과 길이를 알 수 있다.",
@@ -18,7 +18,7 @@
 
   "words": [
     { "term": "기관",     "abbr": "AGNCY", "english": "AGENCY",       "role": "modifier" },
-    { "term": "게시판",   "abbr": "BBS",   "english": "BULLETIN BOARD", "role": "modifier" },
+    { "term": "게시판",   "abbr": "BBS",   "english": "BULLETIN BOARD", "role": "modifier", "notes": "게시판뿐 아니라 게시·게시물까지 받는다 — 게시상태코드(BBS_STTS_CD)·게시물제목(BBS_TTL)이 모두 이 낱말이다" },
     { "term": "고시공고", "abbr": "NOTI",  "english": "NOTICE",       "role": "modifier" },
     { "term": "첨부",     "abbr": "ATCH",  "english": "ATTACHMENT",   "role": "modifier" },
     { "term": "파일",     "abbr": "FILE",  "english": "FILE",         "role": "modifier" },
@@ -50,6 +50,14 @@
     { "term": "최종",     "abbr": "LAST",  "english": "LAST",         "role": "modifier" },
     { "term": "등록",     "abbr": "REG",   "english": "REGISTER",     "role": "modifier" },
     { "term": "변경",     "abbr": "CHG",   "english": "CHANGE",       "role": "modifier" },
+    { "term": "원문",     "abbr": "SRC",   "english": "SOURCE",       "role": "modifier", "notes": "지자체 홈페이지가 게시물을 식별하는 원래 키를 가리킨다. 파이프라인이 만들어 낸 번호와 구분하려고 둔 낱말이다" },
+    { "term": "키",       "abbr": "KEY",   "english": "KEY",          "role": "modifier", "notes": "SQL 예약어지만 낱말로는 쓴다 — 예약어 검사는 물리명 전체를 보므로 SRC_KEY_HASH는 통과하고 KEY라는 컬럼만 막힌다" },
+    { "term": "크롤",     "abbr": "CRWL",  "english": "CRAWL",        "role": "modifier" },
+    { "term": "로그",     "abbr": "LOG",   "english": "LOG",          "role": "modifier", "notes": "LOG()는 PostgreSQL 함수지만 낱말로만 쓰고 단독 컬럼명으로 쓰지 않으므로 겹치지 않는다" },
+    { "term": "담당",     "abbr": "CHRG",  "english": "CHARGE",       "role": "modifier" },
+    { "term": "부서",     "abbr": "DEPT",  "english": "DEPARTMENT",   "role": "modifier" },
+    { "term": "사람",     "abbr": "PSN",   "english": "PERSON",       "role": "modifier" },
+    { "term": "전화",     "abbr": "TEL",   "english": "TELEPHONE",    "role": "modifier" },
 
     { "term": "일련번호", "abbr": "SN",    "english": "SERIAL NUMBER", "role": "classifier", "domain": "D_SN" },
     { "term": "번호",     "abbr": "NO",    "english": "NUMBER",        "role": "classifier", "domain": "D_NO" },
@@ -68,7 +76,9 @@
     { "term": "율",       "abbr": "RT",    "english": "RATE",          "role": "classifier", "domain": "D_RT" },
     { "term": "순번",     "abbr": "SEQ",   "english": "SEQUENCE",      "role": "classifier", "domain": "D_SEQ" },
     { "term": "구분",     "abbr": "SE",    "english": "SECTION",       "role": "classifier", "domain": "D_SE" },
-    { "term": "식별자",   "abbr": "ID",    "english": "IDENTIFIER",    "role": "classifier", "domain": "D_ID" }
+    { "term": "식별자",   "abbr": "ID",    "english": "IDENTIFIER",    "role": "classifier", "domain": "D_ID" },
+    { "term": "해시",     "abbr": "HASH",  "english": "HASH",          "role": "classifier", "domain": "D_HASH" },
+    { "term": "URL",      "abbr": "URL",   "english": "UNIFORM RESOURCE LOCATOR", "role": "classifier", "domain": "D_URL" }
   ],
 
   "domains": [
@@ -89,7 +99,9 @@
     { "id": "D_RT",    "term": "율",       "sqlType": "NUMERIC(7,4)",   "description": "예비" },
     { "id": "D_SEQ",   "term": "순번",     "sqlType": "INTEGER",        "description": "예비 — 이 스키마의 순번은 전부 일련번호(SN)로 등록돼 있다" },
     { "id": "D_SE",    "term": "구분",     "sqlType": "VARCHAR(4)",     "description": "예비 — 코드 테이블 없이 두세 값만 가르는 구분값용" },
-    { "id": "D_ID",    "term": "식별자",   "sqlType": "VARCHAR(20)",    "description": "예비 — 사용자·시스템 식별자용" }
+    { "id": "D_ID",    "term": "식별자",   "sqlType": "VARCHAR(20)",    "description": "예비 — 사용자·시스템 식별자용" },
+    { "id": "D_HASH",  "term": "해시",     "sqlType": "CHAR(64)",       "check": "VALUE ~ '^[0-9a-f]{64}$'", "description": "SHA-256 16진 표기 64자. CHAR(64)만으로는 부족해 CHECK을 건다 — character(n)은 짧은 값을 거부하지 않고 공백으로 채워 넣으므로 잘린 해시가 조용히 들어온다. 소문자만 받는 것도 일부러다: 같은 해시가 대소문자 두 벌로 저장되면 UNIQUE가 중복을 못 잡는다" },
+    { "id": "D_URL",   "term": "URL",      "sqlType": "VARCHAR(2000)",  "description": "웹 주소. 경로(D_PATH, VARCHAR(1000))는 파일 시스템 절대경로 전용이라 쓸 수 없다 — URL은 질의문자열·앵커가 붙어 더 길고, 크롤러가 이미 2000으로 잡고 있다" }
   ],
 
   "tableSuffixes": [
@@ -110,9 +122,20 @@
     },
     {
       "logical": "고시공고게시물", "physical": "NOTI_BAS", "suffix": "BAS",
-      "description": "게시물. 크롤링 대상이 첨부파일뿐이라 게시물 자체의 정보는 없고 같은 게시물의 첨부를 묶는 키로만 쓴다",
+      "description": "게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다",
       "primaryKey": ["NOTI_SN"],
-      "columns": ["NOTI_SN", "AGNCY_SN", "BBS_STTS_CD", "FRST_REG_DTM", "LAST_CHG_DTM"]
+      "columns": ["NOTI_SN", "AGNCY_SN", "BBS_STTS_CD",
+                  "SRC_KEY_CTNT", "SRC_KEY_HASH", "BBS_URL", "BBS_TTL", "CRWL_KND_CD",
+                  "CHRG_DEPT_NM", "CHRG_PSN_NM", "TEL_NO", "NOTI_NO", "NOTI_DT",
+                  "FRST_REG_DTM", "LAST_CHG_DTM"]
+    },
+    {
+      "logical": "크롤로그", "physical": "CRWL_LOG_DTL", "suffix": "DTL",
+      "description": "크롤 실행 1건의 완료·실패 기록. 게시물이 하나도 안 생긴 기관을 설명하는 유일한 자리라 기관 FK를 두지 않는다",
+      "primaryKey": ["CRWL_LOG_SN"],
+      "columns": ["CRWL_LOG_SN", "CRWL_KND_CD", "CRWL_STTS_CD", "CRWL_STEP_CD",
+                  "AGNCY_SN", "AGNCY_NM", "BBS_URL", "FAIL_MSG_CTNT",
+                  "FRST_REG_DTM", "LAST_CHG_DTM"]
     },
     {
       "logical": "공고종류", "physical": "NOTI_KND_TC", "suffix": "TC",
@@ -153,11 +176,22 @@
   ],
 
   "terms": [
-    { "logical": "기관일련번호",     "physical": "AGNCY_SN",          "domain": "D_SN",   "description": "입력 폴더명 앞 번호. AgencyRegistry가 폴더 집합 전체를 보고 결정론적으로 발급한다" },
-    { "logical": "기관명",           "physical": "AGNCY_NM",          "domain": "D_NM",   "description": "수집처 기관명 — 입력 폴더명에서 온다" },
+    { "logical": "기관일련번호",     "physical": "AGNCY_SN",          "domain": "D_SN",   "description": "크롤러가 발급한 기관번호가 정의처다. 크롤 산출물이 아닌 파일은 입력 폴더명 앞 번호로 AgencyRegistry가 폴더 집합 전체를 보고 결정론적으로 발급한다" },
+    { "logical": "기관명",           "physical": "AGNCY_NM",          "domain": "D_NM",   "description": "수집처 기관명. 크롤러 엑셀에서 오고, 크롤 산출물이 아니면 입력 폴더명에서 온다. 크롤로그에도 담는 이유는 기관 행이 아예 없을 수 있어서다" },
     { "logical": "기관종류코드",     "physical": "AGNCY_KND_CD",      "domain": "D_CD",   "code": "CD_AGNCY_KND", "description": "GZT는 기관 종류가 아니라 수집 경로다 — 같은 부처를 자체 게시판과 전자관보 양쪽에서 긁으므로 이름이 같은 두 행을 이 값으로 가린다" },
-    { "logical": "고시공고일련번호", "physical": "NOTI_SN",           "domain": "D_SN",   "description": "크롤 일련번호. 첨부파일명 앞자리다. 문서 본문의 고시번호(NOTI_NO)와는 다른 것이다" },
+    { "logical": "고시공고일련번호", "physical": "NOTI_SN",           "domain": "D_SN",   "description": "크롤 일련번호 = 크롤러 게시물 목록 엑셀의 번호이며 첨부파일명 앞자리다. 실행마다 1로 되돌아가지 않고 마지막 번호 뒤로 이어진다. 문서 본문의 고시번호(NOTI_NO)와는 다른 것이다" },
     { "logical": "게시상태코드",     "physical": "BBS_STTS_CD",       "domain": "D_CD",   "code": "CD_BBS_STTS", "description": "폴더명 꼬리표로 가른다. 같은 기관이 게시판을 둘 운영하면 기관은 하나고 이 값만 갈린다" },
+    { "logical": "원문키내용",       "physical": "SRC_KEY_CTNT",      "domain": "D_CTNT", "description": "지자체 홈페이지가 게시물을 식별하는 사람이 읽는 키 원문 — [기관번호:게시물 식별 방식:게시물 번호]. 해시는 되돌릴 수 없으므로 중복 오판을 따질 때 볼 것은 이 컬럼뿐이다" },
+    { "logical": "원문키해시",       "physical": "SRC_KEY_HASH",      "domain": "D_HASH", "description": "원문키의 SHA-256 소문자 16진 64자. 같은 게시물을 두 번 담지 않게 막는 열쇠이며 UNIQUE다. 크롤 산출물이 아닌 행은 NULL이고, PostgreSQL의 UNIQUE는 NULL을 서로 다른 값으로 보므로 그런 행이 여럿 공존한다" },
+    { "logical": "게시물URL",        "physical": "BBS_URL",           "domain": "D_URL",  "description": "고시공고 상세 페이지 주소. 첨부파일만 긁던 시절에는 알 길이 없던 값이고, 추출 결과를 원본과 대조할 때 유일한 통로다" },
+    { "logical": "게시물제목",       "physical": "BBS_TTL",           "domain": "D_TTL",  "description": "게시판 목록에 걸린 제목. 문서 본문의 고시제목(NOTI_TTL)과는 다른 것이다 — 첨부가 없거나 추출에 실패한 게시물도 이 값은 남는다" },
+    { "logical": "크롤종류코드",     "physical": "CRWL_KND_CD",       "domain": "D_CD",   "code": "CD_CRWL_KND", "description": "이 행을 만들어 낸 크롤러의 갈래. 전수 수집분과 일일 증분분을 갈라 세는 축이다" },
+    { "logical": "담당부서명",       "physical": "CHRG_DEPT_NM",      "domain": "D_NM",   "description": "게시판이 표기한 담당부서" },
+    { "logical": "담당자명",         "physical": "CHRG_PSN_NM",       "domain": "D_NM",   "description": "게시판이 표기한 담당자 이름" },
+    { "logical": "전화번호",         "physical": "TEL_NO",            "domain": "D_NO",   "description": "담당자 연락처. 크롤러는 VARCHAR(100)으로 받지만 번호(D_NO)는 50자다 — 내선·복수번호가 섞여 넘치면 도메인 폭을 올린다" },
+    { "logical": "크롤로그일련번호", "physical": "CRWL_LOG_SN",       "domain": "D_SN",   "description": "크롤러가 발급한 실행 로그 순번을 그대로 받는다. 크롤러 쪽은 BIGSERIAL이지만 실행당 수십~수백 행 규모라 일련번호(INTEGER)로 넘칠 일이 없다 — 여기서 BIGINT 도메인을 새로 만들면 분류어 SN이 도메인 둘을 가리켜 표준이 무너진다" },
+    { "logical": "크롤상태코드",     "physical": "CRWL_STTS_CD",      "domain": "D_CD",   "code": "CD_CRWL_STTS", "description": "로그 한 줄이 완료 표시인지 실패인지. 처리상태코드(PROC_STTS_CD)와 같은 자리를 크롤 쪽에서 맡는다" },
+    { "logical": "크롤단계코드",     "physical": "CRWL_STEP_CD",      "domain": "D_CD",   "code": "CD_CRWL_STEP", "description": "실패한 크롤 단계. 완료 행은 비어 있다" },
     { "logical": "공고종류코드",     "physical": "NOTI_KND_CD",       "domain": "D_CD",   "code": "CD_NOTI_KND", "description": "{상위분류}_{행위} 조합. 코드만 보고도 계열을 알 수 있어야 필터가 쉽다" },
     { "logical": "공고종류명",       "physical": "NOTI_KND_NM",       "domain": "D_NM",   "description": "공고종류의 한글 이름" },
     { "logical": "상위공고종류명",   "physical": "HRNK_NOTI_KND_NM",  "domain": "D_NM",   "description": "점용·사용 / 실시계획 / 매립 / 점용료·사용료 / 혼합 / 기타. UPPER_로 시작하면 SQL 함수명과 겹쳐 HRNK_를 쓴다" },
@@ -177,8 +211,8 @@
     { "logical": "실제파일확장자명", "physical": "ACTL_FILE_EXTN_NM", "domain": "D_NM",   "code": "CD_FILE_EXTN", "description": "매직바이트로 판정한 실제 형식. FILE_EXTN_NM과 다른 행이 곧 확장자가 어긋난 파일 목록이다" },
     { "logical": "스캔여부",         "physical": "SCAN_YN",           "domain": "D_YN",   "description": "본문이 텍스트가 아니라 이미지인 스캔본 여부" },
     { "logical": "추출엔진명",       "physical": "EXTC_ENGN_NM",      "domain": "D_NM",   "description": "본문을 읽어 낸 엔진" },
-    { "logical": "고시번호",         "physical": "NOTI_NO",           "domain": "D_NO",   "description": "문서 본문의 고시번호(\"고시 제2026-47호\"). 게시물 일련번호와도, 처분받은 허가번호와도 다른 것이다" },
-    { "logical": "고시일자",         "physical": "NOTI_DT",           "domain": "D_DT",   "description": "고시문에 적힌 고시 날짜" },
+    { "logical": "고시번호",         "physical": "NOTI_NO",           "domain": "D_NO",   "description": "\"고시 제2026-47호\". 근거는 테이블이 가른다 — NOTI_BAS는 게시판이 목록에 표기한 값, ATCH_FILE_DTL은 문서 본문에서 추출한 값이고, 두 값이 어긋난 행이 곧 추출 검증 대상이다. 게시물 일련번호와도, 처분받은 허가번호와도 다른 것이다" },
+    { "logical": "고시일자",         "physical": "NOTI_DT",           "domain": "D_DT",   "description": "고시 날짜. 고시번호와 같이 NOTI_BAS는 게시판 표기, ATCH_FILE_DTL은 문서 본문 추출값이다" },
     { "logical": "고시제목",         "physical": "NOTI_TTL",          "domain": "D_TTL",  "description": "고시문 제목. 공고종류 판정의 입력이다" },
     { "logical": "이미지일련번호",   "physical": "IMG_SN",            "domain": "D_SN",   "description": "한 첨부 안에서의 이미지 순번" },
     { "logical": "이미지캡션내용",   "physical": "IMG_CPTN_CTNT",     "domain": "D_CTNT", "description": "그림 아래 캡션 원문" },
@@ -209,6 +243,30 @@
         { "code": "POST", "name": "게시중" },
         { "code": "CLSD", "name": "게시완료" }
       ]
+    },
+    {
+      "group": "CD_CRWL_KND", "name": "크롤종류코드", "columns": ["NOTI_BAS.CRWL_KND_CD", "CRWL_LOG_DTL.CRWL_KND_CD"],
+      "description": "크롤러의 CRAWL_MODE가 정의처다. 이미 대문자 영문이라 값을 그대로 등재한다 — 여기서 짧은 약어로 번역하면 크롤러와 DB가 어긋난다",
+      "values": [
+        { "code": "SAMPLE",     "name": "표본 수집" },
+        { "code": "FULL_CRAWL", "name": "전수 수집" },
+        { "code": "DAILY_NEW",  "name": "일일 신규 수집" }
+      ]
+    },
+    {
+      "group": "CD_CRWL_STTS", "name": "크롤상태코드", "columns": ["CRWL_LOG_DTL.CRWL_STTS_CD"],
+      "description": "크롤 로그 한 줄의 결과. 완료 표시도 행으로 남긴다 — 실패만 적재하면 \"돌긴 돌았는데 아무것도 못 건진 실행\"과 \"아예 안 돈 실행\"이 구분되지 않는다",
+      "values": [
+        { "code": "OK",   "name": "수집 완료" },
+        { "code": "FAIL", "name": "실패" }
+      ]
+    },
+    {
+      "group": "CD_CRWL_STEP", "name": "크롤단계코드", "columns": ["CRWL_LOG_DTL.CRWL_STEP_CD"],
+      "managedBy": "크롤러 실패단계 정의",
+      "enforced": false,
+      "description": "크롤러가 넘어진 단계. 허용값은 크롤러의 실패단계 정의가 정의처이므로 확인 전까지 비워 둔다 — 여기에 지어낸 값을 채우면 크롤러가 실제로 쓰는 값과 조용히 어긋난다",
+      "values": []
     },
     {
       "group": "CD_PROC_STTS", "name": "처리상태코드", "columns": ["ATCH_FILE_DTL.PROC_STTS_CD"],

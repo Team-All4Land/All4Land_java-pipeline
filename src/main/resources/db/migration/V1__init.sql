@@ -1,11 +1,12 @@
--- 공유수면 고시공고 스키마 — 표준도메인 18 + 8 엔터티.
+-- 공유수면 고시공고 스키마 — 표준도메인 20 + 9 엔터티.
 --
 -- 이름은 DB 표준 사전(src/main/resources/db/standard_terms.json)이 정한다. 사전을 고치지 않고
 -- 여기에 컬럼을 보태면 DbStandardTest가 막는다 — 사전과 이 파일을 테이블 단위로 대조한다.
 --
 -- 계층: 기관 → 게시물 → 첨부파일 → (처분 레코드) 항목값
---   AGNCY_BAS          기관 게시판. 입력 폴더명에서 만든다
---   NOTI_BAS           게시물 = 크롤 순번. 같은 게시물의 첨부를 묶는 키
+--   AGNCY_BAS          기관 게시판. 크롤러가 발급한 기관번호가 정의처다
+--   NOTI_BAS           게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이다
+--   CRWL_LOG_DTL       크롤 실행 1건의 완료·실패 기록
 --   NOTI_KND_TC        공고종류 56종
 --   NOTI_ITEM_TC       공고항목 40종. synonyms.json이 정의처이고 ReferenceSync가 동기화한다
 --   ATCH_FILE_DTL      파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
@@ -30,6 +31,15 @@
 -- 방어하게 되고, init 마이그레이션은 Flyway가 빈 스키마에 한 번만 돌린다(실패하면 트랜잭션
 -- 통째로 롤백된다). 객체가 남아 있다면 스키마를 안 지운 것이므로, 조용히 건너뛰는 것보다
 -- 죽는 편이 낫다. 다시 세우는 절차는 README "개발 DB 초기화"에 있다.
+--
+-- 파이프라인 앞에 크롤러가 붙는다. 크롤러는 게시물 목록 엑셀과 첨부파일 폴더 두 가지를 내놓고,
+-- 엑셀이 NOTI_BAS·CRWL_LOG_DTL을, 첨부파일 폴더가 ATCH_FILE_DTL 이하를 채운다. 엑셀의 번호가
+-- 곧 NOTI_SN이며 실행마다 1로 되돌아가지 않고 마지막 번호 뒤로 이어진다.
+--
+-- 크롤러가 준 컬럼에 NOT NULL을 걸지 않는다. 크롤 산출물이 아닌 파일(수동 수집분, samples/)은
+-- 음수 NOTI_SN을 발급받아 같은 테이블에 들어오는데, 그 행에는 원문키도 URL도 없다. NOT NULL을
+-- 걸면 수동 수집분 적재가 통째로 막히므로, 중복은 SRC_KEY_HASH의 UNIQUE로만 막는다 —
+-- PostgreSQL의 UNIQUE는 NULL을 서로 다른 값으로 보므로 음수 행이 여럿 공존한다.
 --
 -- 값 컬럼을 두지 않고 전부 EAV로 담는 이유:
 --   ① 종류마다 등장하는 항목 집합이 다르고 극단적으로 성기다. 전역 출현율이 60%를 넘는
@@ -61,6 +71,8 @@ CREATE DOMAIN D_RT   AS NUMERIC(7,4);
 CREATE DOMAIN D_SEQ  AS INTEGER;
 CREATE DOMAIN D_SE   AS VARCHAR(4);
 CREATE DOMAIN D_ID   AS VARCHAR(20);
+CREATE DOMAIN D_HASH AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}$');
+CREATE DOMAIN D_URL  AS VARCHAR(2000);
 
 COMMENT ON DOMAIN D_SN   IS '일련번호 — 숫자 순번. 기관·게시물·첨부·이미지·처분·반복이 모두 이 도메인이다';
 COMMENT ON DOMAIN D_NO   IS '번호 — 문자 번호. "고시 제2026-47호"처럼 접두어가 붙은 원문 표기를 담는다';
@@ -72,6 +84,8 @@ COMMENT ON DOMAIN D_DTM  IS '일시 — 타임존 포함. 감사 컬럼이 이 �
 COMMENT ON DOMAIN D_YN   IS '여부 — BOOLEAN을 쓰지 않는다. 분류어 YN이 지시하는 도메인이 CHAR(1)인데 실제 타입이 BOOLEAN이면 "분류어만 보고 타입을 안다"는 규칙이 무너진다';
 COMMENT ON DOMAIN D_CTNT IS '내용 — 길이를 예측할 수 없는 자유 텍스트';
 COMMENT ON DOMAIN D_PATH IS '경로 — 파일 시스템 절대경로';
+COMMENT ON DOMAIN D_HASH IS '해시 — SHA-256 16진 표기 64자. CHAR(64)만으로는 부족해 CHECK을 건다: character(n)은 짧은 값을 거부하지 않고 공백으로 채워 넣으므로, 잘린 해시가 조용히 들어온다. 소문자만 받는 것도 일부러다 — 같은 해시가 대소문자 두 벌로 저장되면 SRC_KEY_HASH의 UNIQUE가 중복을 못 잡는다. 적재하는 쪽이 소문자로 맞춰 넣어야 한다';
+COMMENT ON DOMAIN D_URL  IS 'URL — 웹 주소. 경로(D_PATH)는 파일 시스템 절대경로 전용이라 쓸 수 없다. URL은 질의문자열·앵커가 붙어 더 길다';
 
 -- ---------------------------------------------------------------------------
 -- 2. 테이블
@@ -97,28 +111,106 @@ COMMENT ON COLUMN AGNCY_BAS.AGNCY_KND_CD IS
     '기관종류코드(CD_AGNCY_KND): MOF 지방해양수산청 / LOCL 지방자치단체 / CNTL 중앙행정기관 / GZT 전자관보. GZT는 기관 종류가 아니라 수집 경로다 — 같은 부처를 자체 게시판(CNTL)과 전자관보 양쪽에서 긁으므로, 이름이 같은 두 행을 이 값으로 가린다';
 
 CREATE TABLE NOTI_BAS (
-    NOTI_SN       D_SN  NOT NULL,
+    NOTI_SN       D_SN   NOT NULL,
     AGNCY_SN      D_SN,
     BBS_STTS_CD   D_CD,
-    FRST_REG_DTM  D_DTM NOT NULL DEFAULT now(),
-    LAST_CHG_DTM  D_DTM NOT NULL DEFAULT now(),
+    SRC_KEY_CTNT  D_CTNT,
+    SRC_KEY_HASH  D_HASH,
+    BBS_URL       D_URL,
+    BBS_TTL       D_TTL,
+    CRWL_KND_CD   D_CD,
+    CHRG_DEPT_NM  D_NM,
+    CHRG_PSN_NM   D_NM,
+    TEL_NO        D_NO,
+    NOTI_NO       D_NO,
+    NOTI_DT       D_DT,
+    FRST_REG_DTM  D_DTM  NOT NULL DEFAULT now(),
+    LAST_CHG_DTM  D_DTM  NOT NULL DEFAULT now(),
     CONSTRAINT PK_NOTI_BAS PRIMARY KEY (NOTI_SN),
+    CONSTRAINT UK_NOTI_BAS__SRC_KEY_HASH UNIQUE (SRC_KEY_HASH),
     CONSTRAINT FK_NOTI_BAS__AGNCY_BAS FOREIGN KEY (AGNCY_SN)
         REFERENCES AGNCY_BAS(AGNCY_SN)
 );
 COMMENT ON TABLE NOTI_BAS IS
-    '고시공고게시물 — 크롤링 대상이 첨부파일뿐이라 게시물 자체의 정보는 없고, 같은 게시물의 첨부를 묶는 키로만 쓴다';
+    '고시공고게시물 — 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다. 첨부가 없거나 추출에 실패한 게시물도 제목·URL·담당자는 여기 남는다';
 COMMENT ON COLUMN NOTI_BAS.NOTI_SN IS
-    '고시공고일련번호 = 크롤 순번. 파일명 "{순번}_{제목}" 또는 "{순번}_{첨부순번}_{제목}"의 앞자리다. 기관마다 연속 블록을 차지하고 기관 간 충돌이 없어 기관 스코프가 필요 없다. 문서 본문의 고시번호(ATCH_FILE_DTL.NOTI_NO)와는 다른 것이다. 크롤 산출물이 아닌 파일은 음수를 발급받아 크롤 순번과 겹치지 않는다';
+    '고시공고일련번호 = 크롤러 게시물 목록 엑셀의 번호. 첨부파일명 "{순번}_{제목}" 또는 "{순번}_{첨부순번}_{제목}"의 앞자리와 같은 값이다. 실행마다 1로 되돌아가지 않고 마지막 번호 뒤로 이어지므로 기관 스코프가 필요 없다. 문서 본문의 고시번호(ATCH_FILE_DTL.NOTI_NO)와는 다른 것이다. 크롤 산출물이 아닌 파일은 음수를 발급받아 크롤 순번과 겹치지 않는다';
 COMMENT ON COLUMN NOTI_BAS.AGNCY_SN IS
-    '기관일련번호 — 입력 폴더명에서 채운다. 첨부파일 안에는 수집처가 없어 폴더가 유일한 근거다. 폴더 규약 밖에서 온 파일(수동 수집분, 입력 루트 직속)은 NULL이다';
+    '기관일련번호 — 크롤러가 발급한 기관번호에서 채운다. 크롤 산출물이 아닌 파일은 입력 폴더명에서 채우고, 폴더 규약 밖에서 온 파일(수동 수집분, 입력 루트 직속)은 NULL이다';
 COMMENT ON COLUMN NOTI_BAS.BBS_STTS_CD IS
     '게시상태코드(CD_BBS_STTS): POST 게시중 / CLSD 게시완료. 폴더명 꼬리표로 가른다 — "지난·이전·완료"류면 CLSD, 꼬리표가 없거나 "게시중·고시공고"류면 POST. 같은 기관이 게시판을 둘 운영하면(12_1 / 12_2) 기관은 하나고 이 값만 갈린다';
+COMMENT ON COLUMN NOTI_BAS.SRC_KEY_CTNT IS
+    '원문키내용 — 지자체 홈페이지가 게시물을 식별하는, 사람이 읽는 키 원문이다([기관번호:게시물 식별 방식:게시물 번호]). 해시만 두지 않는 이유는 SHA-256을 되돌릴 수 없기 때문이다 — 중복 오판이 났을 때 "이 행이 어느 게시물인가"를 댈 근거가 이 컬럼뿐이다';
+COMMENT ON COLUMN NOTI_BAS.SRC_KEY_HASH IS
+    '원문키해시 — SRC_KEY_CTNT의 SHA-256 소문자 16진 64자(도메인 CHECK이 형태를 강제한다). 같은 게시물을 두 번 담지 않게 막는 열쇠라 UNIQUE다. NOT NULL이 아닌 것은 크롤 산출물이 아닌 행(음수 NOTI_SN)에는 원문키가 없기 때문이고, PostgreSQL의 UNIQUE는 NULL을 서로 다른 값으로 보므로 그런 행이 여럿 공존한다';
+COMMENT ON COLUMN NOTI_BAS.BBS_URL IS
+    '게시물URL — 고시공고 상세 페이지 주소. 첨부파일만 긁던 시절에는 알 길이 없던 값이고, 추출 결과를 원본과 대조할 때 유일한 통로다';
+COMMENT ON COLUMN NOTI_BAS.BBS_TTL IS
+    '게시물제목 — 게시판 목록에 걸린 제목. 문서 본문의 고시제목(ATCH_FILE_DTL.NOTI_TTL)과는 다른 것이다. 첨부가 없거나 추출에 실패한 게시물도 이 값은 남으므로, 무엇을 못 읽었는지 셀 수 있다';
+COMMENT ON COLUMN NOTI_BAS.CRWL_KND_CD IS
+    '크롤종류코드(CD_CRWL_KND): SAMPLE 표본 / FULL_CRAWL 전수 / DAILY_NEW 일일 신규. 이 행을 만들어 낸 크롤러의 갈래이며, 전수 수집분과 증분분을 갈라 세는 축이다. 크롤러의 CRAWL_MODE가 정의처라 값을 그대로 쓴다';
+COMMENT ON COLUMN NOTI_BAS.CHRG_DEPT_NM IS '담당부서명 — 게시판이 표기한 담당부서';
+COMMENT ON COLUMN NOTI_BAS.CHRG_PSN_NM IS '담당자명 — 게시판이 표기한 담당자 이름';
+COMMENT ON COLUMN NOTI_BAS.TEL_NO IS
+    '전화번호 — 담당자 연락처. 크롤러는 100자로 받지만 번호(D_NO)는 50자다. 내선·복수번호가 섞여 넘치는 값이 나오면 도메인 폭을 올린다';
+COMMENT ON COLUMN NOTI_BAS.NOTI_NO IS
+    '고시번호 — 게시판이 목록에 표기한 값. 같은 이름의 ATCH_FILE_DTL.NOTI_NO는 문서 본문에서 추출한 값이며, 두 값이 어긋난 행이 곧 추출 검증 대상이다';
+COMMENT ON COLUMN NOTI_BAS.NOTI_DT IS
+    '고시일자 — 게시판이 목록에 표기한 값. 고시번호와 같이 ATCH_FILE_DTL 쪽은 문서 본문 추출값이다';
 
 -- FK 컬럼에 인덱스를 붙인다. 기관별 수집 현황 집계가 이 스키마의 주 용도이고,
 -- 기관 행을 지울 때 참조 검사가 NOTI_BAS 전건을 훑는 것도 막는다.
--- BBS_STTS_CD에는 만들지 않는다 — 값이 2종뿐이라 플래너가 순차 스캔을 고른다.
+-- BBS_STTS_CD·CRWL_KND_CD에는 만들지 않는다 — 값이 각각 2종·3종뿐이라 플래너가 순차 스캔을 고른다.
+-- SRC_KEY_HASH에도 만들지 않는다 — UNIQUE 제약이 이미 인덱스를 하나 만든다.
 CREATE INDEX IX_NOTI_BAS_AGNCY_SN ON NOTI_BAS(AGNCY_SN);
+CREATE INDEX IX_NOTI_BAS_NOTI_DT  ON NOTI_BAS(NOTI_DT);
+
+-- 크롤 실행 1건의 완료·실패 기록.
+--
+-- AGNCY_BAS로 가는 FK를 두지 않는 것이 이 테이블의 전부다. 로그를 남기는 이유가 정확히
+-- "그 기관에서 아무것도 못 건졌다"인데, FK가 있으면 AGNCY_BAS에 행이 없는 기관의 실패 로그가
+-- FK 위반으로 거부된다 — 남겨야 할 바로 그 행이 사라진다. NOTI_LBL_VAL_DTL이 NOTI_ITEM_TC
+-- FK를 두지 않는 것과 같은 판단이다. 그래서 AGNCY_NM을 함께 담는다: 기관 행이 아예 없을 수
+-- 있으므로 로그 행이 스스로를 설명해야 한다.
+--
+-- 실행 식별자 컬럼을 두지 않는다. 크롤러의 실행 식별자는 게시물 목록 엑셀의 번호와 같은 값인데
+-- 실패 로그 행에는 게시물이 없어 실을 값이 없다. 한 실행을 되짚어야 하면 (FRST_REG_DTM,
+-- CRWL_KND_CD)로 묶는다. 크롤러에 별도 실행 식별자가 따로 있는 것으로 밝혀지면 여기에 컬럼
+-- 하나만 보태면 되고 NOTI_BAS는 손대지 않아도 된다.
+CREATE TABLE CRWL_LOG_DTL (
+    CRWL_LOG_SN    D_SN   NOT NULL,
+    CRWL_KND_CD    D_CD   NOT NULL,
+    CRWL_STTS_CD   D_CD   NOT NULL,
+    CRWL_STEP_CD   D_CD,
+    AGNCY_SN       D_SN,
+    AGNCY_NM       D_NM,
+    BBS_URL        D_URL,
+    FAIL_MSG_CTNT  D_CTNT,
+    FRST_REG_DTM   D_DTM  NOT NULL DEFAULT now(),
+    LAST_CHG_DTM   D_DTM  NOT NULL DEFAULT now(),
+    CONSTRAINT PK_CRWL_LOG_DTL PRIMARY KEY (CRWL_LOG_SN)
+);
+COMMENT ON TABLE CRWL_LOG_DTL IS
+    '크롤로그 — 크롤 실행 1건의 완료·실패 기록. "이 기관 게시물이 왜 하나도 없나"를 DB에서 설명하는 유일한 자리다';
+COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_LOG_SN IS
+    '크롤로그일련번호 — 크롤러가 발급한 값을 그대로 받는다. 크롤러 쪽은 BIGSERIAL이지만 실행당 수십~수백 행 규모라 일련번호(INTEGER)로 넘칠 일이 없다. 여기서 BIGINT 도메인을 새로 만들면 분류어 SN이 도메인 둘을 가리켜 표준이 무너진다';
+COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_KND_CD IS
+    '크롤종류코드(CD_CRWL_KND): SAMPLE / FULL_CRAWL / DAILY_NEW';
+COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_STTS_CD IS
+    '크롤상태코드(CD_CRWL_STTS): OK 수집 완료 / FAIL 실패. 완료도 행으로 남긴다 — 실패만 적재하면 "돌긴 돌았는데 아무것도 못 건진 실행"과 "아예 안 돈 실행"이 구분되지 않는다';
+COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_STEP_CD IS
+    '크롤단계코드(CD_CRWL_STEP) — 넘어진 단계. 허용값은 크롤러의 실패단계 정의가 정의처다. 완료 행은 NULL이다';
+COMMENT ON COLUMN CRWL_LOG_DTL.AGNCY_SN IS
+    '기관일련번호 — FK가 아니다. 아직 AGNCY_BAS에 없는 기관의 실패도 남겨야 하기 때문이다';
+COMMENT ON COLUMN CRWL_LOG_DTL.AGNCY_NM IS
+    '기관명 — AGNCY_BAS와 중복이지만 기관 행이 아예 없을 수 있어 로그 행이 스스로를 설명하게 둔다';
+COMMENT ON COLUMN CRWL_LOG_DTL.BBS_URL IS '게시물URL — 실패한 요청 주소';
+COMMENT ON COLUMN CRWL_LOG_DTL.FAIL_MSG_CTNT IS
+    '실패메시지내용 — 실패 원인 또는 완료 메시지 원문';
+
+-- 기관별 실패 조회와 "실패 행만" 뽑는 질의가 이 테이블의 주 용도다.
+CREATE INDEX IX_CRWL_LOG_AGNCY_SN    ON CRWL_LOG_DTL(AGNCY_SN);
+CREATE INDEX IX_CRWL_LOG_CRWL_STTS_CD ON CRWL_LOG_DTL(CRWL_STTS_CD);
 
 CREATE TABLE NOTI_KND_TC (
     NOTI_KND_CD       D_CD  NOT NULL,
