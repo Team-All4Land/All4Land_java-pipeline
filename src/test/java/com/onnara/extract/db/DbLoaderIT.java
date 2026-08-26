@@ -143,20 +143,6 @@ class DbLoaderIT {
             }
         }
 
-        try (var conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement("""
-                     SELECT CHRG_DEPT_NM, CHRGR_NM, TEL_NO, NOTI_NO
-                       FROM NOTI_BAS WHERE NOTI_SN = ?""")) {
-            ps.setInt(1, NOTICE_BASE + 1);
-            try (ResultSet rs = ps.executeQuery()) {
-                assertTrue(rs.next());
-                assertEquals("해양수산과", rs.getString("CHRG_DEPT_NM"));
-                assertEquals("홍길동", rs.getString("CHRGR_NM"));
-                assertEquals("063-123-4567", rs.getString("TEL_NO"));
-                assertEquals("고시 제2026-47호", rs.getString("NOTI_NO"));
-            }
-        }
-
         // 처분 건수는 컬럼이 아니라 자식 테이블에서 나온다
         assertEquals(1, count("SELECT count(DISTINCT DSPS_SN) FROM NOTI_ITEM_VAL_DTL"
                 + " WHERE NOTI_SN = " + (NOTICE_BASE + 1)));
@@ -172,6 +158,42 @@ class DbLoaderIT {
 
         assertEquals(1, count("SELECT count(*) FROM ATCH_IMG_DTL WHERE NOTI_SN = "
                 + (NOTICE_BASE + 1)));
+    }
+
+    /** 첨부 재적재가 크롤러에서 먼저 저장한 게시물 메타를 덮어쓰지 않아야 한다. */
+    @Test
+    void preservesCrawlerOwnedNoticeMetadata() throws SQLException {
+        int notiSn = NOTICE_BASE + 7;
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement("""
+                     INSERT INTO NOTI_BAS
+                         (NOTI_SN, CHRG_DEPT_NM, CHRGR_NM, TEL_NO, NOTI_NO)
+                     VALUES (?, ?, ?, ?, ?)""")) {
+            ps.setInt(1, notiSn);
+            ps.setString(2, "해양수산과");
+            ps.setString(3, "홍길동");
+            ps.setString(4, "063-123-4567");
+            ps.setString(5, "게시물 제2026-99호");
+            ps.executeUpdate();
+        }
+
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            loader.loadAll(List.of(sample(notiSn, 1, "900007_1_고시문.hml")), List.of());
+        }
+
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement("""
+                     SELECT CHRG_DEPT_NM, CHRGR_NM, TEL_NO, NOTI_NO
+                       FROM NOTI_BAS WHERE NOTI_SN = ?""")) {
+            ps.setInt(1, notiSn);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals("해양수산과", rs.getString("CHRG_DEPT_NM"));
+                assertEquals("홍길동", rs.getString("CHRGR_NM"));
+                assertEquals("063-123-4567", rs.getString("TEL_NO"));
+                assertEquals("게시물 제2026-99호", rs.getString("NOTI_NO"));
+            }
+        }
     }
 
     /** 같은 첨부를 재적재해도 어느 계층에도 중복이 생기지 않아야 한다(CASCADE 멱등성). */
@@ -472,9 +494,6 @@ class DbLoaderIT {
                 NoticeTypes.classify("공유수면 점용·사용 변경허가 고시").orElseThrow());
         schema.getRecords().add(new NoticeRecord.Builder()
                 .set("BODY_AGNCY_NM", "군산지방해양수산청")
-                .set("CHRG_DEPT_NM", "해양수산과")
-                .set("CHRGR_NM", "홍길동")
-                .set("TEL_NO", "063-123-4567")
                 .set("NOTI_NO", "고시 제2026-47호")
                 .set("NOTI_DT", "2026-06-17")
                 .set("NOTI_TTL", "공유수면 점용·사용 변경허가 고시")

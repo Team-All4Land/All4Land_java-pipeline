@@ -6,62 +6,59 @@
 
 | 항목 | 값 |
 |---|---|
-| 사전 버전 | `2026-08-26` |
-| 표준 필드 | 48개 |
-| 등록된 동의어 | 192개 |
+| 사전 버전 | `2026-08-13` |
+| 표준 필드 | 45개 |
+| 등록된 동의어 | 187개 |
 
 ## 한눈에 보기
 
 | # | 표준 필드 | 표시명 | 저장 계층 | 계열 | 값 형식 | 주요 | 동의어 수 |
 |---:|---|---|---|---|---|:-:|---:|
 | 1 | `BODY_AGNCY_NM` | 고시기관 | 추출만(적재 안 함) | — | TEXT |  | 4 |
-| 2 | `CHRG_DEPT_NM` | 담당부서 | `NOTI_BAS` 컬럼 | — | TEXT |  | 2 |
-| 3 | `CHRGR_NM` | 담당자 | `NOTI_BAS` 컬럼 | — | TEXT |  | 2 |
-| 4 | `TEL_NO` | 전화번호 | `NOTI_BAS` 컬럼 | — | TEXT |  | 0 |
-| 5 | `NOTI_NO` | 고시공고번호 | `NOTI_BAS` 컬럼 | — | TEXT |  | 3 |
-| 6 | `NOTI_DT` | 고시일자 | `ATCH_FILE_DTL` 컬럼 | — | DATE |  | 6 |
-| 7 | `NOTI_TTL` | 제목 | `ATCH_FILE_DTL` 컬럼 | — | TEXT |  | 3 |
-| 8 | `NOTI_PSN` | 고시자 | 추출만(적재 안 함) | — | TEXT |  | 2 |
-| 9 | `LOCATION` | 점용·사용 장소 | `NOTI_ITEM_VAL_DTL` 행 | 위치 | TEXT | ● | 17 |
-| 10 | `AREA` | 점용·사용 면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT | ● | 12 |
-| 11 | `PURPOSE` | 점용·사용 목적 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT | ● | 8 |
-| 12 | `APPLICANT_NAME` | 허가·승인 대상자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT | ● | 24 |
-| 13 | `WORK_PERIOD` | 점용·사용 기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG (가상 필드 · 분리 적재) | ● | 9 |
-| 14 | `APPLICANT_ADDRESS` | 허가·승인 대상자 주소 | `NOTI_ITEM_VAL_DTL` 행 | 주소 | TEXT | ● | 6 |
-| 15 | `APPROVAL_NO` | 허가·승인번호 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 7 |
-| 16 | `APPROVAL_DATE` | 허가·승인일자 | `NOTI_ITEM_VAL_DTL` 행 | — | DATE |  | 18 |
-| 17 | `REMARKS` | 비고 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
-| 18 | `SUBJECT_ADDRESS` | 공고·처분 대상자 주소 | `NOTI_ITEM_VAL_DTL` 행 | 주소 | TEXT |  | 0 |
-| 19 | `BUSINESS_CONTENT` | 사업내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 5 |
-| 20 | `CONSTRUCTION_PERIOD` | 공사시행 기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG |  | 3 |
-| 21 | `CHANGED_TO` | 변경 후 값 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 22 | `CHANGE_SUMMARY` | 변경사항 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 23 | `SUBJECT_NAME` | 공고·처분 대상자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT |  | 1 |
-| 24 | `CHANGED_FROM` | 변경 전 값 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 25 | `WATER_TYPE` | 수면 종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 26 | `STRUCTURE_TYPE` | 공작물 종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 27 | `COMPLETION_DATE` | 준공·완료 처리일자 | `NOTI_ITEM_VAL_DTL` 행 | 날짜 | DATE |  | 4 |
-| 28 | `OPERATOR_NAME` | 사업 시행자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT |  | 4 |
-| 29 | `PURPOSE_CONTENT_COMBINED` | 점용·사용 목적·사업내용(복합) | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
-| 30 | `CONTACT_POINT` | 문의처 | `NOTI_ITEM_VAL_DTL` 행 | 연락 | TEXT |  | 2 |
-| 31 | `APPROVAL_NO_DATE_COMBINED` | 허가·승인번호·일자(복합) | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 0 |
-| 32 | `CONSTRUCTION_NAME` | 공사명칭 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
-| 33 | `CONSTRUCTION_LOCATION` | 공사시행 장소 | `NOTI_ITEM_VAL_DTL` 행 | 위치 | TEXT |  | 3 |
-| 34 | `CONTACT_NUMBER` | 연락처 | `NOTI_ITEM_VAL_DTL` 행 | 연락 | TEXT |  | 3 |
-| 35 | `PROJECT_COST` | 사업비 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 36 | `APPROVAL_CONTENT` | 허가내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
-| 37 | `CONSTRUCTION_AREA` | 공사시행 면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT |  | 2 |
-| 38 | `CONSTRUCTION_TYPE` | 공사종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 39 | `LAND_USE_PLAN` | 토지이용계획 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 40 | `CANCEL_DATE` | 취소일자 | `NOTI_ITEM_VAL_DTL` 행 | 날짜 | DATE |  | 3 |
-| 41 | `COMPLETION_AREA` | 준공면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT |  | 1 |
-| 42 | `CANCEL_REASON` | 취소사유 | `NOTI_ITEM_VAL_DTL` 행 | 사유 | TEXT |  | 2 |
-| 43 | `NOTICE_PERIOD` | 공고기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG |  | 1 |
-| 44 | `DISPOSITION_CONTENT` | 처분내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
-| 45 | `NOTICE_SUBJECT` | 공고대상 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 46 | `DISPOSITION_REASON` | 처분사유 | `NOTI_ITEM_VAL_DTL` 행 | 사유 | TEXT |  | 1 |
-| 47 | `OPINION_SUBMISSION` | 의견제출 기간·방법 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 4 |
-| 48 | `LEGAL_BASIS` | 근거법령 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
+| 2 | `NOTI_NO` | 고시번호 | `ATCH_FILE_DTL` 컬럼 | — | TEXT |  | 2 |
+| 3 | `NOTI_DT` | 고시일자 | `ATCH_FILE_DTL` 컬럼 | — | DATE |  | 6 |
+| 4 | `NOTI_TTL` | 제목 | `ATCH_FILE_DTL` 컬럼 | — | TEXT |  | 3 |
+| 5 | `NOTI_PSN` | 고시자 | 추출만(적재 안 함) | — | TEXT |  | 2 |
+| 6 | `LOCATION` | 점용·사용 장소 | `NOTI_ITEM_VAL_DTL` 행 | 위치 | TEXT | ● | 17 |
+| 7 | `AREA` | 점용·사용 면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT | ● | 12 |
+| 8 | `PURPOSE` | 점용·사용 목적 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT | ● | 8 |
+| 9 | `APPLICANT_NAME` | 허가·승인 대상자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT | ● | 24 |
+| 10 | `WORK_PERIOD` | 점용·사용 기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG (가상 필드 · 분리 적재) | ● | 9 |
+| 11 | `APPLICANT_ADDRESS` | 허가·승인 대상자 주소 | `NOTI_ITEM_VAL_DTL` 행 | 주소 | TEXT | ● | 6 |
+| 12 | `APPROVAL_NO` | 허가·승인번호 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 7 |
+| 13 | `APPROVAL_DATE` | 허가·승인일자 | `NOTI_ITEM_VAL_DTL` 행 | — | DATE |  | 18 |
+| 14 | `REMARKS` | 비고 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
+| 15 | `SUBJECT_ADDRESS` | 공고·처분 대상자 주소 | `NOTI_ITEM_VAL_DTL` 행 | 주소 | TEXT |  | 0 |
+| 16 | `BUSINESS_CONTENT` | 사업내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 5 |
+| 17 | `CONSTRUCTION_PERIOD` | 공사시행 기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG |  | 3 |
+| 18 | `CHANGED_TO` | 변경 후 값 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 19 | `CHANGE_SUMMARY` | 변경사항 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 20 | `SUBJECT_NAME` | 공고·처분 대상자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT |  | 1 |
+| 21 | `CHANGED_FROM` | 변경 전 값 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 22 | `WATER_TYPE` | 수면 종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 23 | `STRUCTURE_TYPE` | 공작물 종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 24 | `COMPLETION_DATE` | 준공·완료 처리일자 | `NOTI_ITEM_VAL_DTL` 행 | 날짜 | DATE |  | 4 |
+| 25 | `OPERATOR_NAME` | 사업 시행자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT |  | 4 |
+| 26 | `PURPOSE_CONTENT_COMBINED` | 점용·사용 목적·사업내용(복합) | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
+| 27 | `CONTACT_POINT` | 문의처 | `NOTI_ITEM_VAL_DTL` 행 | 연락 | TEXT |  | 2 |
+| 28 | `APPROVAL_NO_DATE_COMBINED` | 허가·승인번호·일자(복합) | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 0 |
+| 29 | `CONSTRUCTION_NAME` | 공사명칭 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
+| 30 | `CONSTRUCTION_LOCATION` | 공사시행 장소 | `NOTI_ITEM_VAL_DTL` 행 | 위치 | TEXT |  | 3 |
+| 31 | `CONTACT_NUMBER` | 연락처 | `NOTI_ITEM_VAL_DTL` 행 | 연락 | TEXT |  | 3 |
+| 32 | `PROJECT_COST` | 사업비 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 33 | `APPROVAL_CONTENT` | 허가내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
+| 34 | `CONSTRUCTION_AREA` | 공사시행 면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT |  | 2 |
+| 35 | `CONSTRUCTION_TYPE` | 공사종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 36 | `LAND_USE_PLAN` | 토지이용계획 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 37 | `CANCEL_DATE` | 취소일자 | `NOTI_ITEM_VAL_DTL` 행 | 날짜 | DATE |  | 3 |
+| 38 | `COMPLETION_AREA` | 준공면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT |  | 1 |
+| 39 | `CANCEL_REASON` | 취소사유 | `NOTI_ITEM_VAL_DTL` 행 | 사유 | TEXT |  | 2 |
+| 40 | `NOTICE_PERIOD` | 공고기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG |  | 1 |
+| 41 | `DISPOSITION_CONTENT` | 처분내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
+| 42 | `NOTICE_SUBJECT` | 공고대상 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 43 | `DISPOSITION_REASON` | 처분사유 | `NOTI_ITEM_VAL_DTL` 행 | 사유 | TEXT |  | 1 |
+| 44 | `OPINION_SUBMISSION` | 의견제출 기간·방법 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 4 |
+| 45 | `LEGAL_BASIS` | 근거법령 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
 
 ## 필드별 상세
 
@@ -77,48 +74,17 @@
 
 `기관` · `고시기관` · `관리청` · `처분청`
 
-### `CHRG_DEPT_NM` — 담당부서
+### `NOTI_NO` — 고시번호
 
-- **저장 계층**: `NOTI_BAS` 컬럼
-- **값 형식**: TEXT
-- **설명**: 고시·공고 게시물을 담당하는 부서명.
-
-**인식하는 라벨 (2개)**
-
-`담당부서` · `담당부서명`
-
-### `CHRGR_NM` — 담당자
-
-- **저장 계층**: `NOTI_BAS` 컬럼
-- **값 형식**: TEXT
-- **설명**: 고시·공고 게시물 담당자명.
-
-**인식하는 라벨 (2개)**
-
-`담당자` · `담당자명`
-
-### `TEL_NO` — 전화번호
-
-- **저장 계층**: `NOTI_BAS` 컬럼
-- **값 형식**: TEXT
-- **설명**: 고시·공고 게시물 담당부서 또는 담당자의 전화번호.
-- **검토 메모**: 전화번호 라벨은 처분 대상자의 연락처와 겹친다. 같은 표 레코드에 담당부서 또는 담당자가 있을 때 Mapper가 CONTACT_NUMBER를 이 필드로 승격한다.
-
-**인식하는 라벨 (0개)**
-
-``
-
-### `NOTI_NO` — 고시공고번호
-
-- **저장 계층**: `NOTI_BAS` 컬럼
+- **저장 계층**: `ATCH_FILE_DTL` 컬럼
 - **값 형식**: TEXT
 - **설명**: 고시·공고의 문서번호.
 - **값 예시**: `고시 제2026-47호`
 - **검토 메모**: '관리번호'는 방치선박 서식의 별개 필드이므로 등재하지 않는다.
 
-**인식하는 라벨 (3개)**
+**인식하는 라벨 (2개)**
 
-`고시번호` · `공고번호` · `고시공고번호`
+`고시번호` · `공고번호`
 
 ### `NOTI_DT` — 고시일자
 

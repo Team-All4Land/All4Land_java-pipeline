@@ -110,16 +110,16 @@ CREATE TABLE NOTI_BAS (
         REFERENCES AGNCY_BAS(AGNCY_SN)
 );
 COMMENT ON TABLE NOTI_BAS IS
-    '고시공고게시물 — 같은 게시물의 첨부를 묶고 담당부서·담당자·전화번호·고시공고번호를 보관한다';
+    '고시공고게시물 — 같은 게시물의 첨부를 묶는다. 담당부서·담당자·전화번호·고시공고번호는 크롤러가 수집하며 첨부 추출 파이프라인은 덮어쓰지 않는다';
 COMMENT ON COLUMN NOTI_BAS.NOTI_SN IS
     '고시공고일련번호 = 크롤 순번. 파일명 "{순번}_{제목}" 또는 "{순번}_{첨부순번}_{제목}"의 앞자리다. 기관마다 연속 블록을 차지하고 기관 간 충돌이 없어 기관 스코프가 필요 없다. 문서 본문의 고시번호(ATCH_FILE_DTL.NOTI_NO)와는 다른 것이다. 크롤 산출물이 아닌 파일은 음수를 발급받아 크롤 순번과 겹치지 않는다';
 COMMENT ON COLUMN NOTI_BAS.AGNCY_SN IS
     '기관일련번호 — 입력 폴더명에서 채운다. 첨부파일 안에는 수집처가 없어 폴더가 유일한 근거다. 폴더 규약 밖에서 온 파일(수동 수집분, 입력 루트 직속)은 NULL이다';
-COMMENT ON COLUMN NOTI_BAS.CHRG_DEPT_NM IS '담당부서명 — 고시·공고 게시물을 담당하는 부서명';
-COMMENT ON COLUMN NOTI_BAS.CHRGR_NM IS '담당자명 — 고시·공고 게시물 담당자명';
-COMMENT ON COLUMN NOTI_BAS.TEL_NO IS '전화번호 — 고시·공고 게시물 담당부서 또는 담당자의 전화번호';
+COMMENT ON COLUMN NOTI_BAS.CHRG_DEPT_NM IS '담당부서명 — 크롤러가 수집한 고시·공고 게시물 담당부서명';
+COMMENT ON COLUMN NOTI_BAS.CHRGR_NM IS '담당자명 — 크롤러가 수집한 고시·공고 게시물 담당자명';
+COMMENT ON COLUMN NOTI_BAS.TEL_NO IS '전화번호 — 크롤러가 수집한 고시·공고 게시물 담당 전화번호';
 COMMENT ON COLUMN NOTI_BAS.NOTI_NO IS
-    '고시공고번호 — 문서 본문의 고시·공고번호. 같은 게시물의 첨부가 여럿이면 새로 확인된 비NULL 값을 반영한다';
+    '고시공고번호 — 크롤러가 게시물 HTML에서 수집한다. 첨부 문서에서 추출한 고시번호(ATCH_FILE_DTL.NOTI_NO)와는 별개이며 첨부 추출 파이프라인은 이 값을 덮어쓰지 않는다';
 COMMENT ON COLUMN NOTI_BAS.BBS_STTS_CD IS
     '게시상태코드(CD_BBS_STTS): POST 게시중 / CLSD 게시완료. 폴더명 꼬리표로 가른다 — "지난·이전·완료"류면 CLSD, 꼬리표가 없거나 "게시중·고시공고"류면 POST. 같은 기관이 게시판을 둘 운영하면(12_1 / 12_2) 기관은 하나고 이 값만 갈린다';
 

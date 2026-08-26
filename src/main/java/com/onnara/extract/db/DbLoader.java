@@ -46,23 +46,12 @@ public final class DbLoader implements AutoCloseable {
                 AGNCY_NM = EXCLUDED.AGNCY_NM, AGNCY_KND_CD = EXCLUDED.AGNCY_KND_CD
             """;
 
-    /**
-     * 게시물 행 — 같은 게시물의 첨부가 여럿이므로 값은 COALESCE로 합친다.
-     *
-     * <p>{@code DO NOTHING}이 아닌 이유: 같은 게시물의 두 번째 첨부가 들어올 때 첫 첨부가 채운
-     * 기관을 덮어 지우면 안 되고, 폴더를 모르는 경로({@code map} → {@code load})로 재적재해도
-     * 이미 채운 값이 날아가면 안 된다. 새 정보가 있으면 이기고, 없으면 기존을 지킨다.
-     */
+    /** 게시물 행 — 크롤러가 채운 게시물 메타는 건드리지 않고 기관·게시상태만 보완한다. */
     private static final String INSERT_NOTICE = """
-            INSERT INTO NOTI_BAS (
-                NOTI_SN, AGNCY_SN, CHRG_DEPT_NM, CHRGR_NM, TEL_NO, NOTI_NO, BBS_STTS_CD
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO NOTI_BAS (NOTI_SN, AGNCY_SN, BBS_STTS_CD)
+            VALUES (?, ?, ?)
             ON CONFLICT (NOTI_SN) DO UPDATE SET
                 AGNCY_SN = COALESCE(EXCLUDED.AGNCY_SN, NOTI_BAS.AGNCY_SN),
-                CHRG_DEPT_NM = COALESCE(EXCLUDED.CHRG_DEPT_NM, NOTI_BAS.CHRG_DEPT_NM),
-                CHRGR_NM = COALESCE(EXCLUDED.CHRGR_NM, NOTI_BAS.CHRGR_NM),
-                TEL_NO = COALESCE(EXCLUDED.TEL_NO, NOTI_BAS.TEL_NO),
-                NOTI_NO = COALESCE(EXCLUDED.NOTI_NO, NOTI_BAS.NOTI_NO),
                 BBS_STTS_CD = COALESCE(EXCLUDED.BBS_STTS_CD, NOTI_BAS.BBS_STTS_CD)
             """;
 
@@ -255,7 +244,7 @@ public final class DbLoader implements AutoCloseable {
         // 적재제외 파일은 첨부 메타만 남기고 항목값은 넣지 않는다
         boolean loadValues = !file.isExcluded();
         NoticeRecord meta = records.isEmpty() ? null : records.get(0);
-        prepareSlot(name, file.getSourceBoard(), meta);
+        prepareSlot(name, file.getSourceBoard());
 
         insertAttachment(file, name, meta);
 
@@ -270,7 +259,7 @@ public final class DbLoader implements AutoCloseable {
     /** 판별·추출 실패 건을 첨부 행으로만 남긴다(항목값 없음). */
     private void loadFailure(FailedAttachment failure) throws SQLException {
         SourceFileName.Parsed name = SourceFileName.parse(failure.fileName());
-        prepareSlot(name, failure.board(), null);
+        prepareSlot(name, failure.board());
 
         try (PreparedStatement ps = conn.prepareStatement(INSERT_ATTACHMENT)) {
             ps.setInt(1, name.notiSn());
@@ -309,8 +298,7 @@ public final class DbLoader implements AutoCloseable {
      * @param board 수집처. null이면 기관·게시판을 비운 채로 게시물만 만든다 — 폴더 규약 밖에서
      *              온 파일(수동 수집분)도 첨부는 적재돼야 한다
      */
-    private void prepareSlot(SourceFileName.Parsed name, AgencyRegistry.SourceBoard board,
-                             NoticeRecord meta)
+    private void prepareSlot(SourceFileName.Parsed name, AgencyRegistry.SourceBoard board)
             throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(INSERT_NOTICE)) {
             ps.setInt(1, name.notiSn());
@@ -319,11 +307,7 @@ public final class DbLoader implements AutoCloseable {
             } else {
                 ps.setInt(2, board.agncyNo());
             }
-            ps.setString(3, meta == null ? null : meta.chrgDeptNm());
-            ps.setString(4, meta == null ? null : meta.chrgrNm());
-            ps.setString(5, meta == null ? null : meta.telNo());
-            ps.setString(6, meta == null ? null : meta.notiNo());
-            ps.setString(7, board == null ? null : board.boardCd());
+            ps.setString(3, board == null ? null : board.boardCd());
             ps.executeUpdate();
         }
         try (PreparedStatement ps = conn.prepareStatement(DELETE_ATTACHMENT)) {

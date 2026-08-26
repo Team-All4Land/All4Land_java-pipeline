@@ -113,7 +113,7 @@
     },
     {
       "logical": "고시공고게시물", "physical": "NOTI_BAS", "suffix": "BAS",
-      "description": "게시물. 같은 게시물의 첨부를 묶고 담당부서·담당자·전화번호·고시공고번호를 보관한다",
+      "description": "게시물. 같은 게시물의 첨부를 묶으며 담당부서·담당자·전화번호·고시공고번호는 크롤러가 수집한다. 첨부 추출 파이프라인은 이 값을 덮어쓰지 않는다",
       "primaryKey": ["NOTI_SN"],
       "columns": ["NOTI_SN", "AGNCY_SN", "CHRG_DEPT_NM", "CHRGR_NM", "TEL_NO", "NOTI_NO", "BBS_STTS_CD", "FRST_REG_DTM", "LAST_CHG_DTM"]
     },
@@ -155,9 +155,9 @@
     { "logical": "기관종류코드",     "physical": "AGNCY_KND_CD",      "domain": "D_CD",   "code": "CD_AGNCY_KND", "description": "GZT는 기관 종류가 아니라 수집 경로다 — 같은 부처를 자체 게시판과 전자관보 양쪽에서 긁으므로 이름이 같은 두 행을 이 값으로 가린다" },
     { "logical": "고시공고일련번호", "physical": "NOTI_SN",           "domain": "D_SN",   "description": "크롤 일련번호. 첨부파일명 앞자리다. 문서 본문의 고시번호(NOTI_NO)와는 다른 것이다" },
     { "logical": "게시상태코드",     "physical": "BBS_STTS_CD",       "domain": "D_CD",   "code": "CD_BBS_STTS", "description": "폴더명 꼬리표로 가른다. 같은 기관이 게시판을 둘 운영하면 기관은 하나고 이 값만 갈린다" },
-    { "logical": "담당부서명",       "physical": "CHRG_DEPT_NM",      "domain": "D_NM",   "description": "고시·공고 게시물을 담당하는 부서명" },
-    { "logical": "담당자명",         "physical": "CHRGR_NM",          "domain": "D_NM",   "description": "고시·공고 게시물 담당자명" },
-    { "logical": "전화번호",         "physical": "TEL_NO",            "domain": "D_NO",   "description": "고시·공고 게시물 담당부서 또는 담당자의 전화번호" },
+    { "logical": "담당부서명",       "physical": "CHRG_DEPT_NM",      "domain": "D_NM",   "description": "크롤러가 수집한 고시·공고 게시물 담당부서명" },
+    { "logical": "담당자명",         "physical": "CHRGR_NM",          "domain": "D_NM",   "description": "크롤러가 수집한 고시·공고 게시물 담당자명" },
+    { "logical": "전화번호",         "physical": "TEL_NO",            "domain": "D_NO",   "description": "크롤러가 수집한 고시·공고 게시물 담당 전화번호" },
     { "logical": "공고종류코드",     "physical": "NOTI_KND_CD",       "domain": "D_CD",   "code": "CD_NOTI_KND", "description": "{상위분류}_{행위} 조합. 코드만 보고도 계열을 알 수 있어야 필터가 쉽다" },
     { "logical": "공고종류명",       "physical": "NOTI_KND_NM",       "domain": "D_NM",   "description": "공고종류의 한글 이름" },
     { "logical": "상위공고종류명",   "physical": "HRNK_NOTI_KND_NM",  "domain": "D_NM",   "description": "점용·사용 / 실시계획 / 매립 / 점용료·사용료 / 혼합 / 기타. UPPER_로 시작하면 SQL 함수명과 겹쳐 HRNK_를 쓴다" },

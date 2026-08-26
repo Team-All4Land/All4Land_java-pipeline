@@ -1,8 +1,8 @@
 {
-  "version": "2026-08-26",
+  "version": "2026-08-13",
   "description": "고시문 라벨 → 표준 항목 동의어 사전. 이 파일이 단일 정의처이며, Synonyms 클래스가 기동 시 읽고 ReferenceSync가 attribute_defs 테이블로 동기화한다.",
   "conventions": {
-    "scope": "notice = 게시물 메타(NOTI_BAS 컬럼). attachment = 문서 단위 메타(ATCH_FILE_DTL 컬럼). attribute = 처분 단위 값(NOTI_ITEM_VAL_DTL 행). NOTI_ITEM_TC 테이블에는 scope=attribute만 동기화된다.",
+    "scope": "attachment = 문서 단위 메타(ATCH_FILE_DTL 컬럼). attribute = 처분 단위 값(NOTI_ITEM_VAL_DTL 행). NOTI_ITEM_TC 테이블에는 scope=attribute만 동기화된다.",
     "series": "같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음. 누락 검증을 항목이 아니라 계열 단위로 해야 '준공·완료 수리 문서에 점용·사용 면적이 없다' 같은 오탐이 없다.",
     "value_type": "표준코드 CD_ITEM_VAL_TY다. TEXT는 원문 보존, DATE는 ISO 정규화, DTRG는 daterange로 적재한다. NOTI_ITEM_TC.ITEM_VAL_TY_CD로 동기화된다.",
     "synonym_form": "동의어는 사람이 읽는 형태로 적는다. 적재 시 normalizeLabel()이 선행 기호·공백·가운뎃점 변형을 흡수하므로 □·※·○ 같은 머리기호나 \"성 명\" 같은 자간 벌림은 적지 않아도 된다. 전수 표본에서 기계로 뽑은 라벨은 공백을 접은 형태로 실려 있고, 손으로 보탠 어구만 자연스러운 띄어쓰기를 유지한다.",
@@ -32,48 +32,13 @@
       "stored": false
     },
     {
-      "canonical": "CHRG_DEPT_NM",
-      "display": "담당부서",
-      "scope": "notice",
-      "value_type": "TEXT",
-      "synonyms": [
-        "담당부서",
-        "담당부서명"
-      ],
-      "description": "고시·공고 게시물을 담당하는 부서명.",
-      "examples": []
-    },
-    {
-      "canonical": "CHRGR_NM",
-      "display": "담당자",
-      "scope": "notice",
-      "value_type": "TEXT",
-      "synonyms": [
-        "담당자",
-        "담당자명"
-      ],
-      "description": "고시·공고 게시물 담당자명.",
-      "examples": []
-    },
-    {
-      "canonical": "TEL_NO",
-      "display": "전화번호",
-      "scope": "notice",
-      "value_type": "TEXT",
-      "synonyms": [],
-      "description": "고시·공고 게시물 담당부서 또는 담당자의 전화번호.",
-      "examples": [],
-      "notes": "전화번호 라벨은 처분 대상자의 연락처와 겹친다. 같은 표 레코드에 담당부서 또는 담당자가 있을 때 Mapper가 CONTACT_NUMBER를 이 필드로 승격한다."
-    },
-    {
       "canonical": "NOTI_NO",
-      "display": "고시공고번호",
-      "scope": "notice",
+      "display": "고시번호",
+      "scope": "attachment",
       "value_type": "TEXT",
       "synonyms": [
         "고시번호",
-        "공고번호",
-        "고시공고번호"
+        "공고번호"
       ],
       "description": "고시·공고의 문서번호.",
       "examples": [

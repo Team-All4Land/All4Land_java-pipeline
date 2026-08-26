@@ -69,7 +69,7 @@ public final class ReferenceSync {
         }
     }
 
-    /** scope=attribute인 사전 필드만 NOTI_ITEM_TC으로 보낸다 — 나머지는 NOTI_BAS/ATCH_FILE_DTL 컬럼이다. */
+    /** scope=attribute인 사전 필드만 NOTI_ITEM_TC으로 보낸다 — 문서 메타는 ATCH_FILE_DTL 컬럼이다. */
     private static int syncAttributes(Connection conn) throws SQLException {
         int count = 0;
         try (PreparedStatement ps = conn.prepareStatement(UPSERT_ATTRIBUTE)) {

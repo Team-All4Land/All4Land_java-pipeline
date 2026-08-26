@@ -112,7 +112,7 @@ src/main/java/com/onnara/extract/
 
 src/main/resources/
 ├── application.properties   DB 접속·OCR CLI 실행 설정 (설정의 단일 출처)
-├── synonyms.json            표준항목 40종 + 게시물·문서 메타 8종 사전 (매핑의 단일 출처)
+├── synonyms.json            표준항목 40종 + 첨부 문서 메타 5종 사전 (매핑의 단일 출처)
 ├── notice_types.json        공고종류 56종 레지스트리
 ├── db/standard_terms.json   DB 표준 사전 — 표준단어·표준도메인·표준용어·표준코드 (이름의 단일 출처)
 └── db/migration/            Flyway 마이그레이션 (V1__init.sql — 표준 스키마를 세운다)
@@ -370,7 +370,7 @@ erDiagram
 | 논리명 | 물리명 | 무엇의 단위인가 |
 |---|---|---|
 | 기관 | `AGNCY_BAS` | 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다 |
-| 고시공고게시물 | `NOTI_BAS` | 같은 게시물의 첨부를 묶고 담당부서·담당자·전화번호·고시공고번호를 보관한다 |
+| 고시공고게시물 | `NOTI_BAS` | 같은 게시물의 첨부를 묶는다. 담당부서·담당자·전화번호·고시공고번호는 크롤러가 게시물 HTML에서 수집한다 |
 | 공고종류 | `NOTI_KND_TC` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
 | 공고항목 | `NOTI_ITEM_TC` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다 |
 | 첨부파일 | `ATCH_FILE_DTL` | 파일 1건. 원본 절대경로, 문서 단위 메타(고시번호·고시일자·제목), 추출 상태 |
@@ -393,6 +393,9 @@ erDiagram
 - **실패·적재제외도 행으로 남깁니다**(`PROC_STTS_CD`). 성공만 넣으면 "첨부 401건 중
   추출 0건"인 기관이 DB에서 아예 보이지 않아, 추출 누락과 애초에 없던 자료를 구분할 수 없습니다.
 - 첨부 단위로 세이브포인트를 잡아 한 건의 실패가 배치 전체를 막지 않습니다.
+- 첨부 추출 파이프라인은 `NOTI_BAS`의 `CHRG_DEPT_NM`, `CHRGR_NM`, `TEL_NO`,
+  `NOTI_NO`를 추출하거나 갱신하지 않습니다. 이 네 값은 크롤러가 채우며, 첨부에서 읽은
+  고시번호는 기존대로 `ATCH_FILE_DTL.NOTI_NO`에만 저장합니다.
 - 사전 동기화(`ReferenceSync`)가 적재보다 **먼저** 돕니다 — `NOTI_ITEM_VAL_DTL`이
   `NOTI_ITEM_TC`을 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패합니다.
 - **기관도 첨부보다 먼저** 넣습니다 — `NOTI_BAS.AGNCY_SN`가 FK라 같은 이유로 깨집니다.

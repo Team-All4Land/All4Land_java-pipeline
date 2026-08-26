@@ -181,15 +181,9 @@ public final class Mapper {
 
     /** 표 해석 결과의 라벨:값들을 레코드에 반영한다(매핑된 것은 필드로, 나머지는 extras로). */
     private static void applyFacts(NoticeRecord.Builder builder, List<TableFact> facts) {
-        boolean noticeContact = facts.stream().anyMatch(f ->
-                "CHRG_DEPT_NM".equals(f.itemCd()) || "CHRGR_NM".equals(f.itemCd()));
         for (TableFact fact : facts) {
             if (fact.itemCd() != null) {
-                // "전화번호"는 게시물 담당 연락처와 처분 대상자 연락처 양쪽에 쓰인다.
-                // 같은 게시물 헤더 레코드에 담당부서/담당자가 있을 때만 NOTI_BAS로 보낸다.
-                String itemCd = noticeContact && "CONTACT_NUMBER".equals(fact.itemCd())
-                        ? "TEL_NO" : fact.itemCd();
-                builder.set(itemCd, fact.value());
+                builder.set(fact.itemCd(), fact.value());
             } else {
                 builder.extra(fact.label(), fact.value());
             }
@@ -218,12 +212,7 @@ public final class Mapper {
                     i > 0 ? paragraphs.get(i - 1) : null, paragraphs.get(i));
             if (hit.isPresent()) {
                 base.set("BODY_AGNCY_NM", hit.get()[0]);
-                // 표에 고시공고번호 라벨이 있으면 표의 원문을 우선한다. 휴리스틱은
-                // "동해시 고시 제2023-74호"에서 기관명을 떼고 "고시 제2023-74호"만
-                // 남기므로, 먼저 채우면 set()의 최초 값 유지 규칙 때문에 표 값이 사라진다.
-                if (!mappedByTables.contains("NOTI_NO")) {
-                    base.set("NOTI_NO", hit.get()[1]);
-                }
+                base.set("NOTI_NO", hit.get()[1]);
                 noticeNoIdx = i;
                 break;
             }
@@ -415,10 +404,9 @@ public final class Mapper {
         }
     }
 
-    /** 헤더형 표 레코드에 게시물·문서 메타를 상속. */
+    /** 헤더형 표 레코드에 문서 메타(기관·번호·일자·제목·고시자)를 상속. */
     private static void inheritMeta(NoticeRecord.Builder row, NoticeRecord.Builder base) {
-        for (String field : List.of("BODY_AGNCY_NM", "CHRG_DEPT_NM", "CHRGR_NM", "TEL_NO",
-                "NOTI_NO", "NOTI_DT", "NOTI_TTL", "NOTI_PSN")) {
+        for (String field : List.of("BODY_AGNCY_NM", "NOTI_NO", "NOTI_DT", "NOTI_TTL", "NOTI_PSN")) {
             String value = base.get(field);
             if (value != null) {
                 row.set(field, value);
