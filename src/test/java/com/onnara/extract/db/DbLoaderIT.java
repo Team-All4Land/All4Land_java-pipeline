@@ -134,7 +134,7 @@ class DbLoaderIT {
             try (ResultSet rs = ps.executeQuery()) {
                 assertTrue(rs.next());
                 assertEquals("OK", rs.getString("PROC_STTS_CD"));
-                assertEquals("OCUPY_CHG_PRMSN", rs.getString("NOTI_KND_CD"),
+                assertEquals("OCU_CHG_PRM", rs.getString("NOTI_KND_CD"),
                         "제목 \"공유수면 점용·사용 변경허가 고시\"는 변경허가로 분류돼야 한다");
                 assertEquals("고시 제2026-47호", rs.getString("NOTI_NO"));
                 assertEquals("2026-06-17", rs.getDate("NOTI_DT").toLocalDate().toString());
@@ -146,9 +146,9 @@ class DbLoaderIT {
                 + " WHERE NOTI_SN = " + (NOTICE_BASE + 1)));
 
         assertEquals("367,120.2㎡", attribute(NOTICE_BASE + 1, "AREA"));
-        assertEquals("군산시 비응로 107 인근 공유수면", attribute(NOTICE_BASE + 1, "LOCATION"));
+        assertEquals("군산시 비응로 107 인근 공유수면", attribute(NOTICE_BASE + 1, "LOC"));
         // 기간은 시작/종료가 daterange 리터럴 한 행으로 합쳐진다
-        assertEquals("[2025-09-01,2028-08-31]", attribute(NOTICE_BASE + 1, "WORK_PERIOD"));
+        assertEquals("[2025-09-01,2028-08-31]", attribute(NOTICE_BASE + 1, "WORK_PRD"));
         // 문서 메타는 항목값으로 중복 저장하지 않는다
         assertNull(attribute(NOTICE_BASE + 1, "BODY_AGNCY_NM"),
                 "본문 기관명은 적재하지 않는다 — 기관 추적은 AGNCY_BAS로 한다");
@@ -156,6 +156,44 @@ class DbLoaderIT {
 
         assertEquals(1, count("SELECT count(*) FROM ATCH_IMG_DTL WHERE NOTI_SN = "
                 + (NOTICE_BASE + 1)));
+
+        // 표준항목으로 매핑되지 못한 라벨은 버려지지 않고 라벨 테이블에 남는다
+        assertEquals("없음", label(NOTICE_BASE + 1, "특이사항"));
+    }
+
+    /**
+     * 사전에 없는 항목코드가 들어와도 첨부가 통째로 롤백되지 않아야 한다.
+     *
+     * <p>{@code map}과 {@code load}를 따로 돌릴 때 생기는 상황이다 — 옛 산출물이 옛 코드를
+     * 들고 들어온다. 그것을 표준항목 행으로 만들면 {@code NOTI_ITEM_TC} FK를 위반하고,
+     * 배치 삽입이라 그 첨부의 항목값·이미지·첨부 행이 함께 사라진다. 라벨로 돌리면 값도
+     * 남고 옛 코드가 집계에 떠서 산출물이 낡았다는 사실까지 드러난다.
+     */
+    @Test
+    void unknownItemCodeBecomesLabelRowInsteadOfLosingTheAttachment() throws SQLException {
+        int notiSn = NOTICE_BASE + 12;
+        SchemaResult schema = sample(notiSn, 1, "900012_1_옛산출물.hml");
+        schema.getRecords().add(new NoticeRecord.Builder()
+                // 표준화 이전의 기간 항목코드 — 지금 사전에 없다
+                .set("WORK_PERIOD", "2025-09-01 ~ 2028-08-31")
+                .set("LOC", "여수시 돌산읍 인근 공유수면")
+                .build());
+
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            LoadStats stats = loader.loadAll(List.of(schema), List.of());
+            assertEquals(1, stats.filesOk(), "옛 코드 한 줄에 첨부가 통째로 실패하면 안 된다");
+            assertEquals(0, stats.filesFailed());
+        }
+
+        assertEquals(1, count("SELECT count(*) FROM ATCH_FILE_DTL WHERE NOTI_SN = " + notiSn),
+                "첨부 행이 살아남아야 한다");
+        assertEquals("2025-09-01 ~ 2028-08-31", label(notiSn, "WORK_PERIOD"),
+                "사전에 없는 코드는 라벨 원문 그대로 남는다");
+        assertEquals("여수시 돌산읍 인근 공유수면", attributeOf(notiSn, 2, "LOC"),
+                "같은 레코드의 표준항목은 정상 적재된다");
+        assertEquals(0, count("SELECT count(*) FROM NOTI_ITEM_VAL_DTL WHERE NOTI_SN = " + notiSn
+                + " AND NOTI_ITEM_CD = 'WORK_PERIOD'"),
+                "옛 코드가 표준항목 행으로 새면 안 된다");
     }
 
     /** 같은 첨부를 재적재해도 어느 계층에도 중복이 생기지 않아야 한다(CASCADE 멱등성). */
@@ -246,8 +284,8 @@ class DbLoaderIT {
 
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement("""
-                     SELECT DSPS_SN, max(ITEM_VAL_CTNT) FILTER (WHERE NOTI_ITEM_CD = 'LOCATION') AS loc,
-                            max(ITEM_VAL_CTNT) FILTER (WHERE NOTI_ITEM_CD = 'APPLICANT_NAME') AS who
+                     SELECT DSPS_SN, max(ITEM_VAL_CTNT) FILTER (WHERE NOTI_ITEM_CD = 'LOC') AS loc,
+                            max(ITEM_VAL_CTNT) FILTER (WHERE NOTI_ITEM_CD = 'APLC_NM') AS who
                        FROM NOTI_ITEM_VAL_DTL WHERE NOTI_SN = ?
                       GROUP BY DSPS_SN ORDER BY DSPS_SN""")) {
             ps.setInt(1, NOTICE_BASE + 5);
@@ -295,7 +333,7 @@ class DbLoaderIT {
                        FROM NOTI_ITEM_VAL_DTL
                       WHERE NOTI_SN = ? AND DSPS_SN = (
                             SELECT DSPS_SN FROM NOTI_ITEM_VAL_DTL
-                             WHERE NOTI_SN = ? AND NOTI_ITEM_CD = 'LOCATION' AND ITEM_VAL_CTNT = '여수')""")) {
+                             WHERE NOTI_SN = ? AND NOTI_ITEM_CD = 'LOC' AND ITEM_VAL_CTNT = '여수')""")) {
             ps.setInt(1, notice);
             ps.setInt(2, notice);
             try (ResultSet rs = ps.executeQuery()) {
@@ -424,6 +462,33 @@ class DbLoaderIT {
         }
     }
 
+    /** 라벨값 한 건을 읽는다 — 없으면 null. */
+    private String label(int notiSn, String itemLblNm) throws SQLException {
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT ITEM_VAL_CTNT FROM NOTI_LBL_VAL_DTL WHERE NOTI_SN = ? AND ITEM_LBL_NM = ?")) {
+            ps.setInt(1, notiSn);
+            ps.setString(2, itemLblNm);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
+    /** 특정 처분(DSPS_SN)의 항목값 한 건을 읽는다 — 없으면 null. */
+    private String attributeOf(int notiSn, int dspsSn, String attrCode) throws SQLException {
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT ITEM_VAL_CTNT FROM NOTI_ITEM_VAL_DTL"
+                     + " WHERE NOTI_SN = ? AND DSPS_SN = ? AND NOTI_ITEM_CD = ?")) {
+            ps.setInt(1, notiSn);
+            ps.setInt(2, dspsSn);
+            ps.setString(3, attrCode);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
     /** 집계 쿼리 한 줄을 읽는다. */
     private int count(String sql) throws SQLException {
         try (var conn = dataSource.getConnection();
@@ -456,14 +521,14 @@ class DbLoaderIT {
                 .set("NOTI_DT", "2026-06-17")
                 .set("NOTI_TTL", "공유수면 점용·사용 변경허가 고시")
                 .set("NOTI_PSN", "군산지방해양수산청장")
-                .set("APPROVAL_DATE", "2026-06-05")
-                .set("LOCATION", "군산시 비응로 107 인근 공유수면")
+                .set("APV_DT", "2026-06-05")
+                .set("LOC", "군산시 비응로 107 인근 공유수면")
                 .set("AREA", "367,120.2㎡")
-                .set("PURPOSE", "청소년 해양종합레포츠 교육")
-                .set("WORK_PERIOD_START", "2025-09-01")
-                .set("WORK_PERIOD_END", "2028-08-31")
-                .set("APPLICANT_NAME", "한국해양소년단 전북연맹")
-                .set("APPLICANT_ADDRESS", "군산시 비응로 107")
+                .set("PRPS", "청소년 해양종합레포츠 교육")
+                .set("WORK_PRD_ST", "2025-09-01")
+                .set("WORK_PRD_EN", "2028-08-31")
+                .set("APLC_NM", "한국해양소년단 전북연맹")
+                .set("APLC_ADDR", "군산시 비응로 107")
                 .extra("특이사항", "없음")
                 .build());
 
@@ -476,9 +541,9 @@ class DbLoaderIT {
     /** 목록표 한 행에 해당하는 레코드. */
     private static NoticeRecord record(String location, String area, String name) {
         return new NoticeRecord.Builder()
-                .set("LOCATION", location)
+                .set("LOC", location)
                 .set("AREA", area)
-                .set("APPLICANT_NAME", name)
+                .set("APLC_NM", name)
                 .build();
     }
 }

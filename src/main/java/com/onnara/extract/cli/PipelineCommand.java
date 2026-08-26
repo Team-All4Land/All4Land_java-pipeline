@@ -252,9 +252,10 @@ public class PipelineCommand implements Callable<Integer> {
                 System.out.printf("사전 동기화: 표준항목 %d종, 공고종류 %d종, 기관 %d곳%n",
                         reference.attributes(), reference.noticeTypes(), agencies);
                 System.out.printf(
-                        "DB 적재: 첨부 %d건, 항목값 %d행, 이미지 %d행 (적재제외 %d건, 실패기록 %d건)%n",
-                        stats.filesOk(), stats.recordsInserted(), stats.imagesInserted(),
-                        stats.filesSkipped(), failures.size());
+                        "DB 적재: 첨부 %d건, 항목값 %d행, 라벨값 %d행, 이미지 %d행"
+                                + " (적재제외 %d건, 실패기록 %d건)%n",
+                        stats.filesOk(), stats.recordsInserted(), stats.labelsInserted(),
+                        stats.imagesInserted(), stats.filesSkipped(), failures.size());
             }
         }
     }

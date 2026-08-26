@@ -89,7 +89,7 @@ class MapperTest {
         assertNull(record.workPeriodStart());
         assertNull(record.workPeriodEnd());
         assertNotNull(record.extras());
-        assertEquals("’25.", record.extras().get(Synonyms.WORK_PERIOD));
+        assertEquals("’25.", record.extras().get(Synonyms.WORK_PRD));
     }
 
     /** 빈 문서도 레코드 1건(모든 필드 null)을 내보내는지 검증한다. */
@@ -248,7 +248,7 @@ class MapperTest {
         assertEquals("태항조선㈜ 대표이사", record.applicantName());
         assertEquals("인천광역시 동구 보세로 62(만석동)", record.applicantAddress());
         // 전수 통계 반영으로 표준항목이 된 라벨 — 예전에는 extras로 흘러갔다
-        assertEquals("선가대(6기)", record.get("STRUCTURE_TYPE"));
+        assertEquals("선가대(6기)", record.get("STRC_TY"));
     }
 
     /**
@@ -291,8 +291,8 @@ class MapperTest {
         assertTrue(json.contains("\"file_extn_nm\""));
         assertTrue(json.contains("\"scan_yn\""));
         assertTrue(json.contains("\"noti_sn\""), "게시물 일련번호는 구조 키다");
-        assertTrue(json.contains("\"WORK_PERIOD_START\""), "사전 코드는 대문자다");
-        assertTrue(json.contains("\"APPLICANT_ADDRESS\""));
+        assertTrue(json.contains("\"WORK_PRD_ST\""), "사전 코드는 대문자다");
+        assertTrue(json.contains("\"APLC_ADDR\""));
         assertTrue(json.contains("\"ocr_text\"") || !json.contains("ocrText"));
         assertTrue(!json.contains("\"atchFileNm\""));
     }

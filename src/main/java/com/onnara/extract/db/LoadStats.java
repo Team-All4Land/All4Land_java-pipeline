@@ -10,8 +10,10 @@ package com.onnara.extract.db;
  * @param filesSkipped     적재 제외 판정으로 항목값을 넣지 않은 첨부 수 — 실패와 섞어 세면
  *                         "고쳐야 할 오류"와 "의도한 제외"가 구분되지 않는다
  * @param recordsInserted  삽입된 NOTI_ITEM_VAL_DTL 행 수(= 표준항목 값 총합)
+ * @param labelsInserted   삽입된 NOTI_LBL_VAL_DTL 행 수(= 표준항목으로 매핑되지 못한 값 총합).
+ *                         이 수가 늘고 있다면 사전에 구멍이 있다는 뜻이므로 요약에 함께 낸다
  * @param imagesInserted   삽입된 ATCH_IMG_DTL 행 수(= 경로가 있는 이미지 총합)
  */
 public record LoadStats(int agenciesUpserted, int filesOk, int filesFailed, int filesSkipped,
-                        int recordsInserted, int imagesInserted) {
+                        int recordsInserted, int labelsInserted, int imagesInserted) {
 }

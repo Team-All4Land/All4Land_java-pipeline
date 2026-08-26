@@ -39,7 +39,7 @@ public final class ExtrasReport {
      */
     private static final List<String> STANDARD_FIELDS = Synonyms.fields().stream()
             .flatMap(f -> f.virtual()
-                    ? Stream.of(Synonyms.WORK_PERIOD_START, Synonyms.WORK_PERIOD_END)
+                    ? Stream.of(Synonyms.WORK_PRD_ST, Synonyms.WORK_PRD_EN)
                     : Stream.of(f.itemCd()))
             .toList();
 
@@ -174,9 +174,9 @@ public final class ExtrasReport {
      */
     private static String displayFor(String field) {
         return Synonyms.field(field).map(Synonyms.FieldSpec::itemNm).orElseGet(() -> {
-            if (field.startsWith("WORK_PERIOD")) {
+            if (field.startsWith("WORK_PRD")) {
                 String suffix = field.endsWith("_start") ? " (시작)" : " (종료)";
-                return Synonyms.field(Synonyms.WORK_PERIOD)
+                return Synonyms.field(Synonyms.WORK_PRD)
                         .map(Synonyms.FieldSpec::itemNm).orElse(field) + suffix;
             }
             return field;

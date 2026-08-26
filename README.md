@@ -8,10 +8,10 @@
 |---|---|
 | **하는 일** | 고시문 → 텍스트·표·이미지 추출 → 표준 스키마 정규화 → PostgreSQL 적재 |
 | **입력** | HWP 5.0 · 한글 3.0 · HWPX · HML · PDF — 네이티브·스캔본 모두 |
-| **산출물** | `*.raw.json` · `*.tables.json` · `*.schema.json` · PostgreSQL 7테이블 · `images/` |
+| **산출물** | `*.raw.json` · `*.tables.json` · `*.schema.json` · PostgreSQL 8테이블 · `images/` |
 | **스택** | JDK 17 · Maven · picocli · hwplib / hwpxlib / PDFBox · HikariCP + Flyway · PaddleOCR-VL(Python 서브프로세스) |
 | **핵심 원칙** | **판별(detect) → 추출(engine) → 매핑(common) → 적재(db)** 4계층 분리 |
-| **DB** | PostgreSQL — 표준도메인 18개 + 7테이블. Flyway `V1__init.sql` 하나가 세웁니다 |
+| **DB** | PostgreSQL — 표준도메인 18개 + 8테이블. Flyway `V1__init.sql` 하나가 세웁니다 |
 
 PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 스캔본 처리만 Python CLI
 스크립트(`ocr-cli/`)에 맡기고, Java 파이프라인이 **서브프로세스로 실행**합니다.
@@ -270,7 +270,7 @@ MAP_MAX_BODY_CHARS=5000            # 안내문류 적재 제외 임계치 (0이�
 ## 데이터베이스 스키마 (PostgreSQL)
 
 Flyway 마이그레이션 `V1__init.sql` 하나가 [DB 표준 사전](docs/DB_STANDARD.md)에 맞춰
-표준도메인 18개와 7테이블을 만듭니다. 스키마를 고칠 때도 파일을 얹지 않고 이 파일을 고친 뒤
+표준도메인 18개와 8테이블을 만듭니다. 스키마를 고칠 때도 파일을 얹지 않고 이 파일을 고친 뒤
 DB를 다시 만듭니다([개발 DB 초기화](#개발-db-초기화)).
 
 **ERD는 논리명과 물리명을 함께 적습니다.** 물리명은 영문 약어 조합이라 한눈에 뜻이 잡히지
@@ -290,6 +290,7 @@ erDiagram
     ATCH_FILE_DTL     ||--o{ NOTI_ITEM_VAL_DTL : "보유"
     NOTI_KND_TC       ||--o{ ATCH_FILE_DTL     : "분류"
     NOTI_ITEM_TC      ||--o{ NOTI_ITEM_VAL_DTL : "정의"
+    ATCH_FILE_DTL     ||--o{ NOTI_LBL_VAL_DTL  : "보유"
 
     AGNCY_BAS["기관 · AGNCY_BAS"] {
         D_SN   AGNCY_SN     PK "기관일련번호"
@@ -351,6 +352,15 @@ erDiagram
         D_DTM  FRST_REG_DTM        "최초등록일시"
         D_DTM  LAST_CHG_DTM        "최종변경일시"
     }
+    NOTI_LBL_VAL_DTL["고시공고라벨값 · NOTI_LBL_VAL_DTL"] {
+        D_SN   NOTI_SN       PK,FK "고시공고일련번호"
+        D_SN   ATCH_SN       PK,FK "첨부일련번호"
+        D_SN   DSPS_SN       PK    "처분일련번호"
+        D_NM   ITEM_LBL_NM   PK    "항목라벨명 · 표준항목으로 매핑되지 못한 라벨 원문"
+        D_CTNT ITEM_VAL_CTNT       "항목값내용 · 원문 그대로(정규화하지 않음)"
+        D_DTM  FRST_REG_DTM        "최초등록일시"
+        D_DTM  LAST_CHG_DTM        "최종변경일시"
+    }
     NOTI_ITEM_TC["공고항목 · NOTI_ITEM_TC"] {
         D_CD   NOTI_ITEM_CD    PK "공고항목코드"
         D_NM   NOTI_ITEM_NM       "공고항목명"
@@ -371,6 +381,7 @@ erDiagram
 | 첨부파일 | `ATCH_FILE_DTL` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
 | 첨부이미지 | `ATCH_IMG_DTL` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다 |
 | 공고항목값 | `NOTI_ITEM_VAL_DTL` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
+| 고시공고라벨값 | `NOTI_LBL_VAL_DTL` | 표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — `NOTI_ITEM_TC`로 가는 FK가 없는 것이 이 테이블의 전부다 |
 
 컬럼 단위 논리명↔물리명 대응표는 [`docs/DB_STANDARD.md`](docs/DB_STANDARD.md)에 있습니다 —
 `db/standard_terms.json`에서 생성되므로 손으로 옮겨 적은 사본과 달리 어긋날 수 없습니다.
@@ -385,6 +396,11 @@ erDiagram
 - **멱등 단위는 첨부파일**(`NOTI_SN`, `ATCH_SN`)입니다. 재적재 시 첨부 행을 지우면
   이미지와 항목값이 CASCADE로 함께 정리됩니다. 게시물 단위로 지우면 파일을 한 건씩
   처리하는 도중 같은 게시물의 앞선 첨부가 함께 날아갑니다.
+- **표준항목으로 매핑되지 못한 값도 남깁니다** — `NOTI_LBL_VAL_DTL`에 라벨 원문을 키로 넣습니다.
+  이 테이블에는 `NOTI_ITEM_TC`로 가는 FK가 없습니다. 있으면 사전에 없는 라벨이 FK 위반을 내고,
+  배치 삽입이라 그 첨부의 항목값·이미지가 통째로 롤백돼 문서 하나가 라벨 한 줄 때문에 DB에서
+  사라집니다. 그렇다고 라벨을 `NOTI_ITEM_TC`에 자동 등재하지는 않습니다 — 등재는 사람이
+  `synonyms.json`을 고칠 때만 일어나고, 그때까지 값은 이 테이블에 머뭅니다.
 - **실패·적재제외도 행으로 남깁니다**(`PROC_STTS_CD`). 성공만 넣으면 "첨부 401건 중
   추출 0건"인 기관이 DB에서 아예 보이지 않아, 추출 누락과 애초에 없던 자료를 구분할 수 없습니다.
 - 첨부 단위로 세이브포인트를 잡아 한 건의 실패가 배치 전체를 막지 않습니다.
@@ -397,6 +413,14 @@ erDiagram
 ```sql
 SELECT NOTI_SN, count(*) AS 수집, max(ATCH_SN) AS 최대순번
   FROM ATCH_FILE_DTL GROUP BY NOTI_SN HAVING count(*) <> max(ATCH_SN);
+```
+
+어느 라벨을 사전에 올릴지는 이 한 줄로 고릅니다 — 전에는 `dict --review`로 문서를 다시 만들어야
+보이던 것입니다:
+
+```sql
+SELECT ITEM_LBL_NM, count(*) AS 건수, count(DISTINCT NOTI_SN) AS 문서수
+  FROM NOTI_LBL_VAL_DTL GROUP BY 1 ORDER BY 2 DESC LIMIT 20;
 ```
 
 기관별 수집 현황은 폴더명이 채운 `AGNCY_SN`로 봅니다:
@@ -850,9 +874,13 @@ java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out --unmapped
 ```
 
 이 예가 노리는 것을 그대로 보여 줍니다. `처분사유`·`근거법령`은 표준항목
-(`DISPOSITION_REASON`·`LEGAL_BASIS`)인데 머리기호 `ㅇ`(U+3147)가 라벨 정규화의 선행 기호
+(`DSPS_RSN`·`LAW_BASE`)인데 머리기호 `ㅇ`(U+3147)가 라벨 정규화의 선행 기호
 목록에 없어 매칭에 실패했습니다. **사전 구멍이 데이터 손실로 이어진 자리**이고, 그것을 사람이
 볼 수 있게 하는 것이 이 옵션입니다.
+
+> 값 자체는 이제 `NOTI_LBL_VAL_DTL`에 라벨 원문으로 남으므로 잃지 않습니다. 이 옵션이 여전히
+> 필요한 이유는 **표준항목을 하나도 못 뽑은 문서가 어떤 문서인지** 본문 발췌까지 함께 보여
+> 주기 때문입니다 — 라벨만 쌓인 문서는 SQL로는 "값이 있다"로 보입니다.
 
 DB 쪽 건수와 대조할 수 있습니다. 어긋나면 적재 판정(`AttributeRows`)이 갈린 것입니다:
 
@@ -943,7 +971,7 @@ SELECT ATCH_FILE_NM, FILE_EXTN_NM, ACTL_FILE_EXTN_NM
 SELECT F.ATCH_FILE_NM, V.ITEM_VAL_CTNT
   FROM NOTI_ITEM_VAL_DTL V
   JOIN ATCH_FILE_DTL F USING (NOTI_SN, ATCH_SN)
- WHERE V.NOTI_ITEM_CD = 'WORK_PERIOD'
+ WHERE V.NOTI_ITEM_CD = 'WORK_PRD'
    AND iso_daterange(V.ITEM_VAL_CTNT) && '[2026-01-01,2027-01-01)'::daterange;
 ```
 
@@ -954,7 +982,7 @@ SELECT F.ATCH_FILE_NM, V.ITEM_VAL_CTNT
 | | 예 | 어디서 | 어디로 |
 |---|---|---|---|
 | 고시번호 | `고시 제2008-42호` | 본문 문단 `인천지방해양항만청 고시 제2008-42호` | `ATCH_FILE_DTL.NOTI_NO` |
-| 허가번호 | `제2008-46호` | 표의 `허가번호` 라벨 행 | `NOTI_ITEM_VAL_DTL` (`NOTI_ITEM_CD='APPROVAL_NO'`) |
+| 허가번호 | `제2008-46호` | 표의 `허가번호` 라벨 행 | `NOTI_ITEM_VAL_DTL` (`NOTI_ITEM_CD='APV_NO'`) |
 
 앞은 이 고시문이 실린 번호이고 뒤는 신청인이 받은 허가의 번호입니다.
 전수에서 **둘이 같은 행은 0 / 1,067**입니다.
@@ -963,7 +991,7 @@ SELECT F.ATCH_FILE_NM, V.ITEM_VAL_CTNT
 
 ```
 NOTI_NO      동의어 = 고시번호, 공고번호
-APPROVAL_NO  동의어 = 허가번호, 승인번호, 협의번호, 신고번호, 수리번호, 허가증번호
+APV_NO  동의어 = 허가번호, 승인번호, 협의번호, 신고번호, 수리번호, 허가증번호
 ```
 
 겹칠 수도 없습니다 — `synonyms.json`의 `uniqueness` 규약이 "정규화 결과가 두 필드에 중복
@@ -984,7 +1012,7 @@ APPROVAL_NO  동의어 = 허가번호, 승인번호, 협의번호, 신고번호,
 `notice_types.json`의 `keywords`·`priority`에 있고 `NoticeTypes.classify`가 읽습니다.
 
 ```json
-{ "code": "OCUPY_EXTN_CHG_PRMSN", "keywords": ["기간연장+변경+허가", "연장+변경+허가"], "priority": 69 }
+{ "code": "OCU_EXN_PRM", "keywords": ["기간연장+변경+허가", "연장+변경+허가"], "priority": 69 }
 ```
 
 `+`로 이은 낱말이 **모두** 있어야 매칭이고, 규칙끼리는 OR입니다. `priority` 내림차순으로 훑어
@@ -1002,7 +1030,7 @@ APPROVAL_NO  동의어 = 허가번호, 승인번호, 협의번호, 신고번호,
 어느 종류에도 자리가 없는 문서가 실제로 섞여 들어오기 때문입니다.
 
 다만 "자리가 없다"와 "자리를 아직 안 만들었다"는 다릅니다. 입찰공고가 그랬습니다 — 제목은
-멀쩡히 뽑히는데 워크북 55종에 항목이 없어 11건이 통째로 NULL이었습니다. 그래서 `ETC_BID_NOTI`를
+멀쩡히 뽑히는데 워크북 55종에 항목이 없어 11건이 통째로 NULL이었습니다. 그래서 `ETC_BID_NOT`를
 보태 56종이 됐습니다. 앞으로 같은 일이 생겼을 때 사람이 알아채도록, `dict --review`가
 미분류 제목을 빈도순으로 묶은 [docs/NOTICE_TYPES_REVIEW.md](docs/NOTICE_TYPES_REVIEW.md)를
 함께 냅니다. **자동 등록은 하지 않습니다** — 제목에서 코드를 만들어 넣으면 오타와 서식 변형이

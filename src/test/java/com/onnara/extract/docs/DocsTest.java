@@ -24,7 +24,7 @@ class DocsTest {
         SchemaResult schema = new SchemaResult(name, "hml", false, "hml-dom");
         NoticeRecord.Builder record = new NoticeRecord.Builder()
                 .set("BODY_AGNCY_NM", "군산지방해양수산청")
-                .set("LOCATION", location);
+                .set("LOC", location);
         if (extras != null) {
             extras.forEach(record::extra);
         }
@@ -69,7 +69,7 @@ class DocsTest {
 
         // 채움률: location은 2건 중 1건만 채워졌다
         assertTrue(md.contains("## 표준 필드 채움률"));
-        assertTrue(md.contains("| `LOCATION` | 점용·사용 장소 | 1 / 2 | 50% |"),
+        assertTrue(md.contains("| `LOC` | 점용·사용 장소 | 1 / 2 | 50% |"),
                 "채움률 집계가 어긋남:\n" + md);
     }
 

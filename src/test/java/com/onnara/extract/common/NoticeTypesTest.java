@@ -21,22 +21,22 @@ class NoticeTypesTest {
      */
     @ParameterizedTest(name = "{0} → {1}")
     @CsvSource(delimiter = '|', value = {
-            "공유수면 점용ㆍ사용 변경허가 고시          | OCUPY_CHG_PRMSN",
-            "공유수면 점용·사용 허가 고시              | OCUPY_PRMSN",
-            "공유수면 점용ㆍ사용 변경승인 고시          | OCUPY_CHG_APRV",
-            "공유수면 점․사용 변경(기간연장)허가 고시   | OCUPY_EXTN_CHG_PRMSN",
-            "공유수면 점․사용 변경(연장)허가 고시       | OCUPY_EXTN_CHG_PRMSN",
-            "공유수면 점용·사용 승인 고시              | OCUPY_APRV",
-            "공유수면 점용·사용 협의 고시              | OCUPY_CNSLT",
-            "공유수면 점용·사용허가 취소 고시           | OCUPY_PRMSN_CNCL",
-            "공유수면 점용·사용 실시계획 승인 고시      | IMPL_APRV",
-            "공유수면 점용·사용 실시계획 신고 수리 고시 | IMPL_RPT_ACPT",
-            "공유수면 점용·사용 실시계획 변경승인 고시  | IMPL_CHG_APRV",
-            "공유수면 점용·사용 실시계획 준공검사확인증 발급 고시 | ETC_CMPL_ACPT",
-            "공유수면 매립면허 고시                    | RECLM_LCNS",
-            "공유수면 점용료·사용료 감면기준 고시       | FEE_REDCT",
-            "방치선박 제거공고                         | ETC_ABND_RMV",
-            "공유수면 점용ㆍ사용허가의 면제대상 시설 고시 | ETC_PRMSN_EXMPT",
+            "공유수면 점용ㆍ사용 변경허가 고시          | OCU_CHG_PRM",
+            "공유수면 점용·사용 허가 고시              | OCU_PRM",
+            "공유수면 점용ㆍ사용 변경승인 고시          | OCU_CHG_APV",
+            "공유수면 점․사용 변경(기간연장)허가 고시   | OCU_EXN_PRM",
+            "공유수면 점․사용 변경(연장)허가 고시       | OCU_EXN_PRM",
+            "공유수면 점용·사용 승인 고시              | OCU_APV",
+            "공유수면 점용·사용 협의 고시              | OCU_CNS",
+            "공유수면 점용·사용허가 취소 고시           | OCU_PRM_CNC",
+            "공유수면 점용·사용 실시계획 승인 고시      | IMP_APV",
+            "공유수면 점용·사용 실시계획 신고 수리 고시 | IMP_RAC",
+            "공유수면 점용·사용 실시계획 변경승인 고시  | IMP_CHG_APV",
+            "공유수면 점용·사용 실시계획 준공검사확인증 발급 고시 | ETC_CMP_ACP",
+            "공유수면 매립면허 고시                    | RCL_LCN",
+            "공유수면 점용료·사용료 감면기준 고시       | FEE_RED",
+            "방치선박 제거공고                         | ETC_ABD_RMV",
+            "공유수면 점용ㆍ사용허가의 면제대상 시설 고시 | ETC_PRM_EXM",
     })
     void classifiesRealNoticeTitles(String title, String expected) {
         assertEquals(expected, NoticeTypes.classify(title).orElseThrow(), title);
@@ -58,7 +58,7 @@ class NoticeTypesTest {
             "공유수면점용사용변경허가고시",
     })
     void foldsSeparatorAndAbbreviationVariants(String title) {
-        assertEquals("OCUPY_CHG_PRMSN", NoticeTypes.classify(title).orElseThrow(), title);
+        assertEquals("OCU_CHG_PRM", NoticeTypes.classify(title).orElseThrow(), title);
     }
 
     /**
@@ -69,16 +69,16 @@ class NoticeTypesTest {
      */
     @Test
     void prefersTheMoreSpecificRule() {
-        assertEquals("OCUPY_EXTN_CHG_PRMSN",
+        assertEquals("OCU_EXN_PRM",
                 NoticeTypes.classify("공유수면 점용·사용 변경(기간연장)허가 고시").orElseThrow());
-        assertEquals("OCUPY_CHG_PRMSN",
+        assertEquals("OCU_CHG_PRM",
                 NoticeTypes.classify("공유수면 점용·사용 변경허가 고시").orElseThrow());
-        assertEquals("OCUPY_PRMSN",
+        assertEquals("OCU_PRM",
                 NoticeTypes.classify("공유수면 점용·사용 허가 고시").orElseThrow());
 
-        assertEquals("IMPL_RPT_ACPT",
+        assertEquals("IMP_RAC",
                 NoticeTypes.classify("실시계획 신고수리 고시").orElseThrow());
-        assertEquals("IMPL_RPT",
+        assertEquals("IMP_RPT",
                 NoticeTypes.classify("실시계획 신고 고시").orElseThrow());
     }
 
@@ -98,7 +98,7 @@ class NoticeTypesTest {
     }
 
     /**
-     * 입찰공고는 ETC_BID_NOTI로 간다 — 자리가 <b>없는</b> 것과 자리를 <b>안 만든</b> 것은 다르다.
+     * 입찰공고는 ETC_BID_NOT로 간다 — 자리가 <b>없는</b> 것과 자리를 <b>안 만든</b> 것은 다르다.
      *
      * <p>워크북 55종에 항목이 없어 제목이 멀쩡한 첨부 11건이 통째로 NULL이었다. 공유수면 처분이
      * 아니라 조달 공고이지만, 같은 게시판에서 온 이상 "무엇인지 모르는 문서"로 두는 것보다
@@ -110,7 +110,7 @@ class NoticeTypesTest {
             "폐기물처리용역 입찰공고(소액수의)", "공사 입찰 변경공고",
     })
     void classifiesBidNotices(String title) {
-        assertEquals("ETC_BID_NOTI", NoticeTypes.classify(title).orElseThrow(), title);
+        assertEquals("ETC_BID_NOT", NoticeTypes.classify(title).orElseThrow(), title);
     }
 
     /**
@@ -121,9 +121,9 @@ class NoticeTypesTest {
      */
     @Test
     void bidRuleDoesNotOutrankDispositionRules() {
-        assertEquals("OCUPY_CHG_PRMSN", NoticeTypes.classify(
+        assertEquals("OCU_CHG_PRM", NoticeTypes.classify(
                 "공유수면 점용·사용 변경허가 고시").orElseThrow());
-        assertEquals("OCUPY_GEN", NoticeTypes.classify(
+        assertEquals("OCU_GEN", NoticeTypes.classify(
                 "공유수면 점용·사용 관련 입찰 안내").orElseThrow());
     }
 
@@ -136,13 +136,13 @@ class NoticeTypesTest {
      */
     @Test
     void isNotFooledByTheLawNameContainingReclamation() {
-        assertEquals("OCUPY_PRMSN", NoticeTypes.classify(
+        assertEquals("OCU_PRM", NoticeTypes.classify(
                 "「공유수면 관리 및 매립에 관한 법률」제8조에 따라 다음과 같이"
                         + " 공유수면 점용ㆍ사용 허가를 하였기에 고시합니다").orElseThrow());
 
         // 진짜 매립 문서는 그대로 매립으로 가야 한다
-        assertEquals("RECLM_LCNS", NoticeTypes.classify("공유수면 매립면허 고시").orElseThrow());
-        assertEquals("RECLM_CMPL", NoticeTypes.classify("공유수면 매립공사 준공 고시").orElseThrow());
+        assertEquals("RCL_LCN", NoticeTypes.classify("공유수면 매립면허 고시").orElseThrow());
+        assertEquals("RCL_CMP", NoticeTypes.classify("공유수면 매립공사 준공 고시").orElseThrow());
     }
 
     /** 제목이 없으면 분류하지 않는다 — 첨부 173건이 제목 없이 온다. */

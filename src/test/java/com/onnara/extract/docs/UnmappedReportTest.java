@@ -97,8 +97,8 @@ class UnmappedReportTest {
     @Test
     void countsTheMergedPeriodRowAsLoaded() {
         NoticeRecord record = new NoticeRecord.Builder()
-                .set("WORK_PERIOD_START", "2025-09-01")
-                .set("WORK_PERIOD_END", "2028-08-31")
+                .set("WORK_PRD_ST", "2025-09-01")
+                .set("WORK_PRD_EN", "2028-08-31")
                 .build();
 
         assertTrue(UnmappedReport.of(schema(record), null).isEmpty(),
@@ -114,8 +114,8 @@ class UnmappedReportTest {
     @Test
     void treatsAnInvertedPeriodAsNoRow() {
         NoticeRecord record = new NoticeRecord.Builder()
-                .set("WORK_PERIOD_START", "2008-05-30")
-                .set("WORK_PERIOD_END", "2008-05-29")
+                .set("WORK_PRD_ST", "2008-05-30")
+                .set("WORK_PRD_EN", "2008-05-29")
                 .build();
 
         assertTrue(UnmappedReport.of(schema(record), null).isPresent(),

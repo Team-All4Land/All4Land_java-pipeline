@@ -32,7 +32,7 @@ public record NoticeRecord(
         @JsonIgnore Map<String, String> fields,
         @JsonProperty("extras") Map<String, String> extras) {
 
-    /** JSON에는 표준 필드를 평탄하게 편다 — {"LOCATION": "...", "AREA": "...", "extras": {...}}. */
+    /** JSON에는 표준 필드를 평탄하게 편다 — {"LOC": "...", "AREA": "...", "extras": {...}}. */
     @JsonAnyGetter
     public Map<String, String> jsonFields() {
         return fields;
@@ -105,17 +105,17 @@ public record NoticeRecord(
 
     /** 처분(허가/승인/신고수리) 번호. */
     public String approvalNo() {
-        return fields.get("APPROVAL_NO");
+        return fields.get("APV_NO");
     }
 
     /** 처분일자(ISO). */
     public String approvalDate() {
-        return fields.get("APPROVAL_DATE");
+        return fields.get("APV_DT");
     }
 
     /** 점용·사용 장소. */
     public String location() {
-        return fields.get("LOCATION");
+        return fields.get("LOC");
     }
 
     /** 점용·사용 면적(원문 표기 보존). */
@@ -125,32 +125,32 @@ public record NoticeRecord(
 
     /** 점용·사용 목적. */
     public String purpose() {
-        return fields.get("PURPOSE");
+        return fields.get("PRPS");
     }
 
     /** 점용·사용 기간 시작일(ISO). */
     public String workPeriodStart() {
-        return fields.get(Synonyms.WORK_PERIOD_START);
+        return fields.get(Synonyms.WORK_PRD_ST);
     }
 
     /** 점용·사용 기간 종료일(ISO). */
     public String workPeriodEnd() {
-        return fields.get(Synonyms.WORK_PERIOD_END);
+        return fields.get(Synonyms.WORK_PRD_EN);
     }
 
     /** 허가·승인 대상자 성명. */
     public String applicantName() {
-        return fields.get("APPLICANT_NAME");
+        return fields.get("APLC_NM");
     }
 
     /** 허가·승인 대상자 주소. */
     public String applicantAddress() {
-        return fields.get("APPLICANT_ADDRESS");
+        return fields.get("APLC_ADDR");
     }
 
     /** 비고. */
     public String remarks() {
-        return fields.get("REMARKS");
+        return fields.get("RMRK");
     }
 
     /** Mapper가 라벨:값 히트를 누적할 때 쓰는 가변 빌더. */

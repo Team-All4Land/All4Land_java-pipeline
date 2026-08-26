@@ -47,13 +47,13 @@ class SynonymsTest {
     /** 실제 고시문 라벨들이 올바른 itemCd 필드로 매핑되는지 검증한다. */
     @Test
     void canonicalForResolvesSampleLabels() {
-        assertEquals(Optional.of("APPROVAL_DATE"), Synonyms.canonicalFor("1. 허가연월일"));
-        assertEquals(Optional.of("LOCATION"), Synonyms.canonicalFor("3. 점용·사용의 장소"));
+        assertEquals(Optional.of("APV_DT"), Synonyms.canonicalFor("1. 허가연월일"));
+        assertEquals(Optional.of("LOC"), Synonyms.canonicalFor("3. 점용·사용의 장소"));
         assertEquals(Optional.of("AREA"), Synonyms.canonicalFor("4. 점용·사용의 면적"));
-        assertEquals(Optional.of(Synonyms.WORK_PERIOD), Synonyms.canonicalFor("5 점용·사용의 기간"));
-        assertEquals(Optional.of("APPLICANT_NAME"), Synonyms.canonicalFor("나. 성    명"));
-        assertEquals(Optional.of("APPLICANT_ADDRESS"), Synonyms.canonicalFor("가. 주    소"));
-        assertEquals(Optional.of("APPLICANT_NAME"), Synonyms.canonicalFor("성명(상호)"));
+        assertEquals(Optional.of(Synonyms.WORK_PRD), Synonyms.canonicalFor("5 점용·사용의 기간"));
+        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("나. 성    명"));
+        assertEquals(Optional.of("APLC_ADDR"), Synonyms.canonicalFor("가. 주    소"));
+        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("성명(상호)"));
     }
 
     /**
@@ -62,32 +62,32 @@ class SynonymsTest {
      */
     @Test
     void purposeAndBusinessContentAndConstructionNameAreSeparateFields() {
-        assertEquals(Optional.of("PURPOSE"), Synonyms.canonicalFor("3. 점용·사용의 목적"));
-        assertEquals(Optional.of("BUSINESS_CONTENT"), Synonyms.canonicalFor("공사내용"));
-        assertEquals(Optional.of("CONSTRUCTION_NAME"), Synonyms.canonicalFor("공사명칭"));
-        assertEquals(Optional.of("CONSTRUCTION_TYPE"), Synonyms.canonicalFor("공사의 종류"));
-        assertEquals(Optional.of("CONSTRUCTION_PERIOD"), Synonyms.canonicalFor("공사기간"));
-        assertEquals(Optional.of("CONSTRUCTION_AREA"), Synonyms.canonicalFor("공사면적"));
-        assertEquals(Optional.of("COMPLETION_AREA"), Synonyms.canonicalFor("준공면적"));
-        assertEquals(Optional.of("OPERATOR_NAME"), Synonyms.canonicalFor("사업시행자"));
+        assertEquals(Optional.of("PRPS"), Synonyms.canonicalFor("3. 점용·사용의 목적"));
+        assertEquals(Optional.of("BSNS_CTNT"), Synonyms.canonicalFor("공사내용"));
+        assertEquals(Optional.of("CNST_NM"), Synonyms.canonicalFor("공사명칭"));
+        assertEquals(Optional.of("CNST_TY"), Synonyms.canonicalFor("공사의 종류"));
+        assertEquals(Optional.of("CNST_PRD"), Synonyms.canonicalFor("공사기간"));
+        assertEquals(Optional.of("CNST_AREA"), Synonyms.canonicalFor("공사면적"));
+        assertEquals(Optional.of("CMPL_AREA"), Synonyms.canonicalFor("준공면적"));
+        assertEquals(Optional.of("OPER_NM"), Synonyms.canonicalFor("사업시행자"));
     }
 
     /** 샘플에서 관측돼 사전에 보강한 라벨들이 매핑되는지 검증한다. */
     @Test
     void canonicalForResolvesAugmentedLabels() {
         // 승인사항 고시(부산 강서구) 목록표 헤더
-        assertEquals(Optional.of("APPLICANT_NAME"), Synonyms.canonicalFor("피승인자"));
-        assertEquals(Optional.of("APPROVAL_NO"), Synonyms.canonicalFor("승인번호\n(연월일)"));
-        assertEquals(Optional.of(Synonyms.WORK_PERIOD), Synonyms.canonicalFor("기간"));
+        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("피승인자"));
+        assertEquals(Optional.of("APV_NO"), Synonyms.canonicalFor("승인번호\n(연월일)"));
+        assertEquals(Optional.of(Synonyms.WORK_PRD), Synonyms.canonicalFor("기간"));
         // 허가 고시문(부산 강서구) 목록표 헤더
-        assertEquals(Optional.of("APPLICANT_NAME"), Synonyms.canonicalFor("대상자"));
-        assertEquals(Optional.of("LOCATION"), Synonyms.canonicalFor("점용지번"));
-        assertEquals(Optional.of("PURPOSE"), Synonyms.canonicalFor("점용목적"));
+        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("대상자"));
+        assertEquals(Optional.of("LOC"), Synonyms.canonicalFor("점용지번"));
+        assertEquals(Optional.of("PRPS"), Synonyms.canonicalFor("점용목적"));
         // 고시양식(태항조선) 2열 표 라벨
-        assertEquals(Optional.of("APPLICANT_NAME"), Synonyms.canonicalFor("피허가자 성명"));
-        assertEquals(Optional.of("APPLICANT_ADDRESS"), Synonyms.canonicalFor("피허가자 주소"));
+        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("피허가자 성명"));
+        assertEquals(Optional.of("APLC_ADDR"), Synonyms.canonicalFor("피허가자 주소"));
         // 방치선박 제거공고 서식
-        assertEquals(Optional.of("LOCATION"), Synonyms.canonicalFor("발견장소"));
+        assertEquals(Optional.of("LOC"), Synonyms.canonicalFor("발견장소"));
     }
 
     /**
@@ -110,10 +110,10 @@ class SynonymsTest {
      */
     @Test
     void fileSynonymsAreNormalizedOnLoad() {
-        Synonyms.FieldSpec applicant = Synonyms.field("APPLICANT_NAME").orElseThrow();
+        Synonyms.FieldSpec applicant = Synonyms.field("APLC_NM").orElseThrow();
         assertTrue(applicant.rawSynonyms().contains("허가를 받은 자"), "원문 형태가 보존돼야 함");
         assertTrue(applicant.synonyms().contains("허가를받은자"), "정규화 형태로 매칭돼야 함");
-        assertEquals(Optional.of("APPLICANT_NAME"), Synonyms.canonicalFor("허가를 받은 자"));
+        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("허가를 받은 자"));
     }
 
     /**
@@ -156,7 +156,7 @@ class SynonymsTest {
     @Test
     void onlyWorkPeriodIsVirtual() {
         for (Synonyms.FieldSpec field : Synonyms.fields()) {
-            if (field.itemCd().equals(Synonyms.WORK_PERIOD)) {
+            if (field.itemCd().equals(Synonyms.WORK_PRD)) {
                 assertTrue(field.virtual(), "기간은 가상 필드여야 함");
             } else {
                 assertFalse(field.virtual(), field.itemCd() + ": 가상 필드가 아니어야 함");
@@ -179,8 +179,8 @@ class SynonymsTest {
 
         List<String> core = attributes.stream()
                 .filter(Synonyms.FieldSpec::coreYn).map(Synonyms.FieldSpec::itemCd).sorted().toList();
-        assertEquals(List.of("APPLICANT_ADDRESS", "APPLICANT_NAME", "AREA",
-                "LOCATION", "PURPOSE", "WORK_PERIOD"), core, "주요 항목 6종이 달라짐");
+        assertEquals(List.of("APLC_ADDR", "APLC_NM", "AREA",
+                "LOC", "PRPS", "WORK_PRD"), core, "주요 항목 6종이 달라짐");
     }
 
     /**

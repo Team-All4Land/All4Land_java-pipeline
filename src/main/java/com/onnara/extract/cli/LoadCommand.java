@@ -61,10 +61,10 @@ public class LoadCommand implements Callable<Integer> {
                 LoadStats stats = loader.loadAll(schemas, List.of());
                 System.out.printf(
                         "총 %d개 중 %d개 완료, %d개 실패, %d개 적재제외 "
-                                + "(기관 %d곳, 항목값 %d행, 이미지 %d행)%n",
+                                + "(기관 %d곳, 항목값 %d행, 라벨값 %d행, 이미지 %d행)%n",
                         schemaFiles.size(), stats.filesOk(), stats.filesFailed() + readFailed,
                         stats.filesSkipped(), stats.agenciesUpserted(),
-                        stats.recordsInserted(), stats.imagesInserted());
+                        stats.recordsInserted(), stats.labelsInserted(), stats.imagesInserted());
                 return (stats.filesFailed() + readFailed) == 0 ? 0 : 1;
             }
         }

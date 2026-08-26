@@ -1,4 +1,4 @@
--- 공유수면 고시공고 스키마 — 표준도메인 18 + 7 엔터티.
+-- 공유수면 고시공고 스키마 — 표준도메인 18 + 8 엔터티.
 --
 -- 이름은 DB 표준 사전(src/main/resources/db/standard_terms.json)이 정한다. 사전을 고치지 않고
 -- 여기에 컬럼을 보태면 DbStandardTest가 막는다 — 사전과 이 파일을 테이블 단위로 대조한다.
@@ -11,6 +11,7 @@
 --   ATCH_FILE_DTL      파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
 --   ATCH_IMG_DTL       첨부에 딸린 이미지
 --   NOTI_ITEM_VAL_DTL  항목값. 40개 표준항목을 전부 동등하게 행으로 담는다
+--   NOTI_LBL_VAL_DTL   표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다
 --
 -- 이름 규칙 세 가지만 여기 적어 둔다(나머지는 docs/DB_STANDARD.md):
 --   ① 물리명은 [수식어]+…+[분류어]이고 마지막 낱말이 도메인을 지시한다. 분류어만 보고 타입을
@@ -44,7 +45,7 @@
 -- 다음 컬럼을 보탤 때 타입을 새로 고민하는 순간 표준이 무너지기 때문이다.
 CREATE DOMAIN D_SN   AS INTEGER;
 CREATE DOMAIN D_NO   AS VARCHAR(50);
-CREATE DOMAIN D_CD   AS VARCHAR(30);
+CREATE DOMAIN D_CD   AS VARCHAR(25);
 CREATE DOMAIN D_NM   AS VARCHAR(300);
 CREATE DOMAIN D_TTL  AS VARCHAR(500);
 CREATE DOMAIN D_DT   AS DATE;
@@ -63,7 +64,7 @@ CREATE DOMAIN D_ID   AS VARCHAR(20);
 
 COMMENT ON DOMAIN D_SN   IS '일련번호 — 숫자 순번. 기관·게시물·첨부·이미지·처분·반복이 모두 이 도메인이다';
 COMMENT ON DOMAIN D_NO   IS '번호 — 문자 번호. "고시 제2026-47호"처럼 접두어가 붙은 원문 표기를 담는다';
-COMMENT ON DOMAIN D_CD   IS '코드 — 관행적인 8자가 아니라 30자다. 공고종류코드가 뜻이 읽히는 조합형이고 최장값이 MIXED_CHG_PRMSN_CNSLT_APRV(26자)다';
+COMMENT ON DOMAIN D_CD   IS '코드 — 코드값은 12자를 넘지 않는다(행안부 공통표준도메인 코드C12). 도메인이 25자인 것은 그 규칙을 따르지 않는 실패종류코드 때문이다 — FailureKind의 최장값이 DISTRIBUTION_UNSUPPORTED(24자)다';
 COMMENT ON DOMAIN D_NM   IS '명 — 이름. 첨부파일명이 공고 제목을 그대로 쓰는 경우가 있어 300으로 잡았다';
 COMMENT ON DOMAIN D_TTL  IS '제목 — 고시문 제목은 한 문장을 통째로 쓰는 일이 잦아 명보다 길게 잡는다';
 COMMENT ON DOMAIN D_DT   IS '일자 — 날짜만. 시각이 필요하면 일시(D_DTM)를 쓴다';
@@ -130,7 +131,7 @@ CREATE TABLE NOTI_KND_TC (
 COMMENT ON TABLE NOTI_KND_TC IS
     '공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다';
 COMMENT ON COLUMN NOTI_KND_TC.NOTI_KND_CD IS
-    '공고종류코드 — {상위분류}_{행위} 조합(OCUPY_PRMSN = 점용·사용 허가). 상위분류는 HRNK_NOTI_KND_NM에도 있지만 코드만 보고도 계열을 알 수 있어야 필터가 쉽다';
+    '공고종류코드 — {계열}_{수식}_{행위} 조합이고 낱말은 모두 3자다(OCU_PRM = 점용·사용 허가, OCU_CHG_PRM = 변경허가). 상위분류는 HRNK_NOTI_KND_NM에도 있지만 코드만 보고도 계열을 알 수 있어야 필터가 쉽다. 규칙은 notice_types.json의 conventions.code에 있다';
 COMMENT ON COLUMN NOTI_KND_TC.HRNK_NOTI_KND_NM IS
     '상위공고종류명 — 점용·사용 / 실시계획 / 매립 / 점용료·사용료 / 혼합 / 기타. UPPER_로 시작하면 SQL 함수명과 겹쳐 상위(HRNK)를 쓴다';
 
@@ -197,7 +198,7 @@ COMMENT ON COLUMN ATCH_FILE_DTL.ACTL_FILE_EXTN_NM IS
 COMMENT ON COLUMN ATCH_FILE_DTL.NOTI_KND_CD IS
     '공고종류코드 — 제목으로 판정한다. 규칙은 notice_types.json의 keywords에 있고 NoticeTypes.classify가 판정한다. 제목이 없거나 56종에 자리가 없는 문서는 NULL이다 — 억지로 가장 비슷한 종류에 밀어 넣으면 종류별 집계가 조용히 오염된다';
 COMMENT ON COLUMN ATCH_FILE_DTL.NOTI_NO IS
-    '고시번호 — 문서 본문의 "고시 제2026-47호". 게시물 일련번호(NOTI_BAS.NOTI_SN)와도, 처분받은 허가번호(NOTI_ITEM_CD=''APPROVAL_NO'')와도 다른 것이다. 전수에서 고시번호와 허가번호가 같은 행은 0/1,067이다';
+    '고시번호 — 문서 본문의 "고시 제2026-47호". 게시물 일련번호(NOTI_BAS.NOTI_SN)와도, 처분받은 허가번호(NOTI_ITEM_CD=''APV_NO'')와도 다른 것이다. 전수에서 고시번호와 허가번호가 같은 행은 0/1,067이다';
 COMMENT ON COLUMN ATCH_FILE_DTL.NOTI_DT IS
     '고시일자. 일자(DT)와 일시(DTM)를 분류어로 가르므로 이 컬럼은 DATE이고 FRST_REG_DTM은 TIMESTAMPTZ다';
 COMMENT ON COLUMN ATCH_FILE_DTL.FRST_REG_DTM IS '최초등록일시 — 이 행을 처음 적재한 시각';
@@ -257,6 +258,41 @@ COMMENT ON COLUMN NOTI_ITEM_VAL_DTL.ITEM_VAL_CTNT IS
 
 CREATE INDEX IX_ITEM_VAL_NOTI_ITEM_CD ON NOTI_ITEM_VAL_DTL(NOTI_ITEM_CD);
 
+-- 표준항목으로 매핑되지 못한 값. 위 테이블과 모양이 같고 키 자리만 코드에서 라벨 원문으로 바뀐다.
+--
+-- NOTI_ITEM_TC로 가는 FK를 두지 않는 것이 이 테이블의 전부다. FK가 있으면 사전에 없는 라벨은
+-- INSERT가 거부되고, 배치 삽입이라 그 첨부의 항목값·이미지가 통째로 롤백된다 — 문서 하나가
+-- 라벨 한 줄 때문에 DB에서 사라진다. 그렇다고 라벨을 NOTI_ITEM_TC에 자동 등재하면
+-- "서해배타적경제수역(eez)" 같은 것이 표준항목이 되므로, 등재는 사람이 synonyms.json을 고칠
+-- 때만 일어나고 그때까지 값은 여기에 머문다.
+--
+-- 값을 정규화하지 않는다. 표준항목이 아니라 값 유형(NOTI_ITEM_TC.ITEM_VAL_TY_CD)을 모르므로
+-- 날짜인지 면적인지 판정할 근거가 없다 — 원문 그대로 담고 판정은 사전 등재 뒤로 미룬다.
+--
+-- 반복일련번호를 두지 않는다. 라벨:값이 레코드당 Map이라(NoticeRecord.extras) 한 처분 안에서
+-- 라벨이 이미 유일하다.
+CREATE TABLE NOTI_LBL_VAL_DTL (
+    NOTI_SN        D_SN   NOT NULL,
+    ATCH_SN        D_SN   NOT NULL,
+    DSPS_SN        D_SN   NOT NULL,
+    ITEM_LBL_NM    D_NM   NOT NULL,
+    ITEM_VAL_CTNT  D_CTNT NOT NULL,
+    FRST_REG_DTM   D_DTM  NOT NULL DEFAULT now(),
+    LAST_CHG_DTM   D_DTM  NOT NULL DEFAULT now(),
+    CONSTRAINT PK_NOTI_LBL_VAL_DTL PRIMARY KEY (NOTI_SN, ATCH_SN, DSPS_SN, ITEM_LBL_NM),
+    CONSTRAINT FK_NOTI_LBL_VAL_DTL__ATCH_FILE_DTL FOREIGN KEY (NOTI_SN, ATCH_SN)
+        REFERENCES ATCH_FILE_DTL(NOTI_SN, ATCH_SN) ON DELETE CASCADE
+);
+COMMENT ON TABLE NOTI_LBL_VAL_DTL IS
+    '고시공고라벨값 — 표준항목으로 매핑되지 못한 값. 사전 보강 판단이 내려질 때까지 값을 들고 있는 자리다';
+COMMENT ON COLUMN NOTI_LBL_VAL_DTL.ITEM_LBL_NM IS
+    '항목라벨명 — 고시문이 적어 온 이름 원문. 사전이 정하는 코드가 아니므로 표준코드에 등재하지 않는다. Labels.acceptableExtra가 문장·좌표 오탐을 미리 걸러 낸 것만 들어온다';
+COMMENT ON COLUMN NOTI_LBL_VAL_DTL.ITEM_VAL_CTNT IS
+    '항목값내용 — 원문 그대로. 값 유형을 모르므로 정규화하지 않는다';
+
+-- 라벨별 빈도가 이 테이블의 주 질의다 — 어느 라벨을 사전에 올릴지 고르는 근거가 된다.
+CREATE INDEX IX_NOTI_LBL_VAL_ITEM_LBL_NM ON NOTI_LBL_VAL_DTL(ITEM_LBL_NM);
+
 -- ---------------------------------------------------------------------------
 -- 3. 날짜·기간 질의용 인덱스
 -- ---------------------------------------------------------------------------
@@ -264,7 +300,7 @@ CREATE INDEX IX_ITEM_VAL_NOTI_ITEM_CD ON NOTI_ITEM_VAL_DTL(NOTI_ITEM_CD);
 -- IMMUTABLE이 아닌 표현식은 인덱스에 쓸 수 없다("functions in index expression must be
 -- marked IMMUTABLE"). ISO 날짜는 사전순 정렬이 곧 시간순 정렬이므로 문자열 그대로
 -- 인덱싱하면 된다:
---   WHERE NOTI_ITEM_CD = 'APPROVAL_DATE'
+--   WHERE NOTI_ITEM_CD = 'APV_DT'
 --     AND ITEM_VAL_CTNT >= '2026-01-01' AND ITEM_VAL_CTNT < '2027-01-01'
 --
 -- 정규식으로 ISO 형태만 거르는 부분 인덱스로 만들지 않는다. 플래너가 부분 인덱스를 쓰려면
@@ -284,6 +320,6 @@ $$ SELECT CASE WHEN t ~ '^\[\d{4}-\d{2}-\d{2},\d{4}-\d{2}-\d{2}\]$'
 COMMENT ON FUNCTION iso_daterange(text) IS
     'NOTI_ITEM_VAL_DTL.ITEM_VAL_CTNT의 "[시작,종료]" 리터럴을 daterange로. 형식이 어긋나면 NULL. 인덱스 표현식에 쓰려고 IMMUTABLE로 선언했고, ISO 고정폭 표기는 DateStyle과 무관해 그 선언이 참이다';
 
-CREATE INDEX IX_ITEM_VAL_WORK_PERIOD
+CREATE INDEX IX_ITEM_VAL_WORK_PRD
     ON NOTI_ITEM_VAL_DTL USING gist (iso_daterange(ITEM_VAL_CTNT))
-    WHERE NOTI_ITEM_CD = 'WORK_PERIOD';
+    WHERE NOTI_ITEM_CD = 'WORK_PRD';

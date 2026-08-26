@@ -46,7 +46,7 @@ class TableInterpreterTest {
 
         TableFact location = factFor(result, "점용·사용장소");
         assertNotNull(location);
-        assertEquals("LOCATION", location.itemCd());
+        assertEquals("LOC", location.itemCd());
         assertTrue(location.mapped());
         assertEquals("인천광역시 동구 만석동 인근 공유수면", location.value());
         assertEquals(TableFact.ORIGIN_LABEL_PAIR, location.origin());
@@ -84,9 +84,9 @@ class TableInterpreterTest {
         assertEquals(2, result.records().get(0).row(), "원본 데이터 행 인덱스 기록");
 
         // 하위 헤더(주소/성명)가 상위 헤더(피승인자)보다 우선 매핑돼야 한다
-        assertEquals("APPLICANT_ADDRESS", result.columns().get(1).itemCd());
-        assertEquals("APPLICANT_NAME", result.columns().get(2).itemCd());
-        assertEquals("PURPOSE", result.columns().get(3).itemCd());
+        assertEquals("APLC_ADDR", result.columns().get(1).itemCd());
+        assertEquals("APLC_NM", result.columns().get(2).itemCd());
+        assertEquals("PRPS", result.columns().get(3).itemCd());
 
         TableFact name = factFor(result, "성명");
         assertNotNull(name);
@@ -165,13 +165,13 @@ class TableInterpreterTest {
         assertEquals(1, result.records().size(), "데이터 행 1건만 레코드");
 
         // 마침표로 읽힌 가운뎃점이 정규화돼 열별 표준 필드로 매핑돼야 한다
-        assertEquals("APPROVAL_NO", result.columns().get(0).itemCd());
-        assertEquals("LOCATION", result.columns().get(1).itemCd());
-        assertEquals("PURPOSE", result.columns().get(2).itemCd());
+        assertEquals("APV_NO", result.columns().get(0).itemCd());
+        assertEquals("LOC", result.columns().get(1).itemCd());
+        assertEquals("PRPS", result.columns().get(2).itemCd());
         assertEquals("AREA", result.columns().get(3).itemCd());
-        assertEquals("WORK_PERIOD", result.columns().get(4).itemCd());
-        assertEquals("APPLICANT_NAME", result.columns().get(5).itemCd());
-        assertEquals("APPLICANT_ADDRESS", result.columns().get(6).itemCd());
+        assertEquals("WORK_PRD", result.columns().get(4).itemCd());
+        assertEquals("APLC_NM", result.columns().get(5).itemCd());
+        assertEquals("APLC_ADDR", result.columns().get(6).itemCd());
 
         // 값의 시각적 줄바꿈은 한 칸 공백으로 접힌다
         TableFact location = factFor(result, "점용·사용장소");
@@ -234,8 +234,8 @@ class TableInterpreterTest {
 
         InterpretedTable result = TableInterpreter.interpret(List.of(table)).get(0);
 
-        assertEquals("STRUCTURE_TYPE", factFor(result, "공작물의종류").itemCd());
-        assertEquals("WATER_TYPE", factFor(result, "수면의종류").itemCd());
-        assertEquals("PROJECT_COST", factFor(result, "총사업비").itemCd());
+        assertEquals("STRC_TY", factFor(result, "공작물의종류").itemCd());
+        assertEquals("WTR_TY", factFor(result, "수면의종류").itemCd());
+        assertEquals("PRJ_COST", factFor(result, "총사업비").itemCd());
     }
 }

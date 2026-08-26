@@ -91,6 +91,12 @@ public final class DbLoader implements AutoCloseable {
             VALUES (?, ?, ?, ?, ?, ?)
             """;
 
+    /** 라벨값 1행(레코드당 N건, 배치 실행) — 표준항목으로 매핑되지 못한 값. */
+    private static final String INSERT_LABEL = """
+            INSERT INTO NOTI_LBL_VAL_DTL (NOTI_SN, ATCH_SN, DSPS_SN, ITEM_LBL_NM, ITEM_VAL_CTNT)
+            VALUES (?, ?, ?, ?, ?)
+            """;
+
     /** 처리상태코드(CD_PROC_STTS) — 추출 성공. */
     private static final String STATUS_OK = "OK";
 
@@ -135,6 +141,7 @@ public final class DbLoader implements AutoCloseable {
         int filesFailed = 0;
         int filesSkipped = 0;
         int recordsInserted = 0;
+        int labelsInserted = 0;
         int imagesInserted = 0;
 
         for (SchemaResult file : files) {
@@ -150,6 +157,7 @@ public final class DbLoader implements AutoCloseable {
                     filesOk++;
                 }
                 recordsInserted += counts.records();
+                labelsInserted += counts.labels();
                 imagesInserted += counts.images();
             } catch (Exception e) {
                 conn.rollback(savepoint);
@@ -171,7 +179,7 @@ public final class DbLoader implements AutoCloseable {
 
         conn.commit();
         return new LoadStats(agencies, filesOk, filesFailed, filesSkipped,
-                recordsInserted, imagesInserted);
+                recordsInserted, labelsInserted, imagesInserted);
     }
 
     /**
@@ -240,7 +248,7 @@ public final class DbLoader implements AutoCloseable {
      * 첨부 1건을 멱등 적재한다(기존 행 삭제 후 재삽입).
      * 트랜잭션 커밋/롤백은 호출부({@link #loadAll})가 책임진다.
      *
-     * @return 삽입한 (항목값 행 수, 이미지 행 수)
+     * @return 삽입한 (항목값 행 수, 라벨값 행 수, 이미지 행 수)
      */
     public Counts loadOne(SchemaResult file) throws SQLException {
         SourceFileName.Parsed name = file.attachmentKey();
@@ -254,11 +262,17 @@ public final class DbLoader implements AutoCloseable {
         insertAttachment(file, name, meta);
 
         int attributes = 0;
+        int labels = 0;
         if (loadValues) {
-            attributes = insertAttributes(name, records);
+            // 레코드마다 한 번만 가른다 — AttributeRows.of는 필드마다 사전을 훑으므로
+            // 항목값과 라벨값을 넣으며 따로 부르면 같은 일을 두 번 한다.
+            List<AttributeRows.Split> split = new ArrayList<>(records.size());
+            records.forEach(record -> split.add(AttributeRows.of(record)));
+            attributes = insertAttributes(name, split);
+            labels = insertLabels(name, split);
         }
         int images = insertImages(file, name);
-        return new Counts(attributes, images);
+        return new Counts(attributes, labels, images);
     }
 
     /** 판별·추출 실패 건을 첨부 행으로만 남긴다(항목값 없음). */
@@ -353,14 +367,14 @@ public final class DbLoader implements AutoCloseable {
      * <p>어느 필드가 행이 되는지는 {@link AttributeRows}가 정한다 — 적재하는 쪽과
      * "한 줄도 못 넣었다"를 판정하는 쪽이 같은 코드를 봐야 둘이 어긋나지 않는다.
      */
-    private int insertAttributes(SourceFileName.Parsed name, List<NoticeRecord> records)
+    private int insertAttributes(SourceFileName.Parsed name, List<AttributeRows.Split> split)
             throws SQLException {
         int inserted = 0;
         try (PreparedStatement ps = conn.prepareStatement(INSERT_ATTRIBUTE)) {
             int recordNo = 0;
-            for (NoticeRecord record : records) {
+            for (AttributeRows.Split record : split) {
                 recordNo++;
-                for (AttributeRows.Row row : AttributeRows.of(record)) {
+                for (AttributeRows.Row row : record.items()) {
                     addAttribute(ps, name, recordNo, row.itemCd(), row.value());
                     inserted++;
                 }
@@ -388,6 +402,39 @@ public final class DbLoader implements AutoCloseable {
         ps.setInt(5, 1);
         ps.setString(6, value);
         ps.addBatch();
+    }
+
+    /**
+     * 표준항목으로 매핑되지 못한 값을 라벨 원문 그대로 남긴다.
+     *
+     * <p>{@code DSPS_SN}은 항목값과 같은 번호를 쓴다 — 같은 처분에서 나온 값이므로 나란히
+     * 놓고 봐야 "이 처분에서 무엇이 표준항목으로 갔고 무엇이 라벨로 남았는지"가 읽힌다.
+     *
+     * <p>이 테이블에는 {@code NOTI_ITEM_TC}로 가는 FK가 없다. 있으면 사전에 없는 라벨이
+     * FK 위반을 내고, 배치 삽입이라 그 첨부의 항목값·이미지가 통째로 롤백된다.
+     */
+    private int insertLabels(SourceFileName.Parsed name, List<AttributeRows.Split> split)
+            throws SQLException {
+        int inserted = 0;
+        try (PreparedStatement ps = conn.prepareStatement(INSERT_LABEL)) {
+            int recordNo = 0;
+            for (AttributeRows.Split record : split) {
+                recordNo++;
+                for (AttributeRows.LabelRow row : record.labels()) {
+                    ps.setInt(1, name.notiSn());
+                    ps.setInt(2, name.atchSn());
+                    ps.setInt(3, recordNo);
+                    ps.setString(4, row.itemLblNm());
+                    ps.setString(5, row.value());
+                    ps.addBatch();
+                    inserted++;
+                }
+            }
+            if (inserted > 0) {
+                ps.executeBatch();
+            }
+        }
+        return inserted;
     }
 
     /** 이미지는 처분 레코드가 아니라 첨부의 속성이다 — 파일에 딸린 순서대로 번호를 매긴다. */
@@ -433,9 +480,10 @@ public final class DbLoader implements AutoCloseable {
      * 첨부 1건을 적재한 결과.
      *
      * @param records NOTI_ITEM_VAL_DTL에 넣은 항목값 행 수
+     * @param labels  NOTI_LBL_VAL_DTL에 넣은 라벨값 행 수
      * @param images  ATCH_IMG_DTL에 넣은 이미지 행 수
      */
-    public record Counts(int records, int images) {
+    public record Counts(int records, int labels, int images) {
     }
 
     /** 커넥션을 닫는다(try-with-resources 종료 시 호출). */

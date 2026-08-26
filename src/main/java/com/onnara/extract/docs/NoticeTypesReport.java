@@ -24,7 +24,7 @@ import java.util.Set;
  *
  * <p>왜 자동 등록이 아니라 리포트인가: 제목에서 코드를 만들어 넣으면 오타와 서식 변형이 각각
  * 새 종류가 되어, 종류를 축으로 삼는 집계가 통째로 무너진다. 실제로 입찰공고 11건이 이 방식으로
- * 드러나 {@code ETC_BID_NOTI} 한 줄로 정리됐다. 사람이 한 줄 추가하면
+ * 드러나 {@code ETC_BID_NOT} 한 줄로 정리됐다. 사람이 한 줄 추가하면
  * {@link com.onnara.extract.db.ReferenceSync}가 {@code NOTI_KND_TC}까지 알아서 따라온다.
  *
  * <p>{@link ExtrasReport}(미매핑 라벨)와 같은 절차를 공고종류에 적용한 것이다.

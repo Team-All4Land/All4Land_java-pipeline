@@ -31,13 +31,13 @@ import java.util.regex.Pattern;
 public final class Synonyms {
 
     /** 기간 가상 필드명 — Mapper가 시작/종료로 분리하므로 레코드에는 그대로 남지 않는다. */
-    public static final String WORK_PERIOD = "WORK_PERIOD";
+    public static final String WORK_PRD = "WORK_PRD";
 
-    /** {@link #WORK_PERIOD} 분리 결과 — 시작일(ISO). 사전에는 없는 파생 필드다. */
-    public static final String WORK_PERIOD_START = "WORK_PERIOD_START";
+    /** {@link #WORK_PRD} 분리 결과 — 시작일(ISO). 사전에는 없는 파생 필드다. */
+    public static final String WORK_PRD_ST = "WORK_PRD_ST";
 
-    /** {@link #WORK_PERIOD} 분리 결과 — 종료일(ISO). 사전에는 없는 파생 필드다. */
-    public static final String WORK_PERIOD_END = "WORK_PERIOD_END";
+    /** {@link #WORK_PRD} 분리 결과 — 종료일(ISO). 사전에는 없는 파생 필드다. */
+    public static final String WORK_PRD_EN = "WORK_PRD_EN";
 
     /** 문서 단위 메타 — attachments 테이블의 컬럼이 된다(고시번호·고시일자·제목·고시자·기관). */
     public static final String SCOPE_ATTACHMENT = "attachment";

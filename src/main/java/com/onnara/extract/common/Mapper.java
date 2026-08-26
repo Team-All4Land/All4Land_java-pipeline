@@ -343,25 +343,25 @@ public final class Mapper {
     private static void normalize(NoticeRecord.Builder builder, List<String> paragraphs) {
         splitApprovalNoDate(builder);
         normalizeDate(builder, "NOTI_DT");
-        normalizeDate(builder, "APPROVAL_DATE");
+        normalizeDate(builder, "APV_DT");
 
-        String period = builder.get(Synonyms.WORK_PERIOD);
+        String period = builder.get(Synonyms.WORK_PRD);
         if (period != null) {
-            builder.overwrite(Synonyms.WORK_PERIOD, null);
+            builder.overwrite(Synonyms.WORK_PRD, null);
             Optional<String[]> halves = Dates.splitRange(period);
             if (halves.isPresent()) {
-                Dates.toIso(halves.get()[0]).ifPresent(v -> builder.set("WORK_PERIOD_START", v));
-                Dates.toIso(halves.get()[1]).ifPresent(v -> builder.set("WORK_PERIOD_END", v));
+                Dates.toIso(halves.get()[0]).ifPresent(v -> builder.set("WORK_PRD_ST", v));
+                Dates.toIso(halves.get()[1]).ifPresent(v -> builder.set("WORK_PRD_EN", v));
             }
-            if (!builder.has("WORK_PERIOD_START") && !builder.has("WORK_PERIOD_END")) {
-                builder.extra(Synonyms.WORK_PERIOD, period);
+            if (!builder.has("WORK_PRD_ST") && !builder.has("WORK_PRD_EN")) {
+                builder.extra(Synonyms.WORK_PRD, period);
             }
         }
 
-        if (!builder.has("APPLICANT_ADDRESS")) {
-            String name = builder.get("APPLICANT_NAME");
+        if (!builder.has("APLC_ADDR")) {
+            String name = builder.get("APLC_NM");
             if (name != null) {
-                Address.extract(name).ifPresent(v -> builder.set("APPLICANT_ADDRESS", v));
+                Address.extract(name).ifPresent(v -> builder.set("APLC_ADDR", v));
             }
         }
     }
@@ -372,7 +372,7 @@ public final class Mapper {
      * approval_no에서 떼어 approval_date로 옮긴다.
      */
     private static void splitApprovalNoDate(NoticeRecord.Builder builder) {
-        String approvalNo = builder.get("APPROVAL_NO");
+        String approvalNo = builder.get("APV_NO");
         if (approvalNo == null) {
             return;
         }
@@ -384,8 +384,8 @@ public final class Mapper {
         if (number.isEmpty()) {
             return;
         }
-        builder.set("APPROVAL_DATE", m.group(1).trim());
-        builder.overwrite("APPROVAL_NO", number);
+        builder.set("APV_DT", m.group(1).trim());
+        builder.overwrite("APV_NO", number);
     }
 
     /** 날짜 필드를 ISO로 변환한다. 변환 불가면 필드를 비우고 원문을 extras로 보존한다. */
