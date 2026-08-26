@@ -299,16 +299,21 @@ erDiagram
         D_DTM  LAST_CHG_DTM    "최종변경일시"
     }
     NOTI_BAS["고시공고게시물 · NOTI_BAS"] {
-        D_SN   NOTI_SN      PK "고시공고일련번호 · 크롤 순번"
-        D_SN   AGNCY_SN     FK "기관일련번호"
-        D_CD   BBS_STTS_CD     "게시상태코드 · POST 게시중 / CLSD 게시완료"
-        D_DTM  FRST_REG_DTM    "최초등록일시"
-        D_DTM  LAST_CHG_DTM    "최종변경일시"
+        D_SN   NOTI_SN       PK "고시공고일련번호 · 크롤 순번"
+        D_SN   AGNCY_SN      FK "기관일련번호"
+        D_NM   CHRG_DEPT_NM     "담당부서"
+        D_NM   CHRGR_NM          "담당자"
+        D_NO   TEL_NO            "전화번호"
+        D_NO   NOTI_NO           "고시공고번호"
+        D_CD   BBS_STTS_CD       "게시상태코드 · POST 게시중 / CLSD 게시완료"
+        D_DTM  FRST_REG_DTM      "최초등록일시"
+        D_DTM  LAST_CHG_DTM      "최종변경일시"
     }
     ATCH_FILE_DTL["첨부파일 · ATCH_FILE_DTL"] {
         D_SN   NOTI_SN            PK,FK "고시공고일련번호"
         D_SN   ATCH_SN            PK    "첨부일련번호"
         D_NM   ATCH_FILE_NM             "첨부파일명"
+        D_PATH ATCH_FILE_PATH           "첨부파일경로 · 절대경로"
         D_CD   PROC_STTS_CD             "처리상태코드 · OK 정상 / FAIL 실패 / SKIP 적재제외"
         D_CD   FAIL_STEP_CD             "실패단계코드 · DTCT 판별 / EXTC 추출 / TBIT 표해석 / MAPP 매핑 / SAVE 저장"
         D_CD   FAIL_KND_CD              "실패종류코드 · FailureKind가 정의처"
