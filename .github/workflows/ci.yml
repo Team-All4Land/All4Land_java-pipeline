@@ -1,0 +1,59 @@
+name: CI
+
+# 이 워크플로가 지키는 것과 지키지 못하는 것
+#
+#   지킨다 — 픽스처가 필요 없는 단위 테스트 전부, 그리고 실제 PostgreSQL을 띄워 도는
+#           적재 경로(DbLoaderIT). 특히 적재는 스키마 컬럼 20여 개를 다루는 가장 넓은
+#           코드인데, 손으로 -Dgroups=db를 치는 사람이 없으면 영영 검증되지 않는다.
+#
+#   못 지킨다 — samples/가 .gitignore에 있어 체크아웃에 없다. TestFixtures.sample을 쓰는
+#           테스트 13개는 assumeTrue로 skip된다(로컬에서도 마찬가지다). 실제 고시문으로
+#           엔진을 확인하는 일은 여전히 손으로 해야 한다.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      # DbLoaderIT는 스스로 DbSchema.migrate + ReferenceSync.sync를 하므로
+      # 빈 데이터베이스 하나면 충분하다
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: extract
+          POSTGRES_USER: extract
+          POSTGRES_PASSWORD: extract
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+
+      - name: 단위 테스트
+        run: mvn -B test
+
+      # pom이 기본으로 db 태그를 제외하므로 groups와 excludedGroups를 함께 재정의해야 한다
+      - name: 적재 통합 테스트
+        run: >-
+          mvn -B test
+          -Dgroups=db -DexcludedGroups=
+          -Ddb.test.url=jdbc:postgresql://localhost:5432/extract
+          -Ddb.test.user=extract
+          -Ddb.test.password=extract
