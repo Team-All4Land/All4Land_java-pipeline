@@ -9,7 +9,7 @@
 | 사전 버전 | `2026-08-29` |
 | 표준단어 | 61개 (수식어 41 · 분류어 20) |
 | 표준도메인 | 20개 |
-| 표준용어 | 테이블 9 · 컬럼 51 |
+| 표준용어 | 테이블 9 · 컬럼 52 |
 | 표준코드 | 12군 |
 
 ## 이름은 이렇게 만들어집니다
@@ -146,7 +146,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 크롤로그 | `OS_CRWL_LOG_DTL` | `CRWL_LOG_SN` | 하루치 수집에서 기관 하나를 긁은 결과. 성공도 행으로 남겨 "오늘 이 기관을 돌았나"에 답한다. 크롤러만… |
 | 공고종류 | `OS_NOTI_KND_TC` | `NOTI_KND_CD` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
 | 공고항목 | `OS_NOTI_ITEM_TC` | `NOTI_ITEM_CD` | 표준항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 u… |
-| 첨부파일 | `OS_ATCH_FILE_DTL` | `NOTI_SN`, `ATCH_SN` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
+| 첨부파일 | `OS_ATCH_FILE_DTL` | `NOTI_SN`, `ATCH_SN` | 파일 1건. 원본 절대경로, 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
 | 첨부이미지 | `OS_ATCH_IMG_DTL` | `NOTI_SN`, `ATCH_SN`, `IMG_SN` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일… |
 | 공고항목값 | `OS_NOTI_ITEM_VAL_DTL` | `NOTI_SN`, `ATCH_SN`, `DSPS_SN`, `NOTI_ITEM_CD`, `RPT_SN` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
 | 고시공고라벨값 | `OS_NOTI_LBL_VAL_DTL` | `NOTI_SN`, `ATCH_SN`, `DSPS_SN`, `ITEM_LBL_NM` | 표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — OS_NOTI_ITEM_TC로 가는 FK가 없… |
@@ -229,6 +229,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 고시공고일련번호 | `NOTI_SN` | `D_SN` | ● |
 | 첨부일련번호 | `ATCH_SN` | `D_SN` | ● |
 | 첨부파일명 | `ATCH_FILE_NM` | `D_NM` |  |
+| 첨부파일경로 | `ATCH_FILE_PATH` | `D_PATH` |  |
 | 처리상태코드 | `PROC_STTS_CD` | `D_CD` |  |
 | 실패단계코드 | `FAIL_STEP_CD` | `D_CD` |  |
 | 실패종류코드 | `FAIL_KND_CD` | `D_CD` |  |
@@ -318,6 +319,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 주요항목여부 | `CORE_ITEM_YN` | 주요 + 항목 + 여부 | `D_YN` | — | 전수 표본 출현율 60% 이상인 주요 6항목 — 누락 검증 가중치용이며 저장 위치와는 무관하다 |
 | 첨부일련번호 | `ATCH_SN` | 첨부 + 일련번호 | `D_SN` | — | 첨부가 1건인 게시물은 파일명에 순번이 없어 항상 1이다. 결번은 버그가 아니라 미수집 신호이므로 다시 매… |
 | 첨부파일명 | `ATCH_FILE_NM` | 첨부 + 파일 + 명 | `D_NM` | — | 입력 파일명 원문 |
+| 첨부파일경로 | `ATCH_FILE_PATH` | 첨부 + 파일 + 경로 | `D_PATH` | — | 파이프라인이 실제로 읽은 원본 첨부파일의 정규화된 절대경로 |
 | 처리상태코드 | `PROC_STTS_CD` | 처리 + 상태 + 코드 | `D_CD` | `CD_PROC_STTS` | FAIL·SKIP도 행으로 남긴다 — 성공만 적재하면 "추출 0건인 기관"이 DB에서 보이지 않는다 |
 | 실패단계코드 | `FAIL_STEP_CD` | 실패 + 단계 + 코드 | `D_CD` | `CD_FAIL_STEP` | 파이프라인의 어느 단계에서 넘어졌는지 |
 | 실패종류코드 | `FAIL_KND_CD` | 실패 + 종류 + 코드 | `D_CD` | `CD_FAIL_KND` | 실패 이유의 갈래. 대응이 다른 실패를 한 덩어리로 세지 않기 위한 축이다 |

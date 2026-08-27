@@ -72,11 +72,11 @@ public final class DbLoader implements AutoCloseable {
      */
     private static final String INSERT_ATTACHMENT = """
             INSERT INTO OS_ATCH_FILE_DTL (
-                NOTI_SN, ATCH_SN, ATCH_FILE_NM, PROC_STTS_CD,
+                NOTI_SN, ATCH_SN, ATCH_FILE_NM, ATCH_FILE_PATH, PROC_STTS_CD,
                 FAIL_STEP_CD, FAIL_KND_CD, FAIL_MSG_CTNT, EXCL_RSN_CTNT,
                 FILE_EXTN_NM, ACTL_FILE_EXTN_NM, SCAN_YN, EXTC_ENGN_NM,
                 NOTI_KND_CD, NOTI_NO, NOTI_DT, NOTI_TTL
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
     /** 이미지 1행(첨부당 N건, 배치 실행). */
@@ -119,12 +119,13 @@ public final class DbLoader implements AutoCloseable {
      * 판별·추출 단계에서 실패한 첨부 1건 — 성공 산출물이 없어 {@link SchemaResult}로 표현할 수 없다.
      *
      * @param fileName 첨부파일명
+     * @param filePath 첨부파일의 정규화된 절대경로
      * @param stage    실패한 단계의 표준코드(CD_FAIL_STEP: DTCT / EXTC / TBIT / MAPP / SAVE)
      * @param kind     실패 갈래({@link com.onnara.extract.detect.FailureKind})
      * @param message  원인 체인까지 담은 사유 문장
      * @param board    수집처 — 실패해도 게시물 행은 만들어지므로 기관이 붙어야 한다. 모르면 null
      */
-    public record FailedAttachment(String fileName, String stage, String kind, String message,
+    public record FailedAttachment(String fileName, String filePath, String stage, String kind, String message,
                                    AgencyRegistry.SourceBoard board) {
     }
 
@@ -284,19 +285,20 @@ public final class DbLoader implements AutoCloseable {
             ps.setInt(1, name.notiSn());
             ps.setInt(2, name.atchSn());
             ps.setString(3, failure.fileName());
-            ps.setString(4, STATUS_FAILED);
-            ps.setString(5, failure.stage());
-            ps.setString(6, failure.kind());
-            ps.setString(7, failure.message());
-            ps.setNull(8, Types.VARCHAR);        // EXCL_RSN_CTNT
-            ps.setString(9, extensionOf(failure.fileName()));
-            ps.setNull(10, Types.VARCHAR);       // ACTL_FILE_EXTN_NM — 판별에 실패했으면 알 수 없다
-            ps.setString(11, DbStandard.yn(false));  // SCAN_YN — 위와 같은 이유로 단정하지 않는다
-            ps.setNull(12, Types.VARCHAR);       // EXTC_ENGN_NM
-            ps.setNull(13, Types.VARCHAR);       // NOTI_KND_CD — 제목을 못 읽었으니 분류할 수 없다
-            ps.setNull(14, Types.VARCHAR);       // NOTI_NO
-            ps.setNull(15, Types.DATE);          // NOTI_DT
-            ps.setNull(16, Types.VARCHAR);       // NOTI_TTL
+            ps.setString(4, failure.filePath());
+            ps.setString(5, STATUS_FAILED);
+            ps.setString(6, failure.stage());
+            ps.setString(7, failure.kind());
+            ps.setString(8, failure.message());
+            ps.setNull(9, Types.VARCHAR);        // EXCL_RSN_CTNT
+            ps.setString(10, extensionOf(failure.fileName()));
+            ps.setNull(11, Types.VARCHAR);       // ACTL_FILE_EXTN_NM — 판별에 실패했으면 알 수 없다
+            ps.setString(12, DbStandard.yn(false));  // SCAN_YN — 위와 같은 이유로 단정하지 않는다
+            ps.setNull(13, Types.VARCHAR);       // EXTC_ENGN_NM
+            ps.setNull(14, Types.VARCHAR);       // NOTI_KND_CD — 제목을 못 읽었으니 분류할 수 없다
+            ps.setNull(15, Types.VARCHAR);       // NOTI_NO
+            ps.setNull(16, Types.DATE);          // NOTI_DT
+            ps.setNull(17, Types.VARCHAR);       // NOTI_TTL
             ps.executeUpdate();
         }
     }
@@ -344,6 +346,7 @@ public final class DbLoader implements AutoCloseable {
             ps.setInt(i++, name.notiSn());
             ps.setInt(i++, name.atchSn());
             ps.setString(i++, file.getAtchFileNm());
+            ps.setString(i++, file.getAtchFilePath());
             ps.setString(i++, file.isExcluded() ? STATUS_SKIPPED : STATUS_OK);
             ps.setNull(i++, Types.VARCHAR);                    // FAIL_STEP_CD
             ps.setNull(i++, Types.VARCHAR);                    // FAIL_KND_CD

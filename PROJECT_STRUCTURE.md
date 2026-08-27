@@ -47,7 +47,7 @@ TableInterpreter.interpret (표 서식 판정 + 라벨:값 추출 + 사전 매�
         ▼
 Mapper.mapToSchema (문단 메타·라벨 + 표 해석 결과 적용 + 값 정규화)
         ▼
-표준 스키마 JSON {"atch_file_nm", "records": [...], "images": [...]}
+표준 스키마 JSON {"atch_file_nm", "atch_file_path", "records": [...], "images": [...]}
         ▼
 DbLoader (PostgreSQL JDBC + HikariCP)
         ▼
@@ -95,10 +95,10 @@ extract-java/
 │   │
 │   ├── common/                  # ★ 형식 공통 계층
 │   │   ├── model/               #   Jackson DTO — 계약의 단일 정의처
-│   │   │   ├── RawDocument.java #     atch_file_nm / file_extn_nm / scan_yn / content / images
+│   │   │   ├── RawDocument.java #     atch_file_nm / atch_file_path / file_extn_nm / scan_yn / content / images
 │   │   │   ├── RawParagraph.java, RawTable.java, RawCell.java, RawImage.java
 │   │   │   ├── NoticeRecord.java#     15개 표준 필드 + extras (java record)
-│   │   │   └── SchemaResult.java#     atch_file_nm / records / images / body_char_cnt / excl_rsn_ctnt
+│   │   │   └── SchemaResult.java#     atch_file_nm / atch_file_path / records / images / body_char_cnt / excl_rsn_ctnt
 │   │   ├── table/               #   표 해석 중간 단계 (§5.1)
 │   │   │   ├── TableInterpreter.java # raw 표 → 서식 판정 + 라벨:값 추출
 │   │   │   ├── TableGrid.java   #     병합(span) 반영 논리 격자 — 없으면 연속 중복 근사
@@ -301,6 +301,7 @@ Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 �
 ```json
 {
   "atch_file_nm": "원본파일명.ext",
+  "atch_file_path": "/srv/input/원본파일명.ext",
   "file_extn_nm": "hwp",
   "scan_yn": false,
   "content": [
@@ -459,7 +460,7 @@ hwp3 엔진만 읽고 있었고, 담을 곳이 없어 일반 문단으로 흘려
 
 ## 5. 표준 스키마 (common/model/NoticeRecord.java)
 
-`Mapper.mapToSchema(raw)`의 출력은 `{"atch_file_nm", "records": [...], "images": [...]}`.
+`Mapper.mapToSchema(raw)`의 출력은 `{"atch_file_nm", "atch_file_path", "records": [...], "images": [...]}`.
 레코드는 15개 표준 필드 + `extras`로 구성된다 (Python 버전과 동일).
 
 | 필드 | 의미 |
@@ -670,13 +671,14 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**첨부파일** `OS_ATCH_FILE_DTL` — 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
+**첨부파일** `OS_ATCH_FILE_DTL` — 파일 1건. 원본 절대경로, 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
 | 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK
 | 첨부일련번호 | `ATCH_SN` | `D_SN` | PK
 | 첨부파일명 | `ATCH_FILE_NM` | `D_NM` |
+| 첨부파일경로 | `ATCH_FILE_PATH` | `D_PATH` |
 | 처리상태코드 | `PROC_STTS_CD` | `D_CD` |
 | 실패단계코드 | `FAIL_STEP_CD` | `D_CD` |
 | 실패종류코드 | `FAIL_KND_CD` | `D_CD` |

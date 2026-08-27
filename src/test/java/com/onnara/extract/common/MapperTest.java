@@ -286,8 +286,11 @@ class MapperTest {
      */
     @Test
     void schemaJsonUsesSnakeCaseKeys() throws Exception {
-        String json = Json.MAPPER.writeValueAsString(Mapper.mapToSchema(sample8Like(), "hml-dom"));
+        RawDocument raw = sample8Like();
+        raw.setAtchFilePath("/srv/input/고시문.hml");
+        String json = Json.MAPPER.writeValueAsString(Mapper.mapToSchema(raw, "hml-dom"));
         assertTrue(json.contains("\"atch_file_nm\""));
+        assertTrue(json.contains("\"atch_file_path\":\"/srv/input/고시문.hml\""));
         assertTrue(json.contains("\"file_extn_nm\""));
         assertTrue(json.contains("\"scan_yn\""));
         assertTrue(json.contains("\"noti_sn\""), "게시물 일련번호는 구조 키다");

@@ -21,6 +21,7 @@ class SchemaResultTest {
     @Test
     void carriesTheSourceBoardThroughJson() throws Exception {
         SchemaResult schema = new SchemaResult("6034_1_고시문.hml", "hml", false, "hml-dom");
+        schema.setAtchFilePath("/srv/input/6034_1_고시문.hml");
         schema.setNotiSn(6034);
         schema.setAtchSn(1);
         schema.setSourceBoard(
@@ -32,6 +33,7 @@ class SchemaResultTest {
 
         SchemaResult reloaded = Json.MAPPER.readValue(json, SchemaResult.class);
         assertEquals(schema.getSourceBoard(), reloaded.getSourceBoard());
+        assertEquals(schema.getAtchFilePath(), reloaded.getAtchFilePath());
     }
 
     /** 수집처를 모르는 파일은 키 자체를 내보내지 않는다 — 옛 스키마 JSON과 바이트가 같아진다. */

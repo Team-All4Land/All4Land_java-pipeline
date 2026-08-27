@@ -99,6 +99,7 @@ public final class Mapper {
 
         SchemaResult result = new SchemaResult(
                 raw.getAtchFileNm(), raw.getFileExtnNm(), raw.isScanYn(), engine);
+        result.setAtchFilePath(raw.getAtchFilePath());
         result.setActlFileExtnNm(raw.getActlFileExtnNm());
         // 적재 키는 여기서 한 번만 확정한다 — 폴백 순번이 호출마다 새로 발급되므로,
         // 적재 시점에 다시 파싱하면 pipeline 경로와 map→load 경로가 다른 게시물로 갈린다

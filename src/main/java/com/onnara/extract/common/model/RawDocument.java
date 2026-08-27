@@ -13,6 +13,7 @@ import java.util.List;
  * <pre>
  * {
  *   "atch_file_nm": "원본파일명.ext",
+ *   "atch_file_path": "/srv/input/원본파일명.ext",
  *   "file_extn_nm": "pdf",
  *   "actl_file_extn_nm": "pdf",
  *   "scan_yn": false,
@@ -21,11 +22,13 @@ import java.util.List;
  * }
  * </pre>
  */
-@JsonPropertyOrder({"atch_file_nm", "file_extn_nm", "actl_file_extn_nm", "scan_yn", "content", "images"})
+@JsonPropertyOrder({"atch_file_nm", "atch_file_path", "file_extn_nm", "actl_file_extn_nm", "scan_yn", "content", "images"})
 public class RawDocument {
 
     /** 원본 파일명(경로 제외). */
     private String atchFileNm;
+    /** 원본 첨부파일의 정규화된 절대경로. */
+    private String atchFilePath;
     /** 형식 식별자: hwp / hwpx / hml / pdf — <b>파일명 확장자</b>가 기준이다. */
     private String fileExtnNm;
     /**
@@ -64,6 +67,17 @@ public class RawDocument {
     /** 원본 파일명을 설정한다. */
     public void setAtchFileNm(String atchFileNm) {
         this.atchFileNm = atchFileNm;
+    }
+
+    /** 원본 첨부파일의 절대경로를 반환한다. */
+    @JsonProperty("atch_file_path")
+    public String getAtchFilePath() {
+        return atchFilePath;
+    }
+
+    /** 원본 첨부파일의 절대경로를 설정한다. */
+    public void setAtchFilePath(String atchFilePath) {
+        this.atchFilePath = atchFilePath;
     }
 
     /** 확장자 기준 형식 식별자(hwp/hwpx/hml/pdf)를 반환한다. */

@@ -127,7 +127,8 @@ class DbLoaderIT {
         // 문서 단위 메타는 첨부 컬럼으로 간다 — 항목값 행이 아니다
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement("""
-                     SELECT PROC_STTS_CD, NOTI_KND_CD, NOTI_NO, NOTI_DT, NOTI_TTL
+                     SELECT PROC_STTS_CD, NOTI_KND_CD, NOTI_NO, NOTI_DT, NOTI_TTL,
+                            ATCH_FILE_PATH
                        FROM OS_ATCH_FILE_DTL WHERE NOTI_SN = ? AND ATCH_SN = ?""")) {
             ps.setInt(1, NOTICE_BASE + 1);
             ps.setInt(2, 1);
@@ -138,6 +139,7 @@ class DbLoaderIT {
                         "제목 \"공유수면 점용·사용 변경허가 고시\"는 변경허가로 분류돼야 한다");
                 assertEquals("고시 제2026-47호", rs.getString("NOTI_NO"));
                 assertEquals("2026-06-17", rs.getDate("NOTI_DT").toLocalDate().toString());
+                assertEquals("/srv/input/900001_1_고시문.hml", rs.getString("ATCH_FILE_PATH"));
             }
         }
 
@@ -239,7 +241,8 @@ class DbLoaderIT {
     @Test
     void recordsFailedAttachments() throws SQLException {
         DbLoader.FailedAttachment failure = new DbLoader.FailedAttachment(
-                "900004_1_깨진문서.hwp", LoadStep.EXTRACT.code(), "ZIP_CORRUPT", "IOException: 중앙 디렉터리를 찾을 수 없음",
+                "900004_1_깨진문서.hwp", "/srv/input/900004_1_깨진문서.hwp",
+                LoadStep.EXTRACT.code(), "ZIP_CORRUPT", "IOException: 중앙 디렉터리를 찾을 수 없음",
                 OPEN_BOARD);
 
         try (DbLoader loader = new DbLoader(dataSource)) {
@@ -248,7 +251,8 @@ class DbLoaderIT {
 
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement("""
-                     SELECT PROC_STTS_CD, FAIL_STEP_CD, FAIL_KND_CD, FAIL_MSG_CTNT, FILE_EXTN_NM
+                     SELECT PROC_STTS_CD, FAIL_STEP_CD, FAIL_KND_CD, FAIL_MSG_CTNT,
+                            FILE_EXTN_NM, ATCH_FILE_PATH
                        FROM OS_ATCH_FILE_DTL WHERE ATCH_FILE_NM = ?""")) {
             ps.setString(1, "900004_1_깨진문서.hwp");
             try (ResultSet rs = ps.executeQuery()) {
@@ -258,6 +262,7 @@ class DbLoaderIT {
                 assertEquals("ZIP_CORRUPT", rs.getString("FAIL_KND_CD"));
                 assertTrue(rs.getString("FAIL_MSG_CTNT").contains("중앙 디렉터리"));
                 assertEquals("hwp", rs.getString("FILE_EXTN_NM"), "확장자는 파일명만으로 알 수 있다");
+                assertEquals("/srv/input/900004_1_깨진문서.hwp", rs.getString("ATCH_FILE_PATH"));
             }
         }
 
@@ -508,6 +513,7 @@ class DbLoaderIT {
     private static SchemaResult sample(int notiSn, int atchSn, String atchFileNm,
                                        AgencyRegistry.SourceBoard board) {
         SchemaResult schema = new SchemaResult(atchFileNm, "hml", false, "hml-dom");
+        schema.setAtchFilePath("/srv/input/" + atchFileNm);
         schema.setSourceBoard(board);
         schema.setNotiSn(notiSn);
         schema.setAtchSn(atchSn);
