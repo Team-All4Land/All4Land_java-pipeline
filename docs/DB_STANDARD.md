@@ -142,13 +142,13 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 논리명 | 물리명 | PK | 무엇의 단위인가 |
 |---|---|---|---|
 | 기관 | `OS_INSTT_BAS` | `INSTT_SN` | 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다 |
-| 고시공고게시물 | `OS_NOTI_BAS` | `NOTI_SN` | 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다 |
+| 고시공고게시물 | `OS_NOTI_BAS` | `NOTI_SN` | 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다. 첨부… |
 | 크롤로그 | `OS_CRWL_LOG_DTL` | `CRWL_LOG_SN` | 하루치 수집에서 기관 하나를 긁은 결과. 성공도 행으로 남겨 "오늘 이 기관을 돌았나"에 답한다. 크롤러만… |
 | 공고종류 | `OS_NOTI_KND_TC` | `NOTI_KND_CD` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
 | 공고항목 | `OS_NOTI_ITEM_TC` | `NOTI_ITEM_CD` | 표준항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 u… |
 | 첨부파일 | `OS_ATCH_FILE_DTL` | `NOTI_SN`, `ATCH_SN` | 파일 1건. 원본 절대경로, 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
-| 첨부이미지 | `OS_ATCH_IMG_DTL` | `NOTI_SN`, `ATCH_SN`, `IMG_SN` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일… |
-| 공고항목값 | `OS_NOTI_ITEM_VAL_DTL` | `NOTI_SN`, `ATCH_SN`, `DSPS_SN`, `NOTI_ITEM_CD`, `RPT_SN` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
+| 첨부이미지 | `OS_ATCH_IMG_DTL` | `NOTI_SN`, `ATCH_SN`, `IMG_SN` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다. 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지… |
+| 공고항목값 | `OS_NOTI_ITEM_VAL_DTL` | `NOTI_SN`, `ATCH_SN`, `DSPS_SN`, `NOTI_ITEM_CD`, `RPT_SN` | 40개 표준항목을 전부 동등하게 행으로 담는다 |
 | 고시공고라벨값 | `OS_NOTI_LBL_VAL_DTL` | `NOTI_SN`, `ATCH_SN`, `DSPS_SN`, `ITEM_LBL_NM` | 표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — OS_NOTI_ITEM_TC로 가는 FK가 없… |
 
 ### 테이블별 구성 컬럼

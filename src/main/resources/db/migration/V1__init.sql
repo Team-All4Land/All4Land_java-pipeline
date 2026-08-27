@@ -13,7 +13,7 @@
 --   OS_CRWL_LOG_DTL       하루치 수집에서 기관 하나를 긁은 결과
 --   OS_NOTI_KND_TC        공고종류 56종
 --   OS_NOTI_ITEM_TC       공고항목 40종. notice_items.json이 정의처이고 ReferenceSync가 동기화한다
---   OS_ATCH_FILE_DTL      파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
+--   OS_ATCH_FILE_DTL      파일 1건. 원본 절대경로, 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
 --   OS_ATCH_IMG_DTL       첨부에 딸린 이미지
 --   OS_NOTI_ITEM_VAL_DTL  항목값. 40개 표준항목을 전부 동등하게 행으로 담는다
 --   OS_NOTI_LBL_VAL_DTL   표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다
@@ -210,7 +210,7 @@ CREATE TABLE OS_CRWL_LOG_DTL (
         REFERENCES OS_INSTT_BAS(INSTT_SN)
 );
 COMMENT ON TABLE OS_CRWL_LOG_DTL IS
-    '크롤로그 — 하루치 수집에서 기관 하나를 긁은 결과. "이 기관 게시물이 왜 하나도 없나"와 "오늘 이 기관을 돌긴 했나"를 DB에서 설명하는 자리다. 크롤러만 아는 것만 담고, OS_NOTI_BAS를 보면 알 수 있는 값은 담지 않는다';
+    '크롤로그 — 하루치 수집에서 기관 하나를 긁은 결과. 성공도 행으로 남겨 "오늘 이 기관을 돌았나"에 답한다. 크롤러만 아는 것(자기 집계·상태·언제 돌았나)만 담고, OS_NOTI_BAS에서 유도되는 값은 담지 않는다';
 COMMENT ON COLUMN OS_CRWL_LOG_DTL.CRWL_LOG_SN IS
     '크롤로그일련번호 — 크롤러가 발급한 값을 그대로 받는다. 크롤러 쪽은 BIGSERIAL이지만 하루에 기관 수(현재 90) 규모라 일련번호(INTEGER)로 넘칠 일이 없다. 여기서 BIGINT 도메인을 새로 만들면 분류어 SN이 도메인 둘을 가리켜 표준이 무너진다';
 COMMENT ON COLUMN OS_CRWL_LOG_DTL.INSTT_SN IS
@@ -269,7 +269,7 @@ CREATE TABLE OS_NOTI_ITEM_TC (
     CONSTRAINT OS_NOTI_ITEM_TC_PK PRIMARY KEY (NOTI_ITEM_CD)
 );
 COMMENT ON TABLE OS_NOTI_ITEM_TC IS
-    '공고항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다';
+    '공고항목 — 표준항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다';
 COMMENT ON COLUMN OS_NOTI_ITEM_TC.NOTI_ITEM_CD IS
     '공고항목코드 = notice_items.json의 canonical. 컬럼명이 아니라 행으로 쌓이는 코드 데이터이므로 표준단어로 분해되지 않는다';
 COMMENT ON COLUMN OS_NOTI_ITEM_TC.NOTI_ITEM_NM IS
@@ -308,7 +308,7 @@ CREATE TABLE OS_ATCH_FILE_DTL (
         REFERENCES OS_NOTI_KND_TC(NOTI_KND_CD)
 );
 COMMENT ON TABLE OS_ATCH_FILE_DTL IS
-    '첨부파일 — 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태';
+    '첨부파일 — 파일 1건. 원본 절대경로, 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.ATCH_FILE_NM IS
     '첨부파일명 — 입력 파일명 원문. 손대지 않고 그대로 담는다: 게시물·첨부 일련번호를 되짚는 근거이자, 적재된 행과 원본 파일을 잇는 유일한 끈이다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.ATCH_SN IS
@@ -433,7 +433,7 @@ CREATE TABLE OS_NOTI_LBL_VAL_DTL (
         REFERENCES OS_ATCH_FILE_DTL(NOTI_SN, ATCH_SN) ON DELETE CASCADE
 );
 COMMENT ON TABLE OS_NOTI_LBL_VAL_DTL IS
-    '고시공고라벨값 — 표준항목으로 매핑되지 못한 값. 사전 보강 판단이 내려질 때까지 값을 들고 있는 자리다';
+    '고시공고라벨값 — 표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — OS_NOTI_ITEM_TC로 가는 FK가 없어야 표준항목 레지스트리를 지키면서 값을 잃지 않는다. 사전 보강 판단이 내려질 때까지 값을 들고 있는 자리다';
 COMMENT ON COLUMN OS_NOTI_LBL_VAL_DTL.ITEM_LBL_NM IS
     '항목라벨명 — 고시문이 적어 온 이름 원문. 사전이 정하는 코드가 아니므로 표준코드에 등재하지 않는다. Labels.acceptableExtra가 문장·좌표 오탐을 미리 걸러 낸 것만 들어온다';
 COMMENT ON COLUMN OS_NOTI_LBL_VAL_DTL.ITEM_VAL_CTNT IS
