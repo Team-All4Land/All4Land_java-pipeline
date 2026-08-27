@@ -60,7 +60,7 @@ public class LoadCommand implements Callable<Integer> {
                 // 이 경로는 이미 만들어진 스키마 JSON만 읽으므로 판별·추출 실패 목록이 없다
                 LoadStats stats = loader.loadAll(schemas, List.of());
                 System.out.printf(
-                        "총 %d개 중 %d개 완료, %d개 실패, %d개 적재제외 "
+                        "총 %d개 중 %d개 완료, %d개 실패, %d개 항목값 적재제외 "
                                 + "(기관 %d곳, 항목값 %d행, 라벨값 %d행, 이미지 %d행)%n",
                         schemaFiles.size(), stats.filesOk(), stats.filesFailed() + readFailed,
                         stats.filesSkipped(), stats.agenciesUpserted(),

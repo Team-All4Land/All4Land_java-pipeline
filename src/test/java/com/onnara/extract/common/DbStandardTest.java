@@ -50,6 +50,20 @@ class DbStandardTest {
     private static final Pattern INDEX_DECL = Pattern.compile(
             "CREATE\\s+(?:UNIQUE\\s+)?INDEX\\s+([A-Z][A-Z0-9_]*)", Pattern.CASE_INSENSITIVE);
 
+    /**
+     * {@code COMMENT ON COLUMN}을 요구하지 않는 컬럼 — 전 테이블에 같은 뜻으로 박히는 감사
+     * 컬럼뿐이다. 예외를 넓히면 검사가 무의미해지므로 여기에 무엇을 보태기 전에 정말 이름만으로
+     * 뜻이 다 서는지 따져야 한다.
+     *
+     * <p>부모 테이블에서 뜻이 정해지는 키 컬럼(자식 테이블의 {@code NOTI_SN} 등)은 목록이 아니라
+     * 규칙으로 면제한다 — 어느 테이블에든 그 컬럼 주석이 한 번 달려 있으면 통과다.
+     */
+    private static final Set<String> SELF_EVIDENT_COLUMNS =
+            Set.of("FRST_REG_DTM", "LAST_CHG_DTM");
+
+    /** 컬럼 설명 한 건이 시작되는 자리. 형태가 하나뿐이라 정규식을 쓰지 않는다. */
+    private static final String COLUMN_COMMENT_MARK = "COMMENT ON COLUMN ";
+
     /** 표준화 이전 이름 — 소스 어디에도 남아 있으면 안 된다. */
     private static final List<String> RETIRED = List.of(
             "TB_AGNCY", "TB_NOTI", "TB_NOTI_KND", "TB_NOTI_ITEM",
@@ -481,5 +495,110 @@ class DbStandardTest {
             }
         }
         assertTrue(problems.isEmpty(), () -> String.join("\n  ", problems));
+    }
+
+    /**
+     * 코드표에 실측 0건인 값이 섞이면 표 전체를 믿을 수 없게 된다. 정의처가 코드(enum)인
+     * 그룹은 사전과 양방향으로 맞춰 둔다 — 지금까지는 손으로만 맞춰져 있었고,
+     * {@code CD_FAIL_STEP}에는 실제로 산출되지 않는 값이 둘 남아 있었다.
+     */
+    @Test
+    @DisplayName("정의처가 enum인 표준코드는 사전과 값 집합이 같다")
+    void enumBackedCodeGroupsMatchTheirSource() {
+        assertCodeGroupMatches("CD_FAIL_STEP",
+                java.util.Arrays.stream(LoadStep.values()).map(LoadStep::code).toList());
+        assertCodeGroupMatches("CD_FAIL_KND",
+                java.util.Arrays.stream(com.onnara.extract.detect.FailureKind.values())
+                        .map(Enum::name).toList());
+    }
+
+    /**
+     * {@code CD_ITEM_VAL_TY}의 정의처는 {@code notice_items.json}의 {@code value_type}이다.
+     * 아무 항목도 쓰지 않는 유형이 표에 남아 있으면(한때 {@code NUM}이 그랬다) 정의처가
+     * 정의처 노릇을 못 한 것이다.
+     */
+    @Test
+    @DisplayName("항목값유형코드는 notice_items.json이 실제로 쓰는 유형과 같다")
+    void itemValueTypesMatchNoticeItems() {
+        assertCodeGroupMatches("CD_ITEM_VAL_TY",
+                NoticeItems.fields().stream().map(NoticeItems.FieldSpec::valTyCd)
+                        .filter(v -> v != null && !v.isBlank()).distinct().toList());
+    }
+
+    /** 사전 등재값과 정의처 값 집합을 양방향으로 대조한다. */
+    private static void assertCodeGroupMatches(String group, List<String> actual) {
+        Set<String> registered = DbStandard.codes().stream()
+                .filter(g -> g.group().equals(group))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("사전에 없는 코드 그룹: " + group))
+                .values().stream().map(DbStandard.CodeValue::code)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        Set<String> source = new LinkedHashSet<>(actual);
+
+        Set<String> onlyRegistered = new LinkedHashSet<>(registered);
+        onlyRegistered.removeAll(source);
+        Set<String> onlySource = new LinkedHashSet<>(source);
+        onlySource.removeAll(registered);
+
+        assertTrue(onlyRegistered.isEmpty(), () -> group
+                + ": 정의처가 내놓지 않는 값이 사전에 있습니다 — " + onlyRegistered);
+        assertTrue(onlySource.isEmpty(), () -> group
+                + ": 정의처에는 있는데 사전에 없습니다 — " + onlySource);
+    }
+
+    /**
+     * 갈래를 만들어 놓고 아무 데서도 그 값을 내놓지 않으면 코드표는 있는데 데이터는 영영
+     * 안 생긴다. {@code FailureKind.ENCRYPTED}가 그랬다 — 분류기가 그 자리를
+     * {@code PASSWORD_PROTECTED}로 보내고 있었는데, 주석은 ENCRYPTED로 간다고 적고 있었다.
+     */
+    @Test
+    @DisplayName("실패종류 갈래는 전부 분류기가 실제로 내놓는다")
+    void everyFailureKindIsProduced() throws IOException {
+        String classifier = Files.readString(
+                Path.of("src/main/java/com/onnara/extract/detect/FailureClassifier.java"),
+                StandardCharsets.UTF_8);
+
+        List<String> unreachable = java.util.Arrays.stream(
+                        com.onnara.extract.detect.FailureKind.values())
+                .map(Enum::name)
+                .filter(name -> !classifier.contains("FailureKind." + name))
+                .toList();
+
+        assertTrue(unreachable.isEmpty(), () -> "분류기가 한 번도 내놓지 않는 갈래입니다"
+                + " — 배선이 끊겼거나 갈래를 지워야 합니다:\n  " + String.join("\n  ", unreachable));
+    }
+
+    /**
+     * 이름만으로는 컬럼이 무엇을 담는지 알려 주지 못한다. {@code EXCL_RSN_CTNT}가 단순 사유가
+     * 아니라 임계 재보정에 쓰는 측정값이라는 사실이 주석이 없어 아무 데도 없었고, 그래서
+     * 그 컬럼이 필요 없다는 오해가 나왔다. 인덱스에 {@code COMMENT ON INDEX}를 요구하는 것과
+     * 같은 이유로 컬럼에도 요구한다.
+     */
+    @Test
+    @DisplayName("모든 컬럼에 COMMENT ON COLUMN이 있다")
+    void everyColumnIsCommented() throws IOException {
+        String sql = readMigration();
+        // 어느 테이블에든 한 번 설명된 컬럼은 통과다 — 자식 테이블이 빌려 쓰는 키까지
+        // 같은 문장을 반복시키면 주석이 늘어날 뿐 읽히지 않는다.
+        Set<String> documented = new LinkedHashSet<>();
+        for (String tail : sql.split(COLUMN_COMMENT_MARK)) {
+            int dot = tail.indexOf('.');
+            int is = tail.indexOf(" IS");
+            if (dot > 0 && is > dot) {
+                documented.add(tail.substring(dot + 1, is).trim());
+            }
+        }
+
+        List<String> missing = new ArrayList<>();
+        for (DbStandard.TableSpec table : DbStandard.tables()) {
+            for (String column : table.columns()) {
+                if (SELF_EVIDENT_COLUMNS.contains(column) || documented.contains(column)) {
+                    continue;
+                }
+                missing.add(table.physical() + "." + column);
+            }
+        }
+        assertTrue(missing.isEmpty(), () -> "COMMENT ON COLUMN이 없습니다 —"
+                + " 이름만으로는 무엇을 담는지 알 수 없습니다:\n  " + String.join("\n  ", missing));
     }
 }

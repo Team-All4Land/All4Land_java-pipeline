@@ -234,12 +234,12 @@ public class SchemaResult {
         return exclRsnCtnt;
     }
 
-    /** 적재를 건너뛰는 사유를 설정한다. */
+    /** 항목값 적재를 건너뛰는 사유(측정값 포함)를 설정한다. */
     public void setExclRsnCtnt(String exclRsnCtnt) {
         this.exclRsnCtnt = exclRsnCtnt;
     }
 
-    /** 적재 대상인지 — DbLoader가 이 값으로 건너뛸지 정한다(사유에서 파생되므로 직렬화하지 않는다). */
+    /** 항목값 적재 대상인지 — DbLoader가 이 값으로 건너뛸지 정한다(사유에서 파생되므로 직렬화하지 않는다). */
     @JsonIgnore
     public boolean isExcluded() {
         return exclRsnCtnt != null && !exclRsnCtnt.isBlank();

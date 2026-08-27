@@ -114,6 +114,11 @@ public final class FailureClassifier {
      *
      * <p>{@link DocProtection.Kind#DISTRIBUTION}은 "배포용이라서 실패"가 아니라 <b>배포용인데도
      * 실패</b>라는 뜻이다 — 복호화는 지원되므로 암호 해제본을 받아도 소용없고, 구조 해석 문제다.
+     *
+     * <p>플래그를 읽지 못했을 때만 예외·메시지를 보조 근거로 쓰는데, 그때도 <b>단정과 추측을
+     * 가른다</b>: 전용 예외는 {@link FailureKind#PASSWORD_PROTECTED}, 메시지 문자열 매칭은
+     * {@link FailureKind#ENCRYPTED}(갈래 미상)로 간다. HWP3 암호 문서가 후자에 해당한다 —
+     * {@link DocProtection}이 HWP5·HWPX만 보므로 여기까지 내려온다.
      */
     private static Result classifyProtection(Path file, DocFormat format,
                                              Throwable root, Throwable error) {
@@ -140,9 +145,16 @@ public final class FailureClassifier {
             String detail = chain.contains(base) ? base : base + " [" + chain + "]";
             return new Result(kind, detail);
         }
-        // 플래그를 못 읽었어도 라이브러리가 암호라고 말하면 그건 근거가 된다(PDF 등)
-        if (isPasswordException(root) || mentionsEncryption(messageOf(error))) {
+        // 플래그를 못 읽었어도 라이브러리가 암호라고 말하면 그건 근거가 된다(PDF 등).
+        // 다만 두 근거의 확실성이 다르므로 갈래도 갈라야 한다 — 라이브러리가 전용 예외로
+        // "암호다"라고 말한 것은 단정할 수 있지만, 메시지 문자열에 "암호"가 보였다는 것은
+        // 추측이다. 후자까지 PASSWORD_PROTECTED로 세면 "암호 해제본을 받아라"라는 대응을
+        // 갈래 미상 건에도 안내하게 된다.
+        if (isPasswordException(root)) {
             return result(FailureKind.PASSWORD_PROTECTED, error);
+        }
+        if (mentionsEncryption(messageOf(error))) {
+            return result(FailureKind.ENCRYPTED, error);
         }
         return null;
     }

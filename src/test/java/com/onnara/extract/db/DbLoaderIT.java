@@ -274,6 +274,96 @@ class DbLoaderIT {
         assertEquals(AGENCY_BASE + 1, agencyOf(NOTICE_BASE + 4));
     }
 
+    /**
+     * 적재 자체가 넘어진 첨부도 흔적을 남겨야 한다.
+     *
+     * <p>값 하나가 컬럼 길이를 넘겨 첨부 INSERT가 죽는 상황이다. 롤백만 하고 끝내면 그 첨부는
+     * DB에서 <b>수집조차 안 된 파일과 구별되지 않는다</b> — 콘솔을 놓친 순간 영영 모른다.
+     * 항목값을 뺀 최소 행은 같은 이유로 죽지 않으므로, 그 자리에 다시 넣어 사실만은 남긴다.
+     */
+    @Test
+    void recordsAttachmentsThatFailedToLoad() throws SQLException {
+        SchemaResult doomed = sample(NOTICE_BASE + 10, 1, "900010_1_고시문.hml", OPEN_BOARD);
+        // NOTI_TTL은 D_TTL(VARCHAR(500))이다 — 600자를 넣으면 첨부 INSERT가 반드시 죽는다
+        doomed.getRecords().set(0, new NoticeRecord.Builder()
+                .set("NOTI_TTL", "가".repeat(600))
+                .build());
+        SchemaResult healthy = sample(NOTICE_BASE + 11, 1, "900011_1_고시문.hml", OPEN_BOARD);
+
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            LoadStats stats = loader.loadAll(List.of(doomed, healthy), List.of());
+            assertEquals(1, stats.filesFailed());
+            assertEquals(1, stats.filesOk(), "한 건이 죽어도 나머지는 적재된다(savepoint 격리)");
+        }
+
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement("""
+                     SELECT PROC_STTS_CD, FAIL_STEP_CD, FAIL_KND_CD, FAIL_MSG_CTNT, NOTI_TTL
+                       FROM OS_ATCH_FILE_DTL WHERE NOTI_SN = ? AND ATCH_SN = ?""")) {
+            ps.setInt(1, NOTICE_BASE + 10);
+            ps.setInt(2, 1);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "적재에 실패해도 첨부 행은 남아야 한다");
+                assertEquals("FAIL", rs.getString("PROC_STTS_CD"));
+                assertEquals("LOAD", rs.getString("FAIL_STEP_CD"),
+                        "산출물 저장(SAVE)이 아니라 DB 적재에서 넘어진 것이다");
+                assertNull(rs.getString("FAIL_KND_CD"),
+                        "FailureKind는 판별·추출의 축이라 적재 실패에 들어맞는 값이 없다");
+                assertTrue(rs.getString("FAIL_MSG_CTNT") != null
+                                && !rs.getString("FAIL_MSG_CTNT").isBlank(),
+                        "사유는 우리 처리 방식이 아니라 실패 원인 원문이어야 한다");
+                assertNull(rs.getString("NOTI_TTL"), "최소 행이므로 문서 메타는 비어 있다");
+            }
+        }
+
+        assertEquals(0, count("SELECT count(*) FROM OS_NOTI_ITEM_VAL_DTL WHERE NOTI_SN = "
+                + (NOTICE_BASE + 10)), "적재 실패 건은 항목값을 남기지 않는다");
+        assertEquals(1, count("SELECT count(*) FROM OS_ATCH_FILE_DTL WHERE NOTI_SN = "
+                + (NOTICE_BASE + 11)), "같은 배치의 정상 첨부는 영향받지 않는다");
+    }
+
+    /**
+     * SKIP은 <b>항목값</b> 적재제외다 — 파일을 통째로 빼는 것이 아니다.
+     *
+     * <p>코드값 이름이 그냥 "적재제외"였을 때 실제로 "아예 안 넣는다"로 읽혔다. 첨부 행과
+     * 이미지는 그대로 들어가고 항목값·라벨값만 빠진다는 것을 여기서 못 박는다.
+     */
+    @Test
+    void skipLeavesAttachmentAndImagesButNoValues() throws SQLException {
+        SchemaResult schema = sample(NOTICE_BASE + 12, 1, "900012_1_이용안내.pdf", OPEN_BOARD);
+        schema.setExclRsnCtnt("본문 8,355자 (임계 5,000자 초과)");
+
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            LoadStats stats = loader.loadAll(List.of(schema), List.of());
+            assertEquals(1, stats.filesSkipped());
+            assertEquals(0, stats.filesOk());
+            assertEquals(1, stats.imagesInserted(), "이미지는 적재제외 대상이 아니다");
+        }
+
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement("""
+                     SELECT PROC_STTS_CD, EXCL_RSN_CTNT, NOTI_TTL
+                       FROM OS_ATCH_FILE_DTL WHERE NOTI_SN = ? AND ATCH_SN = ?""")) {
+            ps.setInt(1, NOTICE_BASE + 12);
+            ps.setInt(2, 1);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "적재제외 첨부도 행으로 남는다");
+                assertEquals("SKIP", rs.getString("PROC_STTS_CD"));
+                assertTrue(rs.getString("EXCL_RSN_CTNT").contains("8,355자"),
+                        "사유가 아니라 측정값이 남아야 임계 재보정에 쓸 수 있다");
+                assertEquals("공유수면 점용·사용 변경허가 고시", rs.getString("NOTI_TTL"),
+                        "추출·매핑은 정상으로 끝났으므로 문서 메타는 채워진다");
+            }
+        }
+
+        assertEquals(1, count("SELECT count(*) FROM OS_ATCH_IMG_DTL WHERE NOTI_SN = "
+                + (NOTICE_BASE + 12)), "이미지는 들어간다");
+        assertEquals(0, count("SELECT count(*) FROM OS_NOTI_ITEM_VAL_DTL WHERE NOTI_SN = "
+                + (NOTICE_BASE + 12)), "항목값만 빠진다");
+        assertEquals(0, count("SELECT count(*) FROM OS_NOTI_LBL_VAL_DTL WHERE NOTI_SN = "
+                + (NOTICE_BASE + 12)), "라벨값도 함께 빠진다");
+    }
+
     /** 목록표 문서는 레코드마다 DSPS_SN이 갈려 값의 짝이 유지돼야 한다. */
     @Test
     void keepsValuePairingAcrossListTableRecords() throws SQLException {

@@ -84,7 +84,7 @@ class AgencyRegistryTest {
      * 첨부가 한 건도 없는 폴더도 기관으로 남긴다.
      *
      * <p>"긁긴 했는데 아무것도 못 건진 기관"이 DB에서 안 보이면, 수집 누락과 애초에 자료가
-     * 없던 기관을 구분할 수 없다. 실패·적재제외를 행으로 남기는 것과 같은 이유다.
+     * 없던 기관을 구분할 수 없다. 실패·항목값 적재제외를 행으로 남기는 것과 같은 이유다.
      */
     @Test
     void registersAgenciesWithNoAttachments(@TempDir Path root) throws IOException {

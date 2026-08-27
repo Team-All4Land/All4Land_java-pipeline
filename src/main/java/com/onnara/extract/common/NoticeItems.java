@@ -94,7 +94,7 @@ public final class NoticeItems {
      * @param series      같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음(면적/기간/위치/인적/주소/
      *                    날짜/연락/사유). 누락 검증을 항목이 아니라 계열 단위로 하기 위한 축이며,
      *                    계열이 없는 단독 항목은 null
-     * @param valTyCd     값의 성격 — 표준코드 CD_ITEM_VAL_TY(TEXT / DATE / DTRG / NUM).
+     * @param valTyCd     값의 성격 — 표준코드 CD_ITEM_VAL_TY(TEXT / DATE / DTRG).
      *                    정규화 방식을 정하고 OS_NOTI_ITEM_TC.ITEM_VAL_TY_CD로 동기화된다
      * @param core        전역 주요 항목(전수 표본 출현율 60% 이상) 여부 — 누락 검증 가중치용
      * @param virtual     NoticeRecord에 대응 필드가 없는 가상 필드 여부(work_period)

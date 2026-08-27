@@ -82,10 +82,13 @@ class FailureClassifierTest {
     }
 
     /**
-     * ZIP은 맞는데 항목이 암호화됐다면 손상이 아니라 암호다.
+     * ZIP은 맞는데 항목이 암호화됐다면 손상이 아니라 암호다 — 다만 <b>어느 암호인지는 모른다.</b>
      *
-     * <p>매니페스트를 읽을 수 없는 조각 파일이라 보호 플래그는 못 얻지만, 라이브러리가 암호라고
-     * 말하는 것 자체는 근거가 된다 — 이럴 때도 "손상"이 아니라 암호 갈래로 세야 대응이 맞는다.
+     * <p>매니페스트를 읽을 수 없는 조각 파일이라 보호 플래그는 못 얻는다. 남은 근거가 라이브러리
+     * 메시지에 "encrypted"가 보였다는 것뿐이라, 암호화됐다는 것까지만 말할 수 있고 열기 암호인지
+     * DRM인지 배포용인지는 가릴 수 없다. 그래서 {@link FailureKind#ENCRYPTED}(갈래 미상)다 —
+     * 여기서 {@link FailureKind#PASSWORD_PROTECTED}로 세면 "암호 해제본을 받아 오라"는, 틀릴 수
+     * 있는 대응을 안내하게 된다.
      */
     @Test
     void detectsEncryptedZipEntry(@TempDir Path dir) throws IOException {
@@ -95,7 +98,47 @@ class FailureClassifierTest {
                 new UncheckedIOException("HWPX 스캔 판별 실패: " + file,
                         new ZipException("encrypted ZIP entry not supported")));
 
+        assertEquals(FailureKind.ENCRYPTED, result.kind());
+    }
+
+    /**
+     * 한글 3.0 암호 문서도 갈래 미상이다.
+     *
+     * <p>{@code DocProtection}은 HWP5·HWPX만 보므로 HWP3는 보호 플래그를 얻지 못하고 메시지
+     * 추측까지 내려온다. {@code Hwp3Reader}가 던지는 문장이 이 갈래에 도달하는 경로다.
+     */
+    @Test
+    void hwp3PasswordFallsToUnknownEncryption(@TempDir Path dir) throws IOException {
+        Path file = writeBytes(dir, "암호3.hwp", "HWP Document File V3.00 ".getBytes("MS949"));
+
+        FailureClassifier.Result result = FailureClassifier.classify(file,
+                new IOException("암호가 걸린 한글 3.0 문서입니다: " + file));
+
+        assertEquals(FailureKind.ENCRYPTED, result.kind());
+    }
+
+    /**
+     * 라이브러리가 <b>전용 예외</b>로 암호라고 말하면 그때는 단정한다.
+     *
+     * <p>메시지 문자열 추측과 가르는 자리다 — PDFBox의 {@code InvalidPasswordException}은
+     * "열기 암호가 걸렸다"는 뜻이 분명하므로 갈래 미상으로 미룰 이유가 없다. 판정은 클래스
+     * 이름으로 하므로(패키지 의존을 늘리지 않으려고) 같은 이름의 대역으로 확인한다.
+     */
+    @Test
+    void dedicatedPasswordExceptionIsCertain(@TempDir Path dir) throws IOException {
+        Path file = writeBytes(dir, "암호.pdf", "%PDF-1.4 ".getBytes("US-ASCII"));
+
+        FailureClassifier.Result result = FailureClassifier.classify(file,
+                new InvalidPasswordException("Cannot decrypt PDF"));
+
         assertEquals(FailureKind.PASSWORD_PROTECTED, result.kind());
+    }
+
+    /** PDFBox 예외의 대역 — 분류기가 클래스 이름만 보므로 이름만 같으면 된다. */
+    private static final class InvalidPasswordException extends IOException {
+        InvalidPasswordException(String message) {
+            super(message);
+        }
     }
 
     /**

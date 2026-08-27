@@ -147,8 +147,8 @@ extract-java/
 │       ├── DataSourceFactory.java #  HikariCP 커넥션 풀 생성 (환경변수/.env/application.properties)
 │       ├── DbSchema.java        #   DDL(§6) 실행 (Flyway 사용 시 마이그레이션은 resources/db/migration/)
 │       ├── DbLoader.java        #   SchemaResult → 7테이블 적재 (PostgreSQL JDBC)
-│       │                        #   excl_rsn_ctnt이 있는 파일은 [적재제외]로 건너뜀
-│       └── LoadStats.java       #   적재 요약 (성공/실패/적재제외 건수)
+│       │                        #   excl_rsn_ctnt이 있는 파일은 항목값만 건너뜀
+│       └── LoadStats.java       #   적재 요약 (성공/실패/항목값 적재제외 건수)
 │
 ├── .env.example                # 리눅스 서버 배포용 환경변수 예시 (.env로 복사; 우선순위 OS 환경변수 > .env > properties)
 ├── docs/                       # 생성 문서 (dict 서브커맨드 산출물 — 손으로 고치지 않는다)
@@ -725,7 +725,7 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 - **멱등 단위는 첨부파일이다.** 게시물 단위로 지우면 파일을 한 건씩 처리하는 도중 같은
   게시물의 앞선 첨부가 함께 날아간다. 첨부 행을 지우면 CASCADE로 이미지와 항목값이 함께
   정리되므로 재적재가 안전하다.
-- **실패·적재제외도 행으로 남긴다**(`PROC_STTS_CD`). 성공만 적재하면 "첨부 401건 중 추출
+- **실패·항목값 적재제외도 행으로 남긴다**(`PROC_STTS_CD`). 성공만 적재하면 "첨부 401건 중 추출
   0건"인 기관이 DB에서 아예 보이지 않는다.
 - **사전 동기화(`ReferenceSync`)가 적재보다 먼저** 돈다 — `OS_NOTI_ITEM_VAL_DTL`이
   `OS_NOTI_ITEM_TC`를 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
@@ -978,7 +978,7 @@ java -jar extract.jar <서브커맨드> [옵션]
                 + 임베디드 이미지가 있으면 같은 경로로 OCR해 본문 뒤에 이어 붙임 (§7.1)
 5) TableInterpreter.interpret → (--tables 시) out/<이름>.tables.json 저장
 6) Mapper.mapToSchema(표 해석 결과 재사용) → LoadPolicy.apply → out/<이름>.schema.json 저장
-7) DbLoader로 7테이블 적재 (excl_rsn_ctnt이 있는 파일은 [적재제외])
+7) DbLoader로 7테이블 적재 (excl_rsn_ctnt이 있는 파일은 [항목값 적재제외])
 
 단계마다 실패를 `[실패] <파일>: (<단계>) <사유>`로 격리한다. 단계는 판별/추출/표해석/매핑/저장
 다섯이고, 사유는 `Errors.describe`로 원인 체인까지 담는다(§3.1). `Exception`이 아니라

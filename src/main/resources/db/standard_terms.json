@@ -222,8 +222,8 @@
     { "logical": "처리상태코드",     "physical": "PROC_STTS_CD",      "domain": "D_CD",   "code": "CD_PROC_STTS", "description": "FAIL·SKIP도 행으로 남긴다 — 성공만 적재하면 \"추출 0건인 기관\"이 DB에서 보이지 않는다" },
     { "logical": "실패단계코드",     "physical": "FAIL_STEP_CD",      "domain": "D_CD",   "code": "CD_FAIL_STEP", "description": "파이프라인의 어느 단계에서 넘어졌는지" },
     { "logical": "실패종류코드",     "physical": "FAIL_KND_CD",       "domain": "D_CD",   "code": "CD_FAIL_KND", "description": "실패 이유의 갈래. 대응이 다른 실패를 한 덩어리로 세지 않기 위한 축이다" },
-    { "logical": "실패메시지내용",   "physical": "FAIL_MSG_CTNT",     "domain": "D_CTNT", "description": "사람이 읽는 실패 설명 원문" },
-    { "logical": "적재제외사유내용", "physical": "EXCL_RSN_CTNT",     "domain": "D_CTNT", "description": "안내문류 차단 등 적재를 건너뛴 사유" },
+    { "logical": "실패메시지내용",   "physical": "FAIL_MSG_CTNT",     "domain": "D_CTNT", "description": "사람이 읽는 실패 설명 원문. 같은 실패종류 여러 건 중 무엇이 진짜 손상이고 무엇이 우리 파서 한계인지는 이 원문으로만 갈린다 — 코드로 접히지 않는다" },
+    { "logical": "적재제외사유내용", "physical": "EXCL_RSN_CTNT",     "domain": "D_CTNT", "description": "항목값 적재를 건너뛴 사유이자 그 판정의 측정값 — \"본문 8,355자 (임계 5,000자 초과)\" 형태다. 본문글자수 컬럼이 따로 없으므로 DB에서 그 수치를 아는 유일한 자리이고, 적재 임계치 재보정의 근거가 된다" },
     { "logical": "파일확장자명",     "physical": "FILE_EXTN_NM",      "domain": "D_NM",   "code": "CD_FILE_EXTN", "description": "파일명 확장자 기준 형식" },
     { "logical": "실제파일확장자명", "physical": "ACTL_FILE_EXTN_NM", "domain": "D_NM",   "code": "CD_FILE_EXTN", "description": "매직바이트로 판정한 실제 형식. FILE_EXTN_NM과 다른 행이 곧 확장자가 어긋난 파일 목록이다" },
     { "logical": "스캔여부",         "physical": "SCAN_YN",           "domain": "D_YN",   "description": "본문이 텍스트가 아니라 이미지인 스캔본 여부" },
@@ -287,22 +287,21 @@
     },
     {
       "group": "CD_PROC_STTS", "name": "처리상태코드", "columns": ["OS_ATCH_FILE_DTL.PROC_STTS_CD"],
-      "description": "첨부파일 1건의 처리 결과",
+      "description": "첨부파일 1건의 처리 결과. SKIP은 파일을 통째로 빼는 것이 아니다 — 첨부 행도 이미지도 들어가고 항목값·라벨값만 빠진다",
       "values": [
         { "code": "OK",   "name": "정상" },
         { "code": "FAIL", "name": "실패" },
-        { "code": "SKIP", "name": "적재제외" }
+        { "code": "SKIP", "name": "항목값 적재제외" }
       ]
     },
     {
       "group": "CD_FAIL_STEP", "name": "실패단계코드", "columns": ["OS_ATCH_FILE_DTL.FAIL_STEP_CD"],
-      "description": "파이프라인 단계. 콘솔에는 한글 표시명이 나가고 DB에는 코드가 들어간다",
+      "description": "파이프라인 단계. 콘솔에는 한글 표시명이 나가고 DB에는 코드가 들어간다. 자체 실패를 정의하지 않는 구간은 값을 두지 않는다 — 실측 0건인 값이 섞이면 이 표를 믿을 수 없게 된다. EXTC가 추출부터 매핑까지를 덮고, SAVE는 중간 산출물 파일 저장이며 DB 적재는 LOAD다",
       "values": [
         { "code": "DTCT", "name": "판별" },
-        { "code": "EXTC", "name": "추출" },
-        { "code": "TBIT", "name": "표해석" },
-        { "code": "MAPP", "name": "매핑" },
-        { "code": "SAVE", "name": "저장" }
+        { "code": "EXTC", "name": "추출·매핑" },
+        { "code": "SAVE", "name": "산출물저장" },
+        { "code": "LOAD", "name": "DB적재" }
       ]
     },
     {
@@ -335,8 +334,7 @@
       "values": [
         { "code": "TEXT", "name": "문자 — 원문 보존" },
         { "code": "DATE", "name": "일자 — ISO 정규화" },
-        { "code": "DTRG", "name": "기간 — daterange 리터럴" },
-        { "code": "NUM",  "name": "수치" }
+        { "code": "DTRG", "name": "기간 — daterange 리터럴" }
       ]
     },
     {

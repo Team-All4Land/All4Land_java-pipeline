@@ -19,10 +19,11 @@ import java.util.Optional;
 /**
  * 추출은 됐는데 DB에 <b>한 줄도</b> 들어가지 못한 첨부를 파일 단위로 남긴다.
  *
- * <p>세 갈래를 갈라 봐야 한다. 실패({@code PROC_STTS_CD='failed'})는 왜 못 읽었는지가 {@code FAIL_*}에
- * 남고, 적재제외({@code EXCL_RSN_CTNT})는 왜 뺐는지가 그 컬럼에 남는다. 둘 다 이유가 DB에 있다.
- * 남는 것이 <b>"읽히기는 했는데 값이 하나도 안 들어간"</b> 첨부인데, 이것만은 DB에 흔적이 없다 —
- * 첨부 행은 {@code ok}로 멀쩡히 서 있고 항목값만 0건이라, 질의로는 그냥 값 없는 문서와 구분되지 않는다.
+ * <p>세 갈래를 갈라 봐야 한다. 실패({@code PROC_STTS_CD='FAIL'})는 왜 못 읽었는지가 {@code FAIL_*}에
+ * 남고, 항목값 적재제외({@code PROC_STTS_CD='SKIP'})는 왜 뺐는지가 {@code EXCL_RSN_CTNT}에 남는다.
+ * 둘 다 이유가 DB에 있다. 남는 것이 <b>"읽히기는 했는데 값이 하나도 안 들어간"</b> 첨부인데,
+ * 이것만은 DB에 흔적이 없다 — 첨부 행은 {@code 'OK'}로 멀쩡히 서 있고 항목값만 0건이라,
+ * 질의로는 그냥 값 없는 문서와 구분되지 않는다.
  *
  * <p>실제로 이런 첨부가 무엇을 잃는지: {@code 148_고시양식 (3).hml}은 처분사유·근거법령·피승인자를
  * 라벨:값으로 다 갖고 있는데 머리기호 {@code ㅇ}가 라벨 정규화에서 안 벗겨져 전부 {@code extras}에
@@ -69,7 +70,7 @@ public final class UnmappedReport {
      * 이 첨부가 미적재인지 보고, 맞으면 남길 내역을 만든다.
      *
      * @param raw 본문 발췌를 뜨기 위한 원시 문서. 없으면 발췌 없이 만든다
-     * @return 값이 한 줄이라도 적재되거나 적재제외 판정을 받았으면 {@link Optional#empty()}
+     * @return 값이 한 줄이라도 적재되거나 항목값 적재제외 판정을 받았으면 {@link Optional#empty()}
      */
     public static Optional<Unmapped> of(SchemaResult schema, RawDocument raw) {
         if (schema == null || schema.isExcluded()) {

@@ -136,12 +136,12 @@ public class PipelineCommand implements Callable<Integer> {
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
                         file, null, output, !noImages, scanRunner, scanned);
 
-                step = LoadStep.TABLE;
-                // 표 해석은 한 번만 하고 중간 산출물 저장과 매핑이 함께 쓴다
+                // 표 해석은 한 번만 하고 중간 산출물 저장과 매핑이 함께 쓴다.
+                // 표해석·매핑에는 단계 코드를 두지 않는다 — 둘 다 자체 실패를 정의하지 않아
+                // 여기서 나온 예외는 파일 문제가 아니라 버그이고, EXTC로 모이는 것이 맞다.
                 List<InterpretedTable> interpreted = TableInterpreter.interpret(
                         TableInterpreter.tablesOf(result.raw()));
 
-                step = LoadStep.MAP;
                 SchemaResult schema = loadPolicy.apply(
                         Mapper.mapToSchema(result.raw(), result.engine(), interpreted), result.raw());
                 // 수집처는 경로에만 있다 — Mapper는 파일명만 받으므로 여기서 붙인다
@@ -253,7 +253,7 @@ public class PipelineCommand implements Callable<Integer> {
                         reference.attributes(), reference.noticeTypes(), agencies);
                 System.out.printf(
                         "DB 적재: 첨부 %d건, 항목값 %d행, 라벨값 %d행, 이미지 %d행"
-                                + " (적재제외 %d건, 실패기록 %d건)%n",
+                                + " (항목값 적재제외 %d건, 실패기록 %d건)%n",
                         stats.filesOk(), stats.recordsInserted(), stats.labelsInserted(),
                         stats.imagesInserted(), stats.filesSkipped(), failures.size());
             }

@@ -128,7 +128,7 @@ cp .env.example .env   # 이후 값 편집
 
 **DB 비밀번호를 파일에 평문으로 두지 마세요** — `.env`나 OS 환경변수(`PGPASSWORD`)로
 주입합니다. 임계치를 왜 두는지는
-[적재 제외](docs/DESIGN_NOTES.md#긴-문서는-적재에서-뺀다-안내문류-차단),
+[항목값 적재 제외](docs/DESIGN_NOTES.md#긴-문서는-항목값-적재에서-뺀다-안내문류-차단),
 DB를 다시 세우는 절차는
 [`PROJECT_STRUCTURE.md` §6.5](PROJECT_STRUCTURE.md#65-개발-db-초기화)에 있습니다.
 
@@ -193,11 +193,11 @@ erDiagram
         D_SN   ATCH_SN            PK    "첨부일련번호"
         D_NM   ATCH_FILE_NM             "첨부파일명"
         D_PATH ATCH_FILE_PATH           "첨부파일경로 · 실제 원본의 절대경로"
-        D_CD   PROC_STTS_CD             "처리상태코드 · OK 정상 / FAIL 실패 / SKIP 적재제외"
-        D_CD   FAIL_STEP_CD             "실패단계코드 · DTCT 판별 / EXTC 추출 / TBIT 표해석 / MAPP 매핑 / SAVE 저장"
+        D_CD   PROC_STTS_CD             "처리상태코드 · OK 정상 / FAIL 실패 / SKIP 항목값 적재제외"
+        D_CD   FAIL_STEP_CD             "실패단계코드 · DTCT 판별 / EXTC 추출·매핑 / SAVE 산출물저장 / LOAD DB적재"
         D_CD   FAIL_KND_CD              "실패종류코드 · FailureKind가 정의처"
         D_CTNT FAIL_MSG_CTNT            "실패메시지내용"
-        D_CTNT EXCL_RSN_CTNT            "적재제외사유내용"
+        D_CTNT EXCL_RSN_CTNT            "적재제외사유내용 · 사유이자 측정값"
         D_NM   FILE_EXTN_NM             "파일확장자명 · 파일명이 말하는 것 (hwp / hwp3 / hwpx / hml / pdf)"
         D_NM   ACTL_FILE_EXTN_NM        "실제파일확장자명 · 매직바이트가 말하는 것 (hwp / hwp3 / hwpx / hml / pdf)"
         D_YN   SCAN_YN                  "스캔여부"
@@ -322,8 +322,10 @@ erDiagram
 
 ## 문제가 생겼을 때
 
-**실패·적재제외도 행으로 남깁니다.** 성공만 적재하면 "첨부 401건 중 추출 0건"인 기관이
+**실패·항목값 적재제외도 행으로 남깁니다.** 성공만 적재하면 "첨부 401건 중 추출 0건"인 기관이
 DB에서 아예 보이지 않아, 추출 누락과 애초에 없던 자료를 구분할 수 없습니다.
+적재 단계에서 넘어진 첨부도 `FAIL_STEP_CD='LOAD'` 행으로 남습니다 — 롤백만 하고 끝내면
+그 첨부가 수집조차 안 된 파일과 구별되지 않습니다.
 
 ```sql
 -- 무엇이 왜 실패했나
@@ -336,7 +338,8 @@ SELECT FAIL_STEP_CD, FAIL_KND_CD, count(*)
 | 특정 파일이 안 열린다 | `FAIL_KND_CD` — 잠긴 문서는 [`PROJECT_STRUCTURE.md` §3.1](PROJECT_STRUCTURE.md)이 갈래를 나눠 놓았습니다 |
 | 표를 잘못 읽은 것 같다 | `render *.tables.json` — 해석한 표를 HTML로 복원해 눈으로 봅니다 |
 | 값이 하나도 안 들어갔다 | `dict --unmapped` — 사전에 없는 라벨을 빈도순으로 뽑습니다 |
-| 문서는 읽혔는데 적재가 안 됐다 | `EXCL_RSN_CTNT` — [안내문류 차단](docs/DESIGN_NOTES.md#긴-문서는-적재에서-뺀다-안내문류-차단)에 걸린 것입니다 |
+| 문서는 읽혔는데 항목값이 안 들어갔다 | `PROC_STTS_CD='SKIP'` — [안내문류 차단](docs/DESIGN_NOTES.md#긴-문서는-항목값-적재에서-뺀다-안내문류-차단)에 걸린 것입니다. `EXCL_RSN_CTNT`에 본문 글자 수가 남습니다 |
+| 적재하다 죽은 첨부가 있다 | `PROC_STTS_CD='FAIL' AND FAIL_STEP_CD='LOAD'` — 원인은 `FAIL_MSG_CTNT`에 있습니다 |
 | 크롤이 안 돈 기관이 있다 | `OS_CRWL_LOG_DTL` — 질의는 [`docs/CRAWLER.md`](docs/CRAWLER.md)에 있습니다 |
 
 ## 테스트

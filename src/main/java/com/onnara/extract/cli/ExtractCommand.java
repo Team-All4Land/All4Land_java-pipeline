@@ -73,7 +73,8 @@ public class ExtractCommand implements Callable<Integer> {
                 PipelineSupport.ExtractResult result = PipelineSupport.extractOne(
                         file, forcedExtractor, outputDir, !noImages, scanRunner);
 
-                step = LoadStep.MAP;
+                // 매핑에는 단계 코드를 두지 않는다 — Mapper는 자체 실패를 정의하지 않으므로
+                // 여기서 나온 예외는 버그이고 EXTC로 모인다.
                 SchemaResult schema = loadPolicy.apply(
                         Mapper.mapToSchema(result.raw(), result.engine()), result.raw());
 

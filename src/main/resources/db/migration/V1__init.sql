@@ -253,6 +253,8 @@ COMMENT ON TABLE OS_NOTI_KND_TC IS
     '공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다';
 COMMENT ON COLUMN OS_NOTI_KND_TC.NOTI_KND_CD IS
     '공고종류코드 — {계열}_{수식}_{행위} 조합이고 낱말은 모두 3자다(OCU_PRM = 점용·사용 허가, OCU_CHG_PRM = 변경허가). 상위분류는 HRNK_NOTI_KND_NM에도 있지만 코드만 보고도 계열을 알 수 있어야 필터가 쉽다. 규칙은 notice_types.json의 conventions.code에 있다';
+COMMENT ON COLUMN OS_NOTI_KND_TC.NOTI_KND_NM IS
+    '공고종류명 — 공고종류의 한글 이름. 정의처는 notice_types.json이고 ReferenceSync가 기동 시 맞춘다';
 COMMENT ON COLUMN OS_NOTI_KND_TC.HRNK_NOTI_KND_NM IS
     '상위공고종류명 — 점용·사용 / 실시계획 / 매립 / 점용료·사용료 / 혼합 / 기타. UPPER_로 시작하면 SQL 함수명과 겹쳐 상위(HRNK)를 쓴다';
 
@@ -270,6 +272,8 @@ COMMENT ON TABLE OS_NOTI_ITEM_TC IS
     '공고항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다';
 COMMENT ON COLUMN OS_NOTI_ITEM_TC.NOTI_ITEM_CD IS
     '공고항목코드 = notice_items.json의 canonical. 컬럼명이 아니라 행으로 쌓이는 코드 데이터이므로 표준단어로 분해되지 않는다';
+COMMENT ON COLUMN OS_NOTI_ITEM_TC.NOTI_ITEM_NM IS
+    '공고항목명 — 표준항목의 한글 표시명. 라벨 원문이 아니라 대표 이름이며, 문서마다 다르게 적힌 라벨은 notice_items.json의 동의어로 이 항목에 모인다';
 COMMENT ON COLUMN OS_NOTI_ITEM_TC.ITEM_SRS_NM IS
     '항목계열명 — 같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음. 준공·완료 수리 문서에는 점용·사용 면적이 아니라 준공면적이 오므로, 누락 검증은 항목이 아니라 계열 단위로 봐야 오탐이 없다';
 COMMENT ON COLUMN OS_NOTI_ITEM_TC.ITEM_VAL_TY_CD IS
@@ -305,26 +309,38 @@ CREATE TABLE OS_ATCH_FILE_DTL (
 );
 COMMENT ON TABLE OS_ATCH_FILE_DTL IS
     '첨부파일 — 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태';
+COMMENT ON COLUMN OS_ATCH_FILE_DTL.ATCH_FILE_NM IS
+    '첨부파일명 — 입력 파일명 원문. 손대지 않고 그대로 담는다: 게시물·첨부 일련번호를 되짚는 근거이자, 적재된 행과 원본 파일을 잇는 유일한 끈이다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.ATCH_SN IS
     '첨부일련번호. 첨부가 1건인 게시물은 파일명에 순번이 없어 항상 1이다. 결번은 버그가 아니라 미수집 신호이므로 다시 매겨 메우지 않는다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.ATCH_FILE_PATH IS
     '첨부파일경로 — 파이프라인이 실제로 읽은 원본 첨부파일의 정규화된 절대경로';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.PROC_STTS_CD IS
-    '처리상태코드(CD_PROC_STTS): OK 정상 / FAIL 실패 / SKIP 적재제외. FAIL·SKIP도 행으로 남긴다 — 성공만 적재하면 "추출 0건인 기관"이 DB에서 보이지 않는다';
+    '처리상태코드(CD_PROC_STTS): OK 정상 / FAIL 실패 / SKIP 항목값 적재제외. SKIP은 파일을 통째로 빼는 것이 아니다 — 첨부 행도 이미지도 들어가고 항목값·라벨값만 빠진다. FAIL·SKIP도 행으로 남긴다 — 성공만 적재하면 "추출 0건인 기관"이 DB에서 보이지 않는다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.FAIL_STEP_CD IS
-    '실패단계코드(CD_FAIL_STEP): DTCT 판별 / EXTC 추출 / TBIT 표해석 / MAPP 매핑 / SAVE 저장';
+    '실패단계코드(CD_FAIL_STEP): DTCT 판별 / EXTC 추출·매핑 / SAVE 산출물저장 / LOAD DB적재. 표해석·매핑에는 값을 두지 않는다 — 그 둘은 자체 실패를 정의하지 않아(TableInterpreter·Mapper에 throw가 없다) 거기서 나온 예외는 파일 문제가 아니라 버그이고 EXTC로 모인다. SAVE는 중간 산출물 파일 저장이지 DB 적재가 아니다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.FAIL_KND_CD IS
-    '실패종류코드(CD_FAIL_KND) — detect.FailureKind가 정의처다';
+    '실패종류코드(CD_FAIL_KND) — detect.FailureKind가 정의처다. 적재 실패(FAIL_STEP_CD=''LOAD'')는 비운다: 그 갈래들은 문서 판별·추출의 축이라 적재 실패에 들어맞는 값이 없고, 억지로 OTHER를 넣으면 판별 실패 집계가 오염된다';
+COMMENT ON COLUMN OS_ATCH_FILE_DTL.FAIL_MSG_CTNT IS
+    '실패메시지내용 — 실패 원인 원문. 같은 실패종류 여러 건 중 무엇이 진짜 손상이고 무엇이 우리 파서 한계인지는 이 원문으로만 갈린다. 코드로 접히지 않으므로 실패종류코드와 함께 남긴다';
+COMMENT ON COLUMN OS_ATCH_FILE_DTL.EXCL_RSN_CTNT IS
+    '적재제외사유내용 — 사유 문자열이 아니라 그 판정의 측정값이다: "본문 8,355자 (임계 5,000자 초과)". 본문글자수 컬럼을 따로 두지 않았으므로 DB에서 본문 길이를 알 수 있는 유일한 자리이고, 잠정값인 적재 임계치(map.max-body-chars)를 재보정할 때 근거가 되는 것이 이 수치다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.FILE_EXTN_NM IS
     '파일확장자명 — 확장자가 내용과 어긋난 파일이 흔하다. FILE_EXTN_NM <> ACTL_FILE_EXTN_NM인 행이 곧 그 목록이다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.ACTL_FILE_EXTN_NM IS
     '실제파일확장자명 — 내용(매직바이트)으로 판정한 형식. REAL_은 PostgreSQL 부동소수 타입명과 겹쳐 실제(ACTL)를 쓴다';
+COMMENT ON COLUMN OS_ATCH_FILE_DTL.SCAN_YN IS
+    '스캔여부 — 본문이 텍스트가 아니라 이미지인 스캔본인지. 판별에 실패한 행은 단정할 수 없으므로 기본값 N이 그대로 남는다';
+COMMENT ON COLUMN OS_ATCH_FILE_DTL.EXTC_ENGN_NM IS
+    '추출엔진명 — 본문을 실제로 읽어 낸 엔진. 확장자가 아니라 매직바이트로 라우팅하므로, 같은 .hwp가 파일마다 다른 엔진으로 갈 수 있다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.NOTI_KND_CD IS
     '공고종류코드 — 제목으로 판정한다. 규칙은 notice_types.json의 keywords에 있고 NoticeTypes.classify가 판정한다. 제목이 없거나 56종에 자리가 없는 문서는 NULL이다 — 억지로 가장 비슷한 종류에 밀어 넣으면 종류별 집계가 조용히 오염된다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.NOTI_NO IS
     '고시번호 — 문서 본문의 "고시 제2026-47호". 게시물 일련번호(OS_NOTI_BAS.NOTI_SN)와도, 처분받은 허가번호(NOTI_ITEM_CD=''APV_NO'')와도 다른 것이다. 전수에서 고시번호와 허가번호가 같은 행은 0/1,067이다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.NOTI_DT IS
     '고시일자. 일자(DT)와 일시(DTM)를 분류어로 가르므로 이 컬럼은 DATE이고 FRST_REG_DTM은 TIMESTAMPTZ다';
+COMMENT ON COLUMN OS_ATCH_FILE_DTL.NOTI_TTL IS
+    '고시제목 — 문서에서 읽은 제목. 공고종류(NOTI_KND_CD) 판정의 입력이므로, 이 값이 비면 종류도 비는 것이 정상이다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.FRST_REG_DTM IS '최초등록일시 — 이 행을 처음 적재한 시각';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.LAST_CHG_DTM IS '최종변경일시 — 이 행을 마지막으로 갱신한 시각';
 
@@ -358,6 +374,10 @@ CREATE TABLE OS_ATCH_IMG_DTL (
 );
 COMMENT ON TABLE OS_ATCH_IMG_DTL IS
     '첨부이미지 — 이미지는 처분 레코드가 아니라 첨부파일의 속성이다. 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다';
+COMMENT ON COLUMN OS_ATCH_IMG_DTL.IMG_SN IS
+    '이미지일련번호 — 한 첨부 안에서의 이미지 순번. 문서에 나온 순서이지 중요도가 아니다';
+COMMENT ON COLUMN OS_ATCH_IMG_DTL.IMG_CPTN_CTNT IS
+    '이미지캡션내용 — 이름과 달리 지금 들어가는 값은 캡션이 아니라 저장 파일명이다(DbLoader가 RawImage.name을 넣는다). 추출기는 캡션을 따로 읽어 두지만(RawImage.caption) 적재 경로가 그것을 쓰지 않는다. 이 컬럼이 NOT NULL이라 캡션 없는 이미지를 무엇으로 채울지 정하지 않으면 바로잡을 수 없다 — 고칠 때 그 결정이 먼저다';
 COMMENT ON COLUMN OS_ATCH_IMG_DTL.IMG_FILE_PATH IS '이미지파일경로 — 추출한 이미지를 저장한 절대경로';
 
 CREATE TABLE OS_NOTI_ITEM_VAL_DTL (

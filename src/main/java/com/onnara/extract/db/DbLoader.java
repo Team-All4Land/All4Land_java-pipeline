@@ -4,6 +4,7 @@ import com.onnara.extract.common.AgencyRegistry;
 import com.onnara.extract.common.DbStandard;
 import com.onnara.extract.common.AttributeRows;
 import com.onnara.extract.common.Errors;
+import com.onnara.extract.common.LoadStep;
 import com.onnara.extract.common.SourceFileName;
 import com.onnara.extract.common.NoticeItems;
 import com.onnara.extract.common.model.NoticeRecord;
@@ -31,7 +32,7 @@ import java.util.Map;
  * 파일을 한 건씩 처리하는 도중 같은 게시물의 앞선 첨부가 함께 날아간다. 첨부 행을 지우면
  * CASCADE로 이미지와 항목값이 함께 정리되므로 재적재가 안전하다.
  *
- * <p>성공한 파일만 넣지 않는다 — 실패·적재제외도 {@code PROC_STTS_CD}를 달아 행으로 남긴다.
+ * <p>성공한 파일만 넣지 않는다 — 실패·항목값 적재제외도 {@code PROC_STTS_CD}를 달아 행으로 남긴다.
  * 성공만 적재하면 "첨부 401건 중 추출 0건"인 기관이 DB에서 아예 보이지 않는다.
  *
  * <p>기관은 첨부보다 <b>먼저</b> 한 번에 넣는다 — {@code OS_NOTI_BAS.INSTT_SN}가 FK라
@@ -103,7 +104,12 @@ public final class DbLoader implements AutoCloseable {
     /** 처리상태코드(CD_PROC_STTS) — 판별·추출·매핑 실패. */
     private static final String STATUS_FAILED = "FAIL";
 
-    /** 처리상태코드(CD_PROC_STTS) — 안내문류로 보고 항목 적재를 건너뜀. */
+    /**
+     * 처리상태코드(CD_PROC_STTS) — 안내문류로 보고 <b>항목값 적재만</b> 건너뜀.
+     *
+     * <p>파일을 통째로 빼는 것이 아니다. 첨부 행도 이미지도 그대로 들어가고
+     * {@code OS_NOTI_ITEM_VAL_DTL}·{@code OS_NOTI_LBL_VAL_DTL}만 빠진다.
+     */
     private static final String STATUS_SKIPPED = "SKIP";
 
     /** 배치 전체에서 공유하는 커넥션(수동 커밋). */
@@ -120,7 +126,7 @@ public final class DbLoader implements AutoCloseable {
      *
      * @param fileName 첨부파일명
      * @param filePath 첨부파일의 정규화된 절대경로
-     * @param stage    실패한 단계의 표준코드(CD_FAIL_STEP: DTCT / EXTC / TBIT / MAPP / SAVE)
+     * @param stage    실패한 단계의 표준코드(CD_FAIL_STEP: DTCT / EXTC / SAVE / LOAD)
      * @param kind     실패 갈래({@link com.onnara.extract.detect.FailureKind})
      * @param message  원인 체인까지 담은 사유 문장
      * @param board    수집처 — 실패해도 게시물 행은 만들어지므로 기관이 붙어야 한다. 모르면 null
@@ -152,8 +158,9 @@ public final class DbLoader implements AutoCloseable {
                 conn.releaseSavepoint(savepoint);
                 if (file.isExcluded()) {
                     filesSkipped++;
-                    System.out.println("[적재제외] " + file.getAtchFileNm() + ": "
-                            + file.getExclRsnCtnt() + " — 안내문류로 보고 항목 적재를 건너뜁니다");
+                    System.out.println("[항목값 적재제외] " + file.getAtchFileNm() + ": "
+                            + file.getExclRsnCtnt()
+                            + " — 안내문류로 보고 항목값 적재만 건너뜁니다(첨부·이미지는 적재)");
                 } else {
                     filesOk++;
                 }
@@ -164,6 +171,7 @@ public final class DbLoader implements AutoCloseable {
                 conn.rollback(savepoint);
                 filesFailed++;
                 System.out.println("[실패] " + file.getAtchFileNm() + ": " + Errors.describe(e));
+                recordLoadFailure(file, e);
             }
         }
 
@@ -256,7 +264,7 @@ public final class DbLoader implements AutoCloseable {
         prepareSlot(name, file.getSourceBoard());
 
         List<NoticeRecord> records = file.getRecords();
-        // 적재제외 파일은 첨부 메타만 남기고 항목값은 넣지 않는다
+        // 적재제외 파일은 첨부 메타와 이미지까지 남기고 항목값·라벨값만 넣지 않는다
         boolean loadValues = !file.isExcluded();
         NoticeRecord meta = records.isEmpty() ? null : records.get(0);
 
@@ -274,6 +282,49 @@ public final class DbLoader implements AutoCloseable {
         }
         int images = insertImages(file, name);
         return new Counts(attributes, labels, images);
+    }
+
+    /**
+     * 적재 자체가 실패한 첨부를 {@code FAIL_STEP_CD='LOAD'} 행으로 남긴다.
+     *
+     * <p>롤백된 뒤라 자리는 비어 있다. 여기에 항목값을 뺀 최소 행을 다시 넣으면, 값 하나 때문에
+     * 통째로 사라지던 첨부가 "적재에서 넘어졌다"는 사실만은 DB에 남긴다 — 그러지 않으면 콘솔을
+     * 놓친 순간 그 첨부는 수집조차 안 된 것과 구별되지 않는다.
+     *
+     * <p><b>모든 적재 실패를 건지지는 못한다.</b> 연결이 끊겼거나 DB가 죽어서 실패한 것이라면
+     * 이 재삽입도 같은 이유로 죽는다. 다만 그런 실패는 전건이 함께 죽어 콘솔에 곧바로 드러나므로,
+     * 이 경로가 실제로 건지는 것은 놓치기 쉬운 <b>행 단위 원인</b>(제약 위반, 값 길이 초과 등)이다.
+     *
+     * <p>실패종류코드는 비운다 — {@link com.onnara.extract.detect.FailureKind}는 문서 판별·추출의
+     * 갈래이고 적재 실패에 들어맞는 값이 없다. 억지로 {@code OTHER}를 넣으면 판별 실패 집계가
+     * 오염된다.
+     */
+    private void recordLoadFailure(SchemaResult file, Exception cause) {
+        Savepoint savepoint = null;
+        try {
+            savepoint = conn.setSavepoint();
+            // 사유는 우리 처리 방식("롤백했다")이 아니라 실패 원인 원문이어야 한다 —
+            // 담당자가 손댈 수 있는 것은 제약 위반이나 값 길이이지 savepoint가 아니다.
+            loadFailure(new FailedAttachment(file.getAtchFileNm(), LoadStep.LOAD.code(),
+                    null, Errors.describe(cause), file.getSourceBoard()));
+            conn.releaseSavepoint(savepoint);
+        } catch (Exception e) {
+            rollbackQuietly(savepoint);
+            System.out.println("[적재실패 기록 실패] " + file.getAtchFileNm() + ": "
+                    + Errors.describe(e));
+        }
+    }
+
+    /** 세이브포인트를 되돌린다 — 되돌리기까지 실패하면 원래 실패를 덮지 않도록 삼킨다. */
+    private void rollbackQuietly(Savepoint savepoint) {
+        if (savepoint == null) {
+            return;
+        }
+        try {
+            conn.rollback(savepoint);
+        } catch (SQLException ignored) {
+            // 원인은 이미 호출부가 출력했다
+        }
     }
 
     /** 판별·추출 실패 건을 첨부 행으로만 남긴다(항목값 없음). */
