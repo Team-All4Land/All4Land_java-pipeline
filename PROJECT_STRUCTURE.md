@@ -157,7 +157,7 @@ extract-java/
 ├── src/main/resources/
 │   ├── application.properties   # db.url=jdbc:postgresql://... , 풀 설정, ocr.cli.* 등 (기본값)
 │   ├── notice_items.json           # ★ 공고항목 사전 (단일 정의처 — 동의어·설명·예시 포함)
-│   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL — 도메인 18 + 7테이블)
+│   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL — 도메인 20 + 9테이블)
 │
 ├── src/test/java/...            # JUnit 5 — detect / mapper / 각 extractor / scan / db
 ├── src/test/resources/fixtures/ # 실제 고시문 픽스처 (형식·스캔 여부별, Python 버전과 공유)
