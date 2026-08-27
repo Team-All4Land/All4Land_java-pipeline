@@ -35,8 +35,18 @@ public final class SourceFolder {
     /** 게시 중임을 알리는 꼬리표 — 기관명 뒤에 붙기만 하고 상태를 가르지는 않는다. */
     private static final Pattern OPEN_MARK = Pattern.compile("^(게시중|게시|고시공고|공고|고시|자료).*");
 
-    /** 전자관보를 경유해 수집한 폴더의 이름 앞에 붙는 조각. */
+    /** 전자관보를 경유해 수집한 폴더의 이름 앞에 붙는 조각. 수집결과 시트의 지자체명이기도 하다. */
     private static final String GAZETTE_PREFIX = "전자관보";
+
+    /**
+     * 전자관보 게시물의 비고에서 발령 기관을 읽는 자리 —
+     * {@code 웹사이트에서 제목이 "농림축산식품부고시"로 시작함}.
+     *
+     * <p>따옴표 안에서 꼬리의 "고시"를 뗀 것이 기관명이다. 접두어("웹사이트에서 제목이")를
+     * 통째로 못박지 않는 이유는 그 문구가 사람이 적은 메모라 언제든 다듬어질 수 있어서다 —
+     * 실제로 고정된 것은 <b>따옴표에 싸인 {기관명}고시</b> 부분뿐이다.
+     */
+    private static final Pattern GAZETTE_REMARK = Pattern.compile("\"([^\"]+?)고시\"");
 
     // 아래 두 묶음은 표준코드 CD_BBS_STTS·CD_AGNCY_KND의 값이다(db/standard_terms.json).
     // 폴더명을 읽는 정규식은 한글 그대로 두고 판정 결과만 코드로 옮긴다 — 정규식이 보는 것은
@@ -126,6 +136,50 @@ public final class SourceFolder {
         String agency = name.toString();
         return Optional.of(new Parsed(folderNo, subNo, agency,
                 kind != null ? kind : kindOf(agency), board));
+    }
+
+    /**
+     * 전자관보 게시물의 비고에서 발령 기관명을 읽는다.
+     *
+     * <p>전자관보만 이 손질이 필요하다. 다른 기관은 수집결과 시트의 지자체명이 곧 검증요약의
+     * 기관명이지만, 전자관보 게시물은 <b>지자체명이 전부 "전자관보" 한 값</b>이라 검증요약의
+     * 두 줄({@code 72_1 전자관보_농림축산식품부} · {@code 72_2 전자관보_새만금개발청}) 중
+     * 어느 쪽인지 가릴 수 없다. 게시물 제목도 근거가 못 된다 — 08.07 산출물의 159건이 모두
+     * "공유수면 점용·사용…"으로 시작하고, 비고가 말하는 접두어는 <b>웹사이트에 걸린 제목</b>의
+     * 것이라 엑셀 제목 칸에는 남아 있지 않다. 비고가 유일한 근거다.
+     *
+     * <p>돌려주는 이름 앞에 {@code 전자관보_}를 붙이면 검증요약의 기관명이 되고, 그것을
+     * {@link #parse}에 먹이면 다른 기관과 똑같은 경로로 기관번호·종류가 정해진다.
+     *
+     * <pre>
+     * 웹사이트에서 제목이 "농림축산식품부고시"로 시작함  → 농림축산식품부
+     * 웹사이트에서 제목이 "새만금개발청고시"로 시작함    → 새만금개발청
+     * </pre>
+     *
+     * @param remark 수집결과 시트의 비고 칸
+     * @return 읽어내지 못하면 {@link Optional#empty()} — 그때는 기관을 붙이지 않는다.
+     *         엉뚱한 기관에 밀어 넣으면 기관별 집계가 조용히 오염되고, 그 오염은
+     *         전자관보 두 기관 사이에서만 일어나 밖에서는 보이지 않는다
+     */
+    public static Optional<String> gazetteAgencyOf(String remark) {
+        if (remark == null) {
+            return Optional.empty();
+        }
+        Matcher m = GAZETTE_REMARK.matcher(remark);
+        if (!m.find()) {
+            return Optional.empty();
+        }
+        String agency = m.group(1).trim();
+        return agency.isEmpty() ? Optional.empty() : Optional.of(agency);
+    }
+
+    /**
+     * 수집결과 시트의 지자체명이 전자관보인지 — 비고를 봐야 하는 행을 가린다.
+     *
+     * @param agencyCell 수집결과 시트의 지자체명 칸
+     */
+    public static boolean isGazette(String agencyCell) {
+        return agencyCell != null && agencyCell.trim().equals(GAZETTE_PREFIX);
     }
 
     /**

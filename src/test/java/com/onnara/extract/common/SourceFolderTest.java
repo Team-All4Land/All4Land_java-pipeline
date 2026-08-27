@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link SourceFolder} 폴더명 → 기관·게시판 파싱 단위 테스트. */
@@ -100,5 +101,71 @@ class SourceFolderTest {
     void toleratesMissingNames() {
         assertEquals(Optional.empty(), SourceFolder.parse(null));
         assertEquals(Optional.empty(), SourceFolder.parse(""));
+    }
+
+    /**
+     * 전자관보 게시물의 비고에서 발령 기관을 읽는다.
+     *
+     * <p>비고 원문은 08.07 산출물에 실제로 실려 온 두 문장이다. 전자관보 159건이 전부
+     * 이 둘 중 하나이며(농림축산식품부 82건 · 새만금개발청 77건), 비고가 빈 행은 없다.
+     */
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "웹사이트에서 제목이 \"농림축산식품부고시\"로 시작함 | 농림축산식품부",
+            "웹사이트에서 제목이 \"새만금개발청고시\"로 시작함   | 새만금개발청",
+    })
+    void readsGazetteAgencyFromRemark(String remark, String expected) {
+        assertEquals(expected, SourceFolder.gazetteAgencyOf(remark).orElseThrow());
+    }
+
+    /**
+     * 읽어낸 이름 앞에 {@code 전자관보_}를 붙이면 검증요약의 기관명이 되고,
+     * 그때부터는 다른 기관과 똑같은 경로를 탄다 — 전자관보 전용 분기가 여기서 끝난다.
+     */
+    @Test
+    void resolvedGazetteAgencyFeedsTheNormalParser() {
+        String agency = SourceFolder.gazetteAgencyOf(
+                "웹사이트에서 제목이 \"새만금개발청고시\"로 시작함").orElseThrow();
+
+        SourceFolder.Parsed parsed = SourceFolder.parse("72_2_전자관보_" + agency).orElseThrow();
+        assertEquals("새만금개발청", parsed.agncyNm());
+        assertEquals(SourceFolder.AGNCY_KND_GAZETTE, parsed.kndCd(),
+                "전자관보는 기관 종류가 아니라 수집 경로다");
+        assertEquals(72, parsed.folderNo());
+        assertEquals(2, parsed.subNo());
+    }
+
+    /** 수집결과 시트의 지자체명이 전자관보인 행만 비고를 본다. */
+    @Test
+    void gazetteRowsAreTheOnlyOnesNeedingTheRemark() {
+        assertTrue(SourceFolder.isGazette("전자관보"));
+        assertTrue(SourceFolder.isGazette("  전자관보  "));
+        assertFalse(SourceFolder.isGazette("전자관보_농림축산식품부"),
+                "그 이름은 검증요약 쪽이고, 수집결과 지자체명은 전자관보 한 값뿐이다");
+        assertFalse(SourceFolder.isGazette("인천지방해양수산청"));
+        assertFalse(SourceFolder.isGazette(null));
+    }
+
+    /**
+     * 근거가 없으면 기관을 붙이지 않는다.
+     *
+     * <p>엉뚱한 기관에 밀어 넣으면 기관별 집계가 조용히 오염되는데, 그 오염은 전자관보
+     * 두 기관 사이에서만 일어나 전체 건수로는 드러나지 않는다.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "첨부파일이 존재하지 않음.",
+            "웹사이트에서 제목이 농림축산식품부고시로 시작함",   // 따옴표가 없다
+            "웹사이트에서 제목이 \"\"로 시작함",                 // 따옴표 안이 비었다
+            "",
+    })
+    void refusesToGuessWhenTheRemarkDoesNotSayIt(String remark) {
+        assertTrue(SourceFolder.gazetteAgencyOf(remark).isEmpty(), remark);
+    }
+
+    /** 비고가 없는 행에서도 배치가 멈추면 안 된다. */
+    @Test
+    void toleratesMissingRemark() {
+        assertEquals(Optional.empty(), SourceFolder.gazetteAgencyOf(null));
     }
 }

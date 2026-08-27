@@ -220,7 +220,7 @@ COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_STEP_CD IS
 COMMENT ON COLUMN CRWL_LOG_DTL.AGNCY_BBS_URL IS
     '기관게시판URL — 긁은 게시판의 목록 페이지 주소(엑셀 "사이트 URL"). 게시물 하나를 가리키는 NOTI_BAS.BBS_URL과는 다른 것이다';
 COMMENT ON COLUMN CRWL_LOG_DTL.NOTI_CNT IS
-    '고시공고건수 — 크롤러가 집계한 수집 게시물 수. 실제 적재된 NOTI_BAS 행수와 대조하는 것이 이 컬럼의 용도다. 08.07 산출물에서는 90기관 중 4기관이 어긋났다(영광군청 465/466, 양양군청_이전공고 0/1, 전자관보 2기관은 게시물이 한 이름으로 뭉쳐 있어 대조 불가)';
+    '고시공고건수 — 크롤러가 집계한 수집 게시물 수. 실제 적재된 NOTI_BAS 행수와 대조하는 것이 이 컬럼의 용도다. 08.07 산출물에서는 90개 게시판 중 둘이 어긋났다(영광군청 465/466, 양양군청 게시완료 0/1)';
 COMMENT ON COLUMN CRWL_LOG_DTL.ATCH_FILE_CNT IS
     '첨부파일건수 — 크롤러가 집계한 내려받은 첨부 수. 게시물보다 많을 수도(한 게시물에 첨부 여럿, 최대 10건) 적을 수도(첨부 없는 게시물 1,256건) 있다';
 COMMENT ON COLUMN CRWL_LOG_DTL.FRST_NOTI_DT IS
