@@ -165,51 +165,75 @@ COMMENT ON COLUMN NOTI_BAS.NOTI_DT IS
 CREATE INDEX IX_NOTI_BAS_AGNCY_SN ON NOTI_BAS(AGNCY_SN);
 CREATE INDEX IX_NOTI_BAS_NOTI_DT  ON NOTI_BAS(NOTI_DT);
 
--- 크롤 실행 1건의 완료·실패 기록.
+-- 한 실행에서 게시판 하나를 수집한 결과. 크롤러 산출물의 검증요약 시트 한 줄이 한 행이다.
 --
--- AGNCY_BAS로 가는 FK를 두지 않는 것이 이 테이블의 전부다. 로그를 남기는 이유가 정확히
--- "그 기관에서 아무것도 못 건졌다"인데, FK가 있으면 AGNCY_BAS에 행이 없는 기관의 실패 로그가
--- FK 위반으로 거부된다 — 남겨야 할 바로 그 행이 사라진다. NOTI_LBL_VAL_DTL이 NOTI_ITEM_TC
--- FK를 두지 않는 것과 같은 판단이다. 그래서 AGNCY_NM을 함께 담는다: 기관 행이 아예 없을 수
--- 있으므로 로그 행이 스스로를 설명해야 한다.
+-- 기관 단위가 아니라 게시판 단위인 것이 중요하다. 검증요약의 번호가 12_1·12_2로 갈리듯,
+-- 게시판을 둘 운영하는 기관은 기관 하나에 로그가 둘이다(목포시청 = 게시중 1건 + 게시완료 304건).
+-- 그래서 게시상태코드를 함께 담는다 — 이 컬럼이 없으면 NOTI_CNT를 실제 적재 행수와 대조할 때
+-- 기관 합계와 게시판별 집계를 견주게 돼 08.07 산출물에서 오탐이 35건 났다.
 --
--- 실행 식별자 컬럼을 두지 않는다. 크롤러의 실행 식별자는 게시물 목록 엑셀의 번호와 같은 값인데
--- 실패 로그 행에는 게시물이 없어 실을 값이 없다. 한 실행을 되짚어야 하면 (FRST_REG_DTM,
--- CRWL_KND_CD)로 묶는다. 크롤러에 별도 실행 식별자가 따로 있는 것으로 밝혀지면 여기에 컬럼
--- 하나만 보태면 되고 NOTI_BAS는 손대지 않아도 된다.
+-- 성공도 행으로 남긴다. 실패만 적재하면 "돌았는데 새 고시가 없었다"와 "아예 안 돌았다"가
+-- 둘 다 "행 없음"이 돼 조용한 수집 누락을 못 잡는다 — 일일 증분 수집에서 뒤엣것은 사고다.
+-- 기관 90개 × 일 1회면 연 3만 행이라 비용은 없다.
+--
+-- AGNCY_BAS로 FK를 건다. 이 레포는 "결과가 0건이어도 기관은 등록한다"를 이미 규칙으로 갖고
+-- 있으므로(AgencyRegistry), 크롤러가 시도한 기관은 수집 결과와 무관하게 기관 행이 생긴다.
+-- 그래서 기관명을 여기 중복해 담지 않는다 — 기관명은 기관의 속성이지 로그의 속성이 아니다.
+-- 기관을 특정조차 못 한 실패는 AGNCY_SN이 NULL이고, 그때는 FAIL_MSG_CTNT가 설명을 떠맡는다.
+--
+-- 실행 식별자 컬럼을 두지 않는다. 크롤러의 실행 식별자는 게시물 목록의 번호와 같은 값인데
+-- 기관 단위인 이 행에는 실을 값이 없다. 한 실행은 (FRST_REG_DTM, CRWL_KND_CD)로 묶는다.
 CREATE TABLE CRWL_LOG_DTL (
     CRWL_LOG_SN    D_SN   NOT NULL,
-    CRWL_KND_CD    D_CD   NOT NULL,
+    AGNCY_SN       D_SN,
+    BBS_STTS_CD    D_CD,
+    CRWL_KND_CD    D_CD,
     CRWL_STTS_CD   D_CD   NOT NULL,
     CRWL_STEP_CD   D_CD,
-    AGNCY_SN       D_SN,
-    AGNCY_NM       D_NM,
-    BBS_URL        D_URL,
+    AGNCY_BBS_URL  D_URL,
+    NOTI_CNT       D_CNT,
+    ATCH_FILE_CNT  D_CNT,
+    FRST_NOTI_DT   D_DT,
+    LAST_NOTI_DT   D_DT,
+    ATCH_ABSC_DT   D_DT,
     FAIL_MSG_CTNT  D_CTNT,
     FRST_REG_DTM   D_DTM  NOT NULL DEFAULT now(),
     LAST_CHG_DTM   D_DTM  NOT NULL DEFAULT now(),
-    CONSTRAINT PK_CRWL_LOG_DTL PRIMARY KEY (CRWL_LOG_SN)
+    CONSTRAINT PK_CRWL_LOG_DTL PRIMARY KEY (CRWL_LOG_SN),
+    CONSTRAINT FK_CRWL_LOG_DTL__AGNCY_BAS FOREIGN KEY (AGNCY_SN)
+        REFERENCES AGNCY_BAS(AGNCY_SN)
 );
 COMMENT ON TABLE CRWL_LOG_DTL IS
-    '크롤로그 — 크롤 실행 1건의 완료·실패 기록. "이 기관 게시물이 왜 하나도 없나"를 DB에서 설명하는 유일한 자리다';
+    '크롤로그 — 한 실행에서 기관 하나를 수집한 결과. 크롤러 검증요약 시트 한 줄이 한 행이다. "이 기관 게시물이 왜 하나도 없나"와 "오늘 이 기관을 돌긴 했나"를 DB에서 설명하는 자리다';
 COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_LOG_SN IS
-    '크롤로그일련번호 — 크롤러가 발급한 값을 그대로 받는다. 크롤러 쪽은 BIGSERIAL이지만 실행당 수십~수백 행 규모라 일련번호(INTEGER)로 넘칠 일이 없다. 여기서 BIGINT 도메인을 새로 만들면 분류어 SN이 도메인 둘을 가리켜 표준이 무너진다';
-COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_KND_CD IS
-    '크롤종류코드(CD_CRWL_KND): SAMPLE / FULL_CRAWL / DAILY_NEW';
-COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_STTS_CD IS
-    '크롤상태코드(CD_CRWL_STTS): OK 수집 완료 / FAIL 실패. 완료도 행으로 남긴다 — 실패만 적재하면 "돌긴 돌았는데 아무것도 못 건진 실행"과 "아예 안 돈 실행"이 구분되지 않는다';
-COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_STEP_CD IS
-    '크롤단계코드(CD_CRWL_STEP) — 넘어진 단계. 허용값은 크롤러의 실패단계 정의가 정의처다. 완료 행은 NULL이다';
+    '크롤로그일련번호 — 크롤러가 발급한 값을 그대로 받는다. 크롤러 쪽은 BIGSERIAL이지만 실행당 기관 수(현재 90) 규모라 일련번호(INTEGER)로 넘칠 일이 없다. 여기서 BIGINT 도메인을 새로 만들면 분류어 SN이 도메인 둘을 가리켜 표준이 무너진다';
 COMMENT ON COLUMN CRWL_LOG_DTL.AGNCY_SN IS
-    '기관일련번호 — FK가 아니다. 아직 AGNCY_BAS에 없는 기관의 실패도 남겨야 하기 때문이다';
-COMMENT ON COLUMN CRWL_LOG_DTL.AGNCY_NM IS
-    '기관명 — AGNCY_BAS와 중복이지만 기관 행이 아예 없을 수 있어 로그 행이 스스로를 설명하게 둔다';
-COMMENT ON COLUMN CRWL_LOG_DTL.BBS_URL IS '게시물URL — 실패한 요청 주소';
+    '기관일련번호 — AGNCY_BAS로 가는 FK다. 결과가 0건인 기관도 기관 행은 만들어지므로 FK가 막을 일이 없다. 기관을 특정조차 못 한 실패만 NULL이다';
+COMMENT ON COLUMN CRWL_LOG_DTL.BBS_STTS_CD IS
+    '게시상태코드(CD_BBS_STTS): POST 게시중 / CLSD 게시완료. 이 행이 어느 게시판의 결과인지를 가른다 — NOTI_BAS와 같은 축이라 (AGNCY_SN, BBS_STTS_CD)로 견줄 수 있다. 한 기관이 게시완료 게시판을 둘 운영하면(수영구 = 지난 공고 + 09.01.11 이전 공고) 이 값만으로는 둘이 갈리지 않으므로 대조는 합계로 한다';
+COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_KND_CD IS
+    '크롤종류코드(CD_CRWL_KND): SAMPLE / FULL_CRAWL / DAILY_NEW. 현재 산출물(엑셀)에는 이 값이 없어 비어 있다';
+COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_STTS_CD IS
+    '크롤상태코드(CD_CRWL_STTS): OK 수집 완료 / FAIL 실패. 성공도 행으로 남긴다 — 실패만 적재하면 "돌았는데 새 고시가 없었다"와 "아예 안 돌았다"가 둘 다 "행 없음"이 된다';
+COMMENT ON COLUMN CRWL_LOG_DTL.CRWL_STEP_CD IS
+    '크롤단계코드(CD_CRWL_STEP) — 넘어진 단계. 허용값은 크롤러의 실패단계 정의가 정의처다. 성공 행은 NULL이다';
+COMMENT ON COLUMN CRWL_LOG_DTL.AGNCY_BBS_URL IS
+    '기관게시판URL — 긁은 게시판의 목록 페이지 주소(엑셀 "사이트 URL"). 게시물 하나를 가리키는 NOTI_BAS.BBS_URL과는 다른 것이다';
+COMMENT ON COLUMN CRWL_LOG_DTL.NOTI_CNT IS
+    '고시공고건수 — 크롤러가 집계한 수집 게시물 수. 실제 적재된 NOTI_BAS 행수와 대조하는 것이 이 컬럼의 용도다. 08.07 산출물에서는 90기관 중 4기관이 어긋났다(영광군청 465/466, 양양군청_이전공고 0/1, 전자관보 2기관은 게시물이 한 이름으로 뭉쳐 있어 대조 불가)';
+COMMENT ON COLUMN CRWL_LOG_DTL.ATCH_FILE_CNT IS
+    '첨부파일건수 — 크롤러가 집계한 내려받은 첨부 수. 게시물보다 많을 수도(한 게시물에 첨부 여럿, 최대 10건) 적을 수도(첨부 없는 게시물 1,256건) 있다';
+COMMENT ON COLUMN CRWL_LOG_DTL.FRST_NOTI_DT IS
+    '최초고시일자 — 그 기관에서 수집한 가장 이른 고시일자(엑셀 "수집 기간"의 앞쪽)';
+COMMENT ON COLUMN CRWL_LOG_DTL.LAST_NOTI_DT IS
+    '최종고시일자 — 그 기관에서 수집한 가장 늦은 고시일자. 다음 증분 수집이 어디서부터인지를 말해 준다';
+COMMENT ON COLUMN CRWL_LOG_DTL.ATCH_ABSC_DT IS
+    '첨부부재일자 — 엑셀 "첨부파일 없음 확인 시작일". 뜻은 크롤러 정의가 정의처다. "그 기관의 첫 무첨부 게시물 등록일"로 가정해 08.07 산출물과 대조하면 52기관 중 41기관만 맞으므로 그 해석은 틀렸다 — 확인 전까지 값을 옮겨 담기만 하고 질의에 쓰지 않는다';
 COMMENT ON COLUMN CRWL_LOG_DTL.FAIL_MSG_CTNT IS
-    '실패메시지내용 — 실패 원인 또는 완료 메시지 원문';
+    '실패메시지내용 — 실패 원인 원문. 기관을 특정하지 못한 실패는 이 컬럼이 유일한 단서다';
 
--- 기관별 실패 조회와 "실패 행만" 뽑는 질의가 이 테이블의 주 용도다.
-CREATE INDEX IX_CRWL_LOG_AGNCY_SN    ON CRWL_LOG_DTL(AGNCY_SN);
+-- 기관별 이력 조회와 "실패 행만" 뽑는 질의가 이 테이블의 주 용도다.
+CREATE INDEX IX_CRWL_LOG_AGNCY_SN     ON CRWL_LOG_DTL(AGNCY_SN);
 CREATE INDEX IX_CRWL_LOG_CRWL_STTS_CD ON CRWL_LOG_DTL(CRWL_STTS_CD);
 
 CREATE TABLE NOTI_KND_TC (
