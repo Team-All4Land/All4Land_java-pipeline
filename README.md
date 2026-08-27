@@ -320,16 +320,13 @@ erDiagram
     CRWL_LOG_DTL["크롤로그 · CRWL_LOG_DTL"] {
         D_SN   CRWL_LOG_SN    PK "크롤로그일련번호"
         D_SN   AGNCY_SN       FK "기관일련번호"
-        D_CD   BBS_STTS_CD       "게시상태코드 · 어느 게시판의 결과인지"
+        D_DT   CRWL_DT           "크롤일자 · 이 수집이 돈 날"
         D_CD   CRWL_KND_CD       "크롤종류코드 · SAMPLE / FULL_CRAWL / DAILY_NEW"
         D_CD   CRWL_STTS_CD      "크롤상태코드 · OK 수집완료 / FAIL 실패"
         D_CD   CRWL_STEP_CD      "크롤단계코드 · 넘어진 단계, 성공 행은 비어 있음"
         D_URL  AGNCY_BBS_URL     "기관게시판URL · 긁은 게시판 목록 주소"
         D_CNT  NOTI_CNT          "고시공고건수 · 크롤러 집계, 실제 행수와 대조용"
         D_CNT  ATCH_FILE_CNT     "첨부파일건수 · 크롤러가 내려받은 첨부 수"
-        D_DT   FRST_NOTI_DT      "최초고시일자 · 수집 기간 앞쪽"
-        D_DT   LAST_NOTI_DT      "최종고시일자 · 수집 기간 뒤쪽"
-        D_DT   ATCH_ABSC_DT      "첨부부재일자 · 뜻은 크롤러 정의가 정의처"
         D_CTNT FAIL_MSG_CTNT     "실패메시지내용 · 실패 원인"
         D_DTM  FRST_REG_DTM      "최초등록일시"
         D_DTM  LAST_CHG_DTM      "최종변경일시"
@@ -404,7 +401,7 @@ erDiagram
 |---|---|---|
 | 기관 | `AGNCY_BAS` | 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다 |
 | 고시공고게시물 | `NOTI_BAS` | 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다 |
-| 크롤로그 | `CRWL_LOG_DTL` | 한 실행에서 **게시판** 하나를 수집한 결과. 크롤러 검증요약 시트 한 줄이 한 행이며, 성공도 남겨 "오늘 이 게시판을 돌긴 했나"에 답한다 |
+| 크롤로그 | `CRWL_LOG_DTL` | 하루치 수집에서 기관 하나를 긁은 결과. 성공도 남겨 "오늘 이 기관을 돌긴 했나"에 답한다. 크롤러만 아는 것만 담고 `NOTI_BAS`에서 유도되는 값은 담지 않는다 |
 | 공고종류 | `NOTI_KND_TC` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
 | 공고항목 | `NOTI_ITEM_TC` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다 |
 | 첨부파일 | `ATCH_FILE_DTL` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
@@ -493,27 +490,24 @@ SELECT DISTINCT A.AGNCY_NM
   LEFT JOIN NOTI_BAS N USING (AGNCY_SN)
  WHERE L.CRWL_STTS_CD = 'OK' AND N.NOTI_SN IS NULL;
 
--- 크롤러 집계와 실제 적재 행수가 어긋난 게시판 = 수집 누락 후보.
--- 기관이 아니라 (기관, 게시상태)로 견줘야 한다 — 게시판을 둘 운영하는 기관은
--- 크롤로그가 두 행이라 기관으로 묶으면 목포시청 1/305·304/305처럼 오탐이 난다.
-WITH 크롤러 AS (SELECT AGNCY_SN, BBS_STTS_CD, sum(NOTI_CNT) AS 집계
-                  FROM CRWL_LOG_DTL GROUP BY 1, 2),
-     실제   AS (SELECT AGNCY_SN, BBS_STTS_CD, count(*) AS 건수
-                  FROM NOTI_BAS WHERE AGNCY_SN IS NOT NULL GROUP BY 1, 2)
-SELECT A.AGNCY_NM, c.BBS_STTS_CD, c.집계, coalesce(r.건수, 0) AS 실제
+-- 크롤러가 지금까지 수집했다고 집계한 누계 vs 실제 적재된 누계 = 수집 누락 후보.
+-- 두 쪽을 각각 접은 뒤 견준다 — 로그와 게시물을 곧장 조인하면 행이 서로 곱해진다.
+WITH 크롤러 AS (SELECT AGNCY_SN, sum(NOTI_CNT) AS 집계 FROM CRWL_LOG_DTL GROUP BY 1),
+     실제   AS (SELECT AGNCY_SN, count(*) AS 건수
+                  FROM NOTI_BAS WHERE AGNCY_SN IS NOT NULL GROUP BY 1)
+SELECT A.AGNCY_NM, c.집계, coalesce(r.건수, 0) AS 실제
   FROM 크롤러 c JOIN AGNCY_BAS A USING (AGNCY_SN)
-  LEFT JOIN 실제 r USING (AGNCY_SN, BBS_STTS_CD)
+  LEFT JOIN 실제 r USING (AGNCY_SN)
  WHERE c.집계 <> coalesce(r.건수, 0);
 
--- 오늘 안 돈 게시판 = 스케줄 누락
+-- 오늘 안 돈 기관 = 스케줄 누락
 SELECT A.AGNCY_NM FROM AGNCY_BAS A
  WHERE NOT EXISTS (SELECT 1 FROM CRWL_LOG_DTL L
-                    WHERE L.AGNCY_SN = A.AGNCY_SN
-                      AND L.FRST_REG_DTM >= current_date);
+                    WHERE L.AGNCY_SN = A.AGNCY_SN AND L.CRWL_DT = current_date);
 ```
 
 08.07 산출물을 실제로 밀어 넣으면 첫 질의가 **2건**을 돌려줍니다 — 영광군청 465/466과
-양양군청(게시완료) 0/1입니다. 나머지 88개 게시판은 크롤러 집계와 적재 행수가 정확히 맞습니다.
+양양군청 120/121입니다. 나머지 71개 기관은 크롤러 집계와 적재 행수가 정확히 맞습니다.
 
 ### 개발 DB 초기화
 
@@ -586,6 +580,12 @@ psql -U postgres -c 'DROP DATABASE extract;' \
 **기관 정보와 게시물 정보는 모두 이 엑셀에서 옵니다.** 폴더명 파싱은 크롤 산출물이 아닌
 파일(수동 수집분)에만 남는 폴백입니다.
 
+> **운영 전제 — 스케줄러가 하루에 한 번 돌고, 새로 게시된 것만 긁습니다.** 크롤로그
+> (`CRWL_LOG_DTL`)가 지금 모양인 근거가 이것입니다. 과거 게시판(게시완료)까지 뒤진 것은
+> 과거 데이터를 전수로 확보해야 했던 **첫 수집 때뿐**이고 그건 이미 끝났으므로, 앞으로
+> 새로 긁히는 게시물은 전부 게시중(`POST`)입니다. 그래서 로그에는 게시상태를 두지 않고,
+> 로그 한 줄을 가리키는 날짜도 수집 기간이 아니라 **`CRWL_DT`(이 수집이 돈 날) 하나**입니다.
+
 ### 시트 3장
 
 아래 수치는 `26.08.07 공유수면 고시 전체 크롤링.xlsx` 실측입니다.
@@ -612,13 +612,12 @@ psql -U postgres -c 'DROP DATABASE extract;' \
 | 엑셀 칸 | 어디로 |
 |---|---|
 | 번호 (`1`·`12_1`·`72_2`) | `AGNCY_BAS.AGNCY_SN` |
-| 기관명 꼬리표 (`_지난자료`) | `CRWL_LOG_DTL.BBS_STTS_CD` |
 | 기관명 (`목포시청_지난자료`) | `AGNCY_BAS.AGNCY_NM` + `AGNCY_KND_CD` + `NOTI_BAS.BBS_STTS_CD` |
 | 사이트 URL | `CRWL_LOG_DTL.AGNCY_BBS_URL` |
 | 고시공고 건수 | `CRWL_LOG_DTL.NOTI_CNT` |
 | 첨부파일 다운로드 건수 | `CRWL_LOG_DTL.ATCH_FILE_CNT` |
-| 수집 기간 (`2006-11-14 ~ 2026-07-30`) | `CRWL_LOG_DTL.FRST_NOTI_DT` · `LAST_NOTI_DT` |
-| 첨부파일 없음 확인 시작일 | `CRWL_LOG_DTL.ATCH_ABSC_DT` |
+| 수집 기간 (`2006-11-14 ~ 2026-07-30`) | — (`min/max(NOTI_BAS.NOTI_DT)`로 그대로 나옵니다) |
+| 첨부파일 없음 확인 시작일 | — (뜻이 확정되지 않아 담지 않습니다) |
 
 **③ 특이사항** (1,820행) — **적재하지 않습니다.** 수집결과에서 비고가 채워진 행을 뽑아
 놓은 파생 시트라 새로운 정보가 없습니다(비고 채워진 1,979행 중 전자관보 메모 159행을 뺀
@@ -680,8 +679,8 @@ psql -U postgres -c 'DROP DATABASE extract;' \
 본문 조각입니다. `D_DT`로 그냥 넣으면 캐스팅에서 죽으므로 **정규화하고 실패하면 NULL**입니다.
 
 **③ 크롤러 집계와 실제 행수가 어긋나는 기관이 있습니다.** `NOTI_CNT`를 실제 `NOTI_BAS`
-행수와 대조하라고 담는 이유입니다. 08.07 산출물에서는 90개 게시판 중 둘 — 영광군청 465/466,
-양양군청(게시완료) 0/1 — 이 어긋났습니다.
+행수와 대조하라고 담는 이유입니다. 08.07 산출물에서는 기관 73개 중 둘 — 영광군청 465/466,
+양양군청 120/121 — 이 어긋났습니다.
 
 **고시번호·고시일자는 두 곳에 있고 근거가 다릅니다.** `NOTI_BAS` 쪽은 게시판이 목록에
 표기한 값, `ATCH_FILE_DTL` 쪽은 문서 본문에서 추출한 값입니다. 이름을 일부러 같게 둔
