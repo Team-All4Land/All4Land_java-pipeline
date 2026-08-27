@@ -29,7 +29,10 @@
 --      OS_NOTI_BAS_PK, OS_NOTI_BAS_FK01, OS_NOTI_BAS_UK01, OS_NOTI_BAS_IX01. 일련번호는
 --      이름만 봐서 무엇을 위한 것인지 알려 주지 못하므로 COMMENT ON INDEX로 그 자리를 메운다.
 --   ④ 감사 컬럼 FRST_REG_DTM·LAST_CHG_DTM은 전 테이블에 같은 이름으로 둔다. 등록자 ID는 두지
---      않는다 — 사람이 아니라 배치 CLI가 적재하므로 무엇을 넣어도 가짜다.
+--      않는다 — 사람이 아니라 배치 CLI가 적재하므로 무엇을 넣어도 가짜다. 예외는 쌓기만 하고
+--      고치지 않는 로그(OS_CRWL_LOG_DTL)뿐인데, 갱신이 없어 최종변경일시가 최초등록일시와
+--      영원히 같기 때문이다. 면제는 표준 사전이 audit:false로 선언하고 DbStandardTest가
+--      양쪽으로 대조한다 — 선언해 놓고 컬럼을 남겨 둬도 붉게 난다.
 --
 -- 식별자는 대문자로 적지만 PostgreSQL이 따옴표 없는 식별자를 소문자로 접으므로 실제 저장은
 -- os_instt_bas·instt_sn이다. 큰따옴표로 대문자를 강제하지 않는다 — 한 번 강제하면 이후 모든
@@ -192,19 +195,25 @@ COMMENT ON INDEX OS_NOTI_BAS_IX02 IS '게시판이 표기한 고시일자 기준
 -- 있으므로(AgencyRegistry), 크롤러가 시도한 기관은 수집 결과와 무관하게 기관 행이 생긴다.
 -- 그래서 기관명을 여기 중복해 담지 않는다 — 기관명은 기관의 속성이지 로그의 속성이 아니다.
 -- 기관을 특정조차 못 한 실패는 INSTT_SN이 NULL이고, 그때는 FAIL_MSG_CTNT가 설명을 떠맡는다.
+--
+-- 이 스키마에서 감사 컬럼을 두지 않는 유일한 테이블이다(명명규칙 ④의 예외). 쌓기만 하고
+-- 고치지 않는 로그라 LAST_CHG_DTM이 FRST_REG_DTM과 영원히 같은 값이고, "언제 돌았나"는
+-- CRWL_DT가 이미 답한다. 규칙 때문에 남겨 두면 읽는 쪽이 이 행을 갱신되는 것으로 잘못 읽는다.
+-- 그래서 CRWL_DT가 이 테이블의 유일한 시간 축이다.
+--
+-- 크롤단계코드(CRWL_STEP_CD)도 두지 않는다. 허용값의 정의처인 크롤러 쪽이 통합 스키마에는
+-- 필요 없는 값이라고 확인해 줬다 — 정의처가 안 쓰는 코드 컬럼은 영원히 NULL로 남는다.
+-- 실패가 어디서 났는지는 FAIL_MSG_CTNT 원문이 설명한다.
 CREATE TABLE OS_CRWL_LOG_DTL (
     CRWL_LOG_SN    D_SN   NOT NULL,
     INSTT_SN       D_SN,
     CRWL_DT        D_DT   NOT NULL,
     CRWL_KND_CD    D_CD,
     CRWL_STTS_CD   D_CD   NOT NULL,
-    CRWL_STEP_CD   D_CD,
     INSTT_BBS_URL  D_URL,
     NOTI_CNT       D_CNT,
     ATCH_FILE_CNT  D_CNT,
     FAIL_MSG_CTNT  D_CTNT,
-    FRST_REG_DTM   D_DTM  NOT NULL DEFAULT now(),
-    LAST_CHG_DTM   D_DTM  NOT NULL DEFAULT now(),
     CONSTRAINT OS_CRWL_LOG_DTL_PK PRIMARY KEY (CRWL_LOG_SN),
     CONSTRAINT OS_CRWL_LOG_DTL_FK01 FOREIGN KEY (INSTT_SN)
         REFERENCES OS_INSTT_BAS(INSTT_SN)
@@ -216,13 +225,11 @@ COMMENT ON COLUMN OS_CRWL_LOG_DTL.CRWL_LOG_SN IS
 COMMENT ON COLUMN OS_CRWL_LOG_DTL.INSTT_SN IS
     '기관일련번호 — OS_INSTT_BAS로 가는 FK다. 결과가 0건인 기관도 기관 행은 만들어지므로 FK가 막을 일이 없다. 기관을 특정조차 못 한 실패만 NULL이다';
 COMMENT ON COLUMN OS_CRWL_LOG_DTL.CRWL_DT IS
-    '크롤일자 — 이 수집이 돈 날. 스케줄러가 하루에 한 번 도므로 로그 한 줄을 가리키는 업무 날짜가 이 하나로 충분하다. 적재 시각(FRST_REG_DTM)과 가르는 이유는 지난 산출물을 나중에 다시 적재하면 둘이 갈리기 때문이다 — 그때는 이 값을 산출물이 만들어진 날로 명시해서 넣어야 한다. 산출물이 이 값을 싣고 오지 않으면 적재하는 쪽이 실행일로 채운다';
+    '크롤일자 — 이 수집이 돈 날. 스케줄러가 하루에 한 번 도므로 로그 한 줄을 가리키는 업무 날짜가 이 하나로 충분하다. 이 테이블에는 감사 컬럼이 없어 여기가 유일한 시간 축이다 — 지난 산출물을 나중에 다시 적재하더라도 적재한 날이 아니라 산출물이 만들어진 날을 명시해서 넣어야 한다. 산출물이 이 값을 싣고 오지 않으면 적재하는 쪽이 실행일로 채운다';
 COMMENT ON COLUMN OS_CRWL_LOG_DTL.CRWL_KND_CD IS
     '크롤종류코드(CD_CRWL_KND): SAMPLE / FULL_CRAWL / DAILY_NEW. 첫 전수 수집분과 일일 증분분을 갈라 세는 축이다. 현재 산출물(엑셀)에는 이 값이 없어 비어 있다';
 COMMENT ON COLUMN OS_CRWL_LOG_DTL.CRWL_STTS_CD IS
     '크롤상태코드(CD_CRWL_STTS): OK 수집 완료 / FAIL 실패. 성공도 행으로 남긴다 — 실패만 적재하면 "돌았는데 새 고시가 없었다"와 "아예 안 돌았다"가 둘 다 "행 없음"이 된다';
-COMMENT ON COLUMN OS_CRWL_LOG_DTL.CRWL_STEP_CD IS
-    '크롤단계코드(CD_CRWL_STEP) — 넘어진 단계. 허용값은 크롤러의 실패단계 정의가 정의처다. 성공 행은 NULL이다';
 COMMENT ON COLUMN OS_CRWL_LOG_DTL.INSTT_BBS_URL IS
     '기관게시판URL — 긁은 게시판의 목록 페이지 주소(엑셀 "사이트 URL"). 게시물 하나를 가리키는 OS_NOTI_BAS.BBS_URL과는 다른 것이다';
 COMMENT ON COLUMN OS_CRWL_LOG_DTL.NOTI_CNT IS

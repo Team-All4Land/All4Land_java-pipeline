@@ -633,13 +633,10 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 | 크롤일자 | `CRWL_DT` | `D_DT` | 이 수집이 돈 날
 | 크롤종류코드 | `CRWL_KND_CD` | `D_CD` | (엑셀에 없음)
 | 크롤상태코드 | `CRWL_STTS_CD` | `D_CD` | 판정
-| 크롤단계코드 | `CRWL_STEP_CD` | `D_CD` | 실패 시
 | 기관게시판URL | `INSTT_BBS_URL` | `D_URL` | 사이트 URL
 | 고시공고건수 | `NOTI_CNT` | `D_CNT` | 고시공고 건수
 | 첨부파일건수 | `ATCH_FILE_CNT` | `D_CNT` | 첨부파일 다운로드 건수
 | 실패메시지내용 | `FAIL_MSG_CTNT` | `D_CTNT` | 실패 시
-| 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
-| 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
 크롤러만 아는 것(자기 집계·상태·언제 돌았나)만 담는다. 수집 기간은 `min/max(OS_NOTI_BAS.NOTI_DT)`로
 그대로 나오고, 게시상태는 운영 단계에서 전부 `POST`라 가를 값이 없어 둘 다 빼냈다 —
@@ -648,6 +645,14 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 둘 다 "행 없음"이 돼 조용한 수집 누락을 못 잡는다. `INSTT_SN`은 FK다: 이 레포는 결과가
 0건이어도 기관을 등록하므로(`AgencyRegistry`) FK가 막을 일이 없고, 그래서 기관명을 여기
 중복해 담지 않는다.
+
+이 스키마에서 **감사 컬럼(`FRST_REG_DTM`·`LAST_CHG_DTM`)이 없는 유일한 테이블**이다. 쌓기만
+하고 고치지 않는 로그라 최종변경일시가 최초등록일시와 영원히 같고, "언제 돌았나"는 `CRWL_DT`가
+이미 답한다 — 그래서 `CRWL_DT`가 이 테이블의 유일한 시간 축이다. 면제는 표준 사전이
+`"audit": false`로 선언하고, 선언해 놓고 컬럼을 남겨 두는 것까지 `DbStandardTest`가 잡는다.
+크롤단계코드도 두지 않는다: 허용값의 정의처인 크롤러 쪽이 통합 스키마에는 필요 없는 값이라고
+확인해 줬고, 정의처가 안 쓰는 코드 컬럼은 영원히 `NULL`로 남는다. 실패가 어디서 났는지는
+`FAIL_MSG_CTNT` 원문이 설명한다.
 
 **공고종류** `OS_NOTI_KND_TC` — 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다
 
@@ -773,10 +778,10 @@ SELECT count(*) FROM OS_NOTI_BAS WHERE INSTT_SN IS NULL;
 첨부 테이블만 봐서는 둘이 똑같이 0건으로 보입니다:
 
 ```sql
--- 어느 단계에서 몇 번 넘어졌나
-SELECT A.INSTT_NM, L.CRWL_STEP_CD, count(*) AS 실패
+-- 어느 기관이 몇 번 넘어졌나 — 어디서 넘어졌는지는 실패메시지가 설명한다
+SELECT A.INSTT_NM, count(*) AS 실패, max(L.FAIL_MSG_CTNT) AS 최근메시지
   FROM OS_CRWL_LOG_DTL L LEFT JOIN OS_INSTT_BAS A USING (INSTT_SN)
- WHERE L.CRWL_STTS_CD = 'FAIL' GROUP BY 1, 2 ORDER BY 3 DESC;
+ WHERE L.CRWL_STTS_CD = 'FAIL' GROUP BY 1 ORDER BY 2 DESC;
 
 -- 크롤은 성공했는데 게시물이 한 건도 안 생긴 기관
 SELECT DISTINCT A.INSTT_NM

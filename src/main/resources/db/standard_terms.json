@@ -9,7 +9,7 @@
     "uniqueness": "논리명과 물리명은 1:1이다. 한 논리명이 두 물리명을 갖거나 그 반대면 로드 시 오류로 중단한다. 컬럼명은 전사에서 유일한 뜻을 가져야 하므로 CUST_NM처럼 수식어를 붙인다 — users.name을 지향하는 웹 관행과는 체계가 다르다.",
     "foreign_key": "FK 컬럼은 부모 PK 컬럼명을 그대로 상속한다. 한 테이블이 같은 부모를 두 번 참조할 때만 역할 수식어를 앞에 붙인다(SEND_ACCT_NO / RECV_ACCT_NO).",
     "constraint": "제약조건과 인덱스 이름은 [테이블명]을 앞에 두고 유형과 두 자리 일련번호를 뒤에 붙인다(OFBD-2210-01 §3.2.3) — 기본키 [테이블명]_PK, 외래키 [테이블명]_FK01, 유일키 [테이블명]_UK01, 인덱스 [테이블명]_IX01, CHECK [테이블명]_CK01. 일련번호는 이름만 봐서 무엇을 위한 인덱스인지 알려 주지 못하므로 COMMENT ON INDEX로 그 자리를 메운다. 함수는 FC_[업무코드]_[역할명]이다.",
-    "audit": "감사 컬럼 FRST_REG_DTM·LAST_CHG_DTM은 전 테이블에 같은 이름으로 강제한다. 등록자·변경자 ID는 두지 않는다 — 사람이 아니라 배치 CLI가 적재하므로 어떤 값을 넣어도 가짜다.",
+    "audit": "감사 컬럼 FRST_REG_DTM·LAST_CHG_DTM은 전 테이블에 같은 이름으로 강제한다. 등록자·변경자 ID는 두지 않는다 — 사람이 아니라 배치 CLI가 적재하므로 어떤 값을 넣어도 가짜다. 예외는 사전이 audit:false로 선언한 테이블뿐이다 — 쌓기만 하고 고치지 않는 로그는 최종변경일시가 최초등록일시와 영원히 같아 두 컬럼이 아무것도 알려 주지 못한다. 면제한 테이블에 그 컬럼이 남아 있어도 오류다.",
     "number_vs_serial": "번호(NO)와 일련번호(SN)를 가른다. NO는 문자 번호(\"고시 제2026-47호\"), SN은 숫자 순번이다. 이게 갈리지 않으면 AGNCY_NO INT처럼 분류어가 타입을 지시하지 못하는 컬럼이 생긴다.",
     "value_classifier": "값(VAL)은 수식어로만 쓰고 분류어로 등록하지 않는다. 자유 텍스트 값은 내용(CTNT)이 받는다 — 분류어를 늘릴수록 분류어→도메인 대응이 흐려진다.",
     "code_length": "코드값은 12자를 넘지 않는다 — 행안부 공공데이터 공통표준도메인의 코드 도메인 상한이 코드C12(12자)이고, 이 사업 표준코드정의서(OFBD-2210-04)의 실측 코드값도 평균 4자·최장 17자다. 도메인 자체는 VARCHAR(25)인데, 그 폭을 정하는 것은 12자 규칙을 따르는 공고종류·공고항목이 아니라 detect.FailureKind가 정의처인 실패종류코드다(최장 DISTRIBUTION_UNSUPPORTED 24자). 그쪽까지 줄이면 VARCHAR(12)로 내릴 수 있다.",
@@ -143,11 +143,11 @@
     },
     {
       "logical": "크롤로그", "physical": "OS_CRWL_LOG_DTL", "suffix": "DTL",
-      "description": "하루치 수집에서 기관 하나를 긁은 결과. 성공도 행으로 남겨 \"오늘 이 기관을 돌았나\"에 답한다. 크롤러만 아는 것(자기 집계·상태·언제 돌았나)만 담고, OS_NOTI_BAS에서 유도되는 값은 담지 않는다",
+      "description": "하루치 수집에서 기관 하나를 긁은 결과. 성공도 행으로 남겨 \"오늘 이 기관을 돌았나\"에 답한다. 크롤러만 아는 것(자기 집계·상태·언제 돌았나)만 담고, OS_NOTI_BAS에서 유도되는 값은 담지 않는다. 쌓기만 하고 고치지 않는 로그라 감사 컬럼을 면제받는다 — 시간 축은 CRWL_DT 하나다",
       "primaryKey": ["CRWL_LOG_SN"],
-      "columns": ["CRWL_LOG_SN", "INSTT_SN", "CRWL_DT", "CRWL_KND_CD", "CRWL_STTS_CD", "CRWL_STEP_CD",
-                  "INSTT_BBS_URL", "NOTI_CNT", "ATCH_FILE_CNT", "FAIL_MSG_CTNT",
-                  "FRST_REG_DTM", "LAST_CHG_DTM"]
+      "audit": false,
+      "columns": ["CRWL_LOG_SN", "INSTT_SN", "CRWL_DT", "CRWL_KND_CD", "CRWL_STTS_CD",
+                  "INSTT_BBS_URL", "NOTI_CNT", "ATCH_FILE_CNT", "FAIL_MSG_CTNT"]
     },
     {
       "logical": "공고종류", "physical": "OS_NOTI_KND_TC", "suffix": "TC",
@@ -203,11 +203,10 @@
     { "logical": "전화번호",         "physical": "TEL_NO",            "domain": "D_NO",   "description": "담당자 연락처. 크롤러는 VARCHAR(100)으로 받지만 번호(D_NO)는 50자다 — 내선·복수번호가 섞여 넘치면 도메인 폭을 올린다" },
     { "logical": "크롤로그일련번호", "physical": "CRWL_LOG_SN",       "domain": "D_SN",   "description": "크롤러가 발급한 실행 로그 순번을 그대로 받는다. 크롤러 쪽은 BIGSERIAL이지만 실행당 수십~수백 행 규모라 일련번호(INTEGER)로 넘칠 일이 없다 — 여기서 BIGINT 도메인을 새로 만들면 분류어 SN이 도메인 둘을 가리켜 표준이 무너진다" },
     { "logical": "크롤상태코드",     "physical": "CRWL_STTS_CD",      "domain": "D_CD",   "code": "CD_CRWL_STTS", "description": "로그 한 줄이 완료 표시인지 실패인지. 처리상태코드(PROC_STTS_CD)와 같은 자리를 크롤 쪽에서 맡는다" },
-    { "logical": "크롤단계코드",     "physical": "CRWL_STEP_CD",      "domain": "D_CD",   "code": "CD_CRWL_STEP", "description": "실패한 크롤 단계. 완료 행은 비어 있다" },
     { "logical": "기관게시판URL",    "physical": "INSTT_BBS_URL",     "domain": "D_URL",  "description": "기관 고시공고 게시판의 목록 페이지 주소. 게시물 하나를 가리키는 게시물URL(BBS_URL)과는 다른 것이다" },
     { "logical": "고시공고건수",     "physical": "NOTI_CNT",          "domain": "D_CNT",  "description": "크롤러가 그 기관에서 수집했다고 집계한 게시물 수. 실제 적재된 행수와 대조하는 것이 이 컬럼의 용도다 — 08.07 산출물에서 90기관 중 4기관이 어긋났다" },
     { "logical": "첨부파일건수",     "physical": "ATCH_FILE_CNT",     "domain": "D_CNT",  "description": "크롤러가 그 기관에서 내려받았다고 집계한 첨부파일 수. 게시물보다 많을 수도(다중 첨부) 적을 수도(첨부 없는 게시물) 있다" },
-    { "logical": "크롤일자",         "physical": "CRWL_DT",           "domain": "D_DT",   "description": "이 수집이 돈 날. 스케줄러가 하루에 한 번 도므로 로그 한 줄을 가리키는 업무 날짜가 이 하나로 충분하다. 적재 시각(FRST_REG_DTM)과 가르는 이유는 지난 산출물을 나중에 다시 적재할 때 둘이 갈리기 때문이다" },
+    { "logical": "크롤일자",         "physical": "CRWL_DT",           "domain": "D_DT",   "description": "이 수집이 돈 날. 스케줄러가 하루에 한 번 도므로 로그 한 줄을 가리키는 업무 날짜가 이 하나로 충분하다. 크롤로그의 유일한 시간 축이므로, 지난 산출물을 나중에 적재하더라도 적재한 날이 아니라 그 수집이 돈 날을 넣어야 한다" },
     { "logical": "공고종류코드",     "physical": "NOTI_KND_CD",       "domain": "D_CD",   "code": "CD_NOTI_KND", "description": "{상위분류}_{행위} 조합. 코드만 보고도 계열을 알 수 있어야 필터가 쉽다" },
     { "logical": "공고종류명",       "physical": "NOTI_KND_NM",       "domain": "D_NM",   "description": "공고종류의 한글 이름" },
     { "logical": "상위공고종류명",   "physical": "HRNK_NOTI_KND_NM",  "domain": "D_NM",   "description": "점용·사용 / 실시계획 / 매립 / 점용료·사용료 / 혼합 / 기타. UPPER_로 시작하면 SQL 함수명과 겹쳐 HRNK_를 쓴다" },
@@ -277,13 +276,6 @@
         { "code": "OK",   "name": "수집 완료" },
         { "code": "FAIL", "name": "실패" }
       ]
-    },
-    {
-      "group": "CD_CRWL_STEP", "name": "크롤단계코드", "columns": ["OS_CRWL_LOG_DTL.CRWL_STEP_CD"],
-      "managedBy": "크롤러 실패단계 정의",
-      "enforced": false,
-      "description": "크롤러가 넘어진 단계. 허용값은 크롤러의 실패단계 정의가 정의처이므로 확인 전까지 비워 둔다 — 여기에 지어낸 값을 채우면 크롤러가 실제로 쓰는 값과 조용히 어긋난다",
-      "values": []
     },
     {
       "group": "CD_PROC_STTS", "name": "처리상태코드", "columns": ["OS_ATCH_FILE_DTL.PROC_STTS_CD"],
