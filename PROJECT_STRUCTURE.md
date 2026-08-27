@@ -268,6 +268,31 @@ hwpxlib은 `"Invalid byte 1 of 1-byte UTF-8 sequence"`를 던진다. 예외 메�
 집계는 `ScanSurvey.byFailureKind(sampleLimit)`가 갈래별 건수와 예시 파일로 낸다.
 `detect --failures <경로>`는 실패 전건을 JSON으로 떨궈 재처리 대상을 그대로 넘길 수 있게 한다.
 
+#### 갈래별 대응
+
+무엇이 실패했는지는 `docs/DB_STANDARD.md`의 `CD_FAIL_KND`가 코드와 이름으로 갖고 있다.
+여기 적는 것은 **그래서 무엇을 해야 하는가**다 — 코드 사전이 담을 수 없는 정보다.
+
+| 갈래 | 뜻 | 대응 |
+|---|---|---|
+| `HWP3_LEGACY` | 한글 3.0인데 자체 파서가 못 읽음 | 손상 여부 확인(구버전이라서가 아님) |
+| `NOT_COMPOUND_FILE` | `.hwp`인데 아는 서명이 하나도 없음 | 헤더 손상 또는 지원 대상 아닌 형식 |
+| `NOT_ZIP` | `.hwpx`인데 아는 서명이 하나도 없음 | 헤더 손상 또는 지원 대상 아닌 형식 |
+| `PASSWORD_PROTECTED` | 열기 암호(HWP 암호설정 비트 / HWPX PBKDF2) | 암호 해제본 확보 — **한글에서도 안 열림** |
+| `DRM_PROTECTED` | DRM 보안 문서 | **사용자도 못 엶** — DRM 해제본 확보 |
+| `DISTRIBUTION_UNSUPPORTED` | 배포용인데 본문 해석 실패 | 개별 확인 — 암호 문제가 아님 |
+| `ENCRYPTED` | 암호화는 분명한데 갈래 미상 | 원본 상태 확인 |
+| `ZIP_CORRUPT` / `XML_PARSE` | 컨테이너·본문 XML 손상 | 원본 재수집 |
+| `DOCUMENT_PARSE` | 컨테이너는 정상, 내부 구조에서 깨짐 | 개별 확인(라이브러리 미지원 레코드일 수 있음) |
+| `PDF_LOAD` | PDF를 열지 못함 | 서명 유무를 상세에서 확인 |
+| `EMPTY_FILE` / `FILE_ACCESS` | 0바이트 / 경로·권한 문제 | 수집 단계 점검 |
+| `OUT_OF_MEMORY` | 파일 하나가 힙을 다 씀 | `-Xmx` 상향 또는 해당 파일 제외 |
+
+갈래는 **파일 앞부분의 매직바이트**(라우팅과 같은 `DocFormat`)와 **원인 체인의 맨 끝 예외**
+
+`OUT_OF_MEMORY`가 갈래로 있는 이유는 `ScanSurvey.of`가 `Exception`이 아니라 `Throwable`을
+잡기 때문이다. 파일 하나가 힙을 다 써도 그 건만 세고 배치는 계속 간다.
+
 ## 4. 공통 계약: raw JSON 형식 (Python 버전과 동일)
 
 모든 추출 경로(네이티브 Extractor, OCR CLI 결과)는 아래 형식을 출력해야 한다.
@@ -550,10 +575,9 @@ span이 없으면(PDF·OCR) 옆 칸과 내용이 같은 것을 병합으로 간�
 기관 → 게시물 → 첨부파일 → (처분) 항목값의 4계층 EAV 스키마이고, 옆에 크롤 실행 기록이
 하나 붙는다. `DbLoader`가 PostgreSQL JDBC 드라이버로 적재하고, `V1__init.sql` 하나가
 DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 20개와 9테이블을 세운다. 스키마를 고칠
-때는 파일을 얹지 않고 `V1`을 고친 뒤 DB를 다시 만든다(README "개발 DB 초기화").
+때는 파일을 얹지 않고 `V1`을 고친 뒤 DB를 다시 만든다(§6.5).
 
-**ERD와 컬럼별 설명은 [README의 데이터베이스 스키마 절](README.md#데이터베이스-스키마-postgresql)에
-있다.** 여기서는 구성만 적는다 — 같은 표를 두 문서에 옮겨 적으면 반드시 한쪽이 뒤처진다.
+**ERD와 엔터티 목록은 [README의 데이터 모델 절](README.md#데이터-모델)에 있다.** 여기서는 구성만 적는다 — 같은 표를 두 문서에 옮겨 적으면 반드시 한쪽이 뒤처진다.
 
 ### 6.1 이름 규칙
 
@@ -708,6 +732,132 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
   `ALTER TABLE`로 컬럼을 자동 추가하지 않고 버전 파일을 얹어 이력을 남긴다.
 - 배치 적재는 **트랜잭션 + `addBatch`/`executeBatch`**로 수행하고, 파일 단위 실패는
   세이브포인트 롤백 후 다음 파일로 계속 진행한다(배치 격리).
+
+### 6.4 자주 쓰는 질의
+
+미수집 첨부는 컬럼이 아니라 **첨부순번 결번**으로 잡습니다:
+
+```sql
+SELECT NOTI_SN, count(*) AS 수집, max(ATCH_SN) AS 최대순번
+  FROM OS_ATCH_FILE_DTL GROUP BY NOTI_SN HAVING count(*) <> max(ATCH_SN);
+```
+
+어느 라벨을 사전에 올릴지는 이 한 줄로 고릅니다 — 전에는 `dict --review`로 문서를 다시 만들어야
+보이던 것입니다:
+
+```sql
+SELECT ITEM_LBL_NM, count(*) AS 건수, count(DISTINCT NOTI_SN) AS 문서수
+  FROM OS_NOTI_LBL_VAL_DTL GROUP BY 1 ORDER BY 2 DESC LIMIT 20;
+```
+
+기관별 수집 현황은 폴더명이 채운 `INSTT_SN`로 봅니다:
+
+```sql
+-- 기관·게시판별 수집·성공 건수
+SELECT A.INSTT_NM, A.INSTT_KND_CD, N.BBS_STTS_CD,
+       count(*) AS 첨부, count(*) FILTER (WHERE F.PROC_STTS_CD = 'OK') AS 성공
+  FROM OS_ATCH_FILE_DTL F JOIN OS_NOTI_BAS N USING (NOTI_SN) JOIN OS_INSTT_BAS A USING (INSTT_SN)
+ GROUP BY 1, 2, 3 ORDER BY 1, 3;
+
+-- 긁긴 했는데 첨부가 한 건도 없는 기관
+SELECT A.INSTT_NM FROM OS_INSTT_BAS A
+  LEFT JOIN OS_NOTI_BAS N USING (INSTT_SN) WHERE N.NOTI_SN IS NULL;
+
+-- 기관이 안 붙은 게시물 = 입력 루트 직속이거나 폴더명 규약 위반
+SELECT count(*) FROM OS_NOTI_BAS WHERE INSTT_SN IS NULL;
+```
+
+"긁긴 했는데 아무것도 못 건진 기관"과 "아예 못 긁은 기관"은 크롤로그로 갈립니다 —
+첨부 테이블만 봐서는 둘이 똑같이 0건으로 보입니다:
+
+```sql
+-- 어느 단계에서 몇 번 넘어졌나
+SELECT A.INSTT_NM, L.CRWL_STEP_CD, count(*) AS 실패
+  FROM OS_CRWL_LOG_DTL L LEFT JOIN OS_INSTT_BAS A USING (INSTT_SN)
+ WHERE L.CRWL_STTS_CD = 'FAIL' GROUP BY 1, 2 ORDER BY 3 DESC;
+
+-- 크롤은 성공했는데 게시물이 한 건도 안 생긴 기관
+SELECT DISTINCT A.INSTT_NM
+  FROM OS_CRWL_LOG_DTL L JOIN OS_INSTT_BAS A USING (INSTT_SN)
+  LEFT JOIN OS_NOTI_BAS N USING (INSTT_SN)
+ WHERE L.CRWL_STTS_CD = 'OK' AND N.NOTI_SN IS NULL;
+
+-- 크롤러가 지금까지 수집했다고 집계한 누계 vs 실제 적재된 누계 = 수집 누락 후보.
+-- 두 쪽을 각각 접은 뒤 견준다 — 로그와 게시물을 곧장 조인하면 행이 서로 곱해진다.
+WITH 크롤러 AS (SELECT INSTT_SN, sum(NOTI_CNT) AS 집계 FROM OS_CRWL_LOG_DTL GROUP BY 1),
+     실제   AS (SELECT INSTT_SN, count(*) AS 건수
+                  FROM OS_NOTI_BAS WHERE INSTT_SN IS NOT NULL GROUP BY 1)
+SELECT A.INSTT_NM, c.집계, coalesce(r.건수, 0) AS 실제
+  FROM 크롤러 c JOIN OS_INSTT_BAS A USING (INSTT_SN)
+  LEFT JOIN 실제 r USING (INSTT_SN)
+ WHERE c.집계 <> coalesce(r.건수, 0);
+
+-- 오늘 안 돈 기관 = 스케줄 누락
+SELECT A.INSTT_NM FROM OS_INSTT_BAS A
+ WHERE NOT EXISTS (SELECT 1 FROM OS_CRWL_LOG_DTL L
+                    WHERE L.INSTT_SN = A.INSTT_SN AND L.CRWL_DT = current_date);
+```
+
+08.07 산출물을 실제로 밀어 넣으면 첫 질의가 **2건**을 돌려줍니다 — 영광군청 465/466과
+양양군청 120/121입니다. 나머지 71개 기관은 크롤러 집계와 적재 행수가 정확히 맞습니다.
+
+### 6.5 개발 DB 초기화
+
+스키마를 고쳤거나(=`V1__init.sql`을 손댔거나) 이전 버전 스키마가 남아 있으면 DB를 비우고
+다시 만듭니다. 이관 SQL은 없습니다 — 파이프라인이 원본 파일에서 전건을 다시 만들어 내므로
+DB는 파생물입니다.
+
+```bash
+# 1) 스키마를 통째로 비우고 다시 만든다
+psql -U extract -d extract -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+
+# 2) 파이프라인이 기동하면서 Flyway가 V1을 적용한다 (DDL을 손으로 돌릴 일은 없습니다)
+java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out
+```
+
+**테이블만 지우면 안 됩니다.** 표준도메인(`D_SN`·`D_CD` …)과 `FC_OS_ISO_DATERANGE` 함수는 테이블이
+아니라 스키마 객체라 `DROP TABLE`로는 사라지지 않고, 남아 있으면 재적용이 이렇게 죽습니다:
+
+```
+ERROR: type "d_sn" already exists
+```
+
+Flyway 이력 테이블(`flyway_schema_history`)도 함께 지워져야 `V1`이 다시 돕니다.
+`DROP SCHEMA public CASCADE`는 이 셋을 한 번에 처리합니다.
+
+비었는지 확인하려면:
+
+```
+\dt    -- 테이블 0개 ("Did not find any relations.")
+\dD    -- 도메인 0개
+\df    -- 함수 0개
+```
+
+**`must be owner of schema public`이 나면** 스키마 소유자가 아닙니다. 슈퍼유저로 한 번
+넘겨주거나, 아래처럼 DB를 통째로 다시 만듭니다.
+
+```bash
+psql -U postgres -d extract -c 'ALTER SCHEMA public OWNER TO extract;'
+```
+
+**DB를 통째로 다시 만들 때**는 접속 세션이 남아 있으면 `DROP DATABASE`가 실패하므로 먼저
+끊습니다.
+
+```bash
+psql -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+                      WHERE datname = 'extract' AND pid <> pg_backend_pid();"
+psql -U postgres -c 'DROP DATABASE extract;' \
+                 -c 'CREATE DATABASE extract OWNER extract;'
+```
+
+> **되돌리기는 없습니다.** Flyway Community에는 undo가 없으므로 스키마를 고치는 길은 위
+> 재생성 하나뿐입니다. `V1`을 고쳤는데 DB를 안 지우면 Flyway가 체크섬 불일치로 **적재 전에**
+> 멈추므로 데이터는 건드리지 않습니다 — 아래 메시지를 보면 DB를 다시 만들면 됩니다.
+>
+> ```
+> Validate failed: Migrations have failed validation
+> Migration checksum mismatch for migration version 1
+> ```
 
 
 ## 7. OCR CLI 계약 (PaddleOCR-VL CLI ↔ ScanOcrRunner)
