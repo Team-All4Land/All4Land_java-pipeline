@@ -267,7 +267,7 @@ public class PipelineCommand implements Callable<Integer> {
      * 판별·추출에 실패해도 게시물 행은 만들어지므로 기관이 붙어야 한다 — 안 붙이면 그 기관의
      * 실패 건이 "기관 미상"으로 새어 기관별 수집률이 실제보다 좋아 보인다.
      */
-    private static List<DbLoader.FailedAttachment> toFailedAttachments(
+    static List<DbLoader.FailedAttachment> toFailedAttachments(
             AgencyRegistry registry, List<Map<String, Object>> failures) {
         List<DbLoader.FailedAttachment> rows = new ArrayList<>();
         for (Map<String, Object> failure : failures) {
