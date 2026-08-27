@@ -5,7 +5,7 @@ import com.onnara.extract.common.DbStandard;
 import com.onnara.extract.common.AttributeRows;
 import com.onnara.extract.common.Errors;
 import com.onnara.extract.common.SourceFileName;
-import com.onnara.extract.common.Synonyms;
+import com.onnara.extract.common.NoticeItems;
 import com.onnara.extract.common.model.NoticeRecord;
 import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.SchemaResult;

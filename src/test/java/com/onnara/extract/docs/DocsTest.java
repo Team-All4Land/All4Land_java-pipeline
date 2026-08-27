@@ -1,7 +1,7 @@
 package com.onnara.extract.docs;
 
 import com.onnara.extract.common.Json;
-import com.onnara.extract.common.Synonyms;
+import com.onnara.extract.common.NoticeItems;
 import com.onnara.extract.common.model.NoticeRecord;
 import com.onnara.extract.common.model.SchemaResult;
 import org.junit.jupiter.api.Test;
@@ -15,7 +15,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 검토용 문서 생성({@link SynonymsDoc}, {@link ExtrasReport})의 단위 테스트. */
+/** 검토용 문서 생성({@link NoticeItemsDoc}, {@link ExtrasReport})의 단위 테스트. */
 class DocsTest {
 
     /** 라벨 하나만 extras에 담은 최소 스키마 결과를 파일로 저장한다. */
@@ -35,9 +35,9 @@ class DocsTest {
     /** 사전 문서가 모든 표준 필드와 등록된 라벨을 빠짐없이 싣는지 검증한다. */
     @Test
     void synonymsDocListsEveryFieldAndSynonym() {
-        String md = SynonymsDoc.render();
+        String md = NoticeItemsDoc.render();
 
-        for (Synonyms.FieldSpec field : Synonyms.fields()) {
+        for (NoticeItems.FieldSpec field : NoticeItems.fields()) {
             assertTrue(md.contains("`" + field.itemCd() + "`"),
                     "문서에 표준 필드가 빠짐: " + field.itemCd());
             assertTrue(md.contains(field.itemNm()), "문서에 표시명이 빠짐: " + field.itemNm());
@@ -46,7 +46,7 @@ class DocsTest {
                         "문서에 동의어가 빠짐: " + field.itemCd() + " / " + synonym);
             }
         }
-        assertTrue(md.contains(Synonyms.version()), "사전 버전이 표기돼야 함");
+        assertTrue(md.contains(NoticeItems.version()), "사전 버전이 표기돼야 함");
         assertTrue(md.contains("## 사전에 라벨 추가하기"), "보강 절차 안내가 있어야 함");
     }
 

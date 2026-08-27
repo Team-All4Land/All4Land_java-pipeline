@@ -157,7 +157,7 @@
     },
     {
       "logical": "공고항목", "physical": "OS_NOTI_ITEM_TC", "suffix": "TC",
-      "description": "표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다",
+      "description": "표준항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다",
       "primaryKey": ["NOTI_ITEM_CD"],
       "columns": ["NOTI_ITEM_CD", "NOTI_ITEM_NM", "ITEM_SRS_NM", "ITEM_VAL_TY_CD", "CORE_ITEM_YN", "FRST_REG_DTM", "LAST_CHG_DTM"]
     },
@@ -211,7 +211,7 @@
     { "logical": "공고종류코드",     "physical": "NOTI_KND_CD",       "domain": "D_CD",   "code": "CD_NOTI_KND", "description": "{상위분류}_{행위} 조합. 코드만 보고도 계열을 알 수 있어야 필터가 쉽다" },
     { "logical": "공고종류명",       "physical": "NOTI_KND_NM",       "domain": "D_NM",   "description": "공고종류의 한글 이름" },
     { "logical": "상위공고종류명",   "physical": "HRNK_NOTI_KND_NM",  "domain": "D_NM",   "description": "점용·사용 / 실시계획 / 매립 / 점용료·사용료 / 혼합 / 기타. UPPER_로 시작하면 SQL 함수명과 겹쳐 HRNK_를 쓴다" },
-    { "logical": "공고항목코드",     "physical": "NOTI_ITEM_CD",      "domain": "D_CD",   "code": "CD_NOTI_ITEM", "description": "표준항목코드 = synonyms.json의 canonical" },
+    { "logical": "공고항목코드",     "physical": "NOTI_ITEM_CD",      "domain": "D_CD",   "code": "CD_NOTI_ITEM", "description": "표준항목코드 = notice_items.json의 canonical" },
     { "logical": "공고항목명",       "physical": "NOTI_ITEM_NM",      "domain": "D_NM",   "description": "표준항목의 한글 표시명" },
     { "logical": "항목계열명",       "physical": "ITEM_SRS_NM",       "domain": "D_NM",   "description": "같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음. 누락 검증은 항목이 아니라 계열 단위로 봐야 오탐이 없다" },
     { "logical": "항목값유형코드",   "physical": "ITEM_VAL_TY_CD",    "domain": "D_CD",   "code": "CD_ITEM_VAL_TY", "description": "값의 정규화 방식을 정한다" },
@@ -330,7 +330,7 @@
     },
     {
       "group": "CD_ITEM_VAL_TY", "name": "항목값유형코드", "columns": ["OS_NOTI_ITEM_TC.ITEM_VAL_TY_CD"],
-      "description": "synonyms.json의 value_type이 정의처다",
+      "description": "notice_items.json의 value_type이 정의처다",
       "values": [
         { "code": "TEXT", "name": "문자 — 원문 보존" },
         { "code": "DATE", "name": "일자 — ISO 정규화" },
@@ -358,8 +358,8 @@
     },
     {
       "group": "CD_NOTI_ITEM", "name": "공고항목코드", "columns": ["OS_NOTI_ITEM_TC.NOTI_ITEM_CD", "OS_NOTI_ITEM_VAL_DTL.NOTI_ITEM_CD"],
-      "managedBy": "synonyms.json", "table": "OS_NOTI_ITEM_TC",
-      "description": "표준항목 40종(+ 컬럼으로 직행하는 attachment 5종). 값 목록은 synonyms.json이 정의처다. 컬럼명이 아니라 행으로 쌓이는 코드 데이터이므로 표준단어로 분해될 필요가 없다",
+      "managedBy": "notice_items.json", "table": "OS_NOTI_ITEM_TC",
+      "description": "표준항목 40종(+ 컬럼으로 직행하는 attachment 5종). 값 목록은 notice_items.json이 정의처다. 컬럼명이 아니라 행으로 쌓이는 코드 데이터이므로 표준단어로 분해될 필요가 없다",
       "values": []
     }
   ],

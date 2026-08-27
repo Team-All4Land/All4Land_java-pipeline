@@ -109,7 +109,7 @@ extract-java/
 │   │   ├── ImageFormats.java    #   저장 확장자 판별 — 매직바이트 + 컨테이너 힌트 폴백 (§4.2)
 │   │   ├── DocumentSize.java    #   본문 글자 수 측정 (문단 + 표 셀, 공백 제외)
 │   │   ├── LoadPolicy.java      #   적재 여부 판정 — 안내문류 차단 (map.max-body-chars, §5)
-│   │   ├── Synonyms.java        #   동의어 사전 로더(resources/synonyms.json) + normalizeLabel
+│   │   ├── NoticeItems.java        #   공고항목 사전 로더(resources/notice_items.json) + normalizeLabel
 │   │   ├── Labels.java          #   "라벨 : 값" 줄 스캔 + extras 라벨 채택 기준 (문단·표 공용)
 │   │   ├── Mapper.java          #   mapToSchema(RawDocument) → SchemaResult
 │   │   ├── Heuristics.java      #   고시문 제목 추정(guessTitleFromTables), 캡션 매칭
@@ -117,7 +117,7 @@ extract-java/
 │   │   └── Address.java         #   주소 추출 휴리스틱
 │   │
 │   ├── docs/                    # ★ 검토용 문서 생성 (사전·미매핑 라벨 리포트)
-│   │   ├── SynonymsDoc.java     #   synonyms.json → docs/SYNONYMS.md
+│   │   ├── NoticeItemsDoc.java     #   notice_items.json → docs/NOTICE_ITEMS.md
 │   │   └── ExtrasReport.java    #   *.schema.json 집계 → docs/EXTRAS_REVIEW.md
 │   │
 │   ├── engine/                  # ★ 2차 분기: 확장자별 네이티브 추출 엔진
@@ -152,11 +152,11 @@ extract-java/
 │
 ├── .env.example                # 리눅스 서버 배포용 환경변수 예시 (.env로 복사; 우선순위 OS 환경변수 > .env > properties)
 ├── docs/                       # 생성 문서 (dict 서브커맨드 산출물 — 손으로 고치지 않는다)
-│   ├── SYNONYMS.md             #   동의어 사전 검토 문서
+│   ├── NOTICE_ITEMS.md             #   동의어 사전 검토 문서
 │   └── EXTRAS_REVIEW.md        #   미매핑 라벨 빈도 + 표준 필드 채움률
 ├── src/main/resources/
 │   ├── application.properties   # db.url=jdbc:postgresql://... , 풀 설정, ocr.cli.* 등 (기본값)
-│   ├── synonyms.json           # ★ 동의어 사전 본문 (단일 정의처 — 설명·예시 포함)
+│   ├── notice_items.json           # ★ 공고항목 사전 (단일 정의처 — 동의어·설명·예시 포함)
 │   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL — 도메인 18 + 7테이블)
 │
 ├── src/test/java/...            # JUnit 5 — detect / mapper / 각 extractor / scan / db
@@ -658,7 +658,7 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**공고항목** `OS_NOTI_ITEM_TC` — 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다
+**공고항목** `OS_NOTI_ITEM_TC` — 표준항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -948,7 +948,7 @@ java -jar extract.jar <서브커맨드> [옵션]
 | `render raw.json\|폴더 -o out/` | 표 복원 전용 (raw JSON → HTML, 검수용 — §5.2) |
 | `map raw.json -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
 | `load out/*.schema.json` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
-| `dict [-o docs/SYNONYMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 (§9.1) |
+| `dict [-o docs/NOTICE_ITEMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 (§9.1) |
 
 - 공통 옵션 의미는 Python 버전과 동일 (`--raw`: 원시 결과 포함,
   `--tables`: 표 해석 중간 결과 포함, `--no-images`: 이미지 저장 생략).
@@ -997,7 +997,7 @@ java -jar extract.jar <서브커맨드> [옵션]
 3. **레지스트리 연결**: `ExtractorRegistry`에 등록. CLI·pipeline은 수정 불필요
    (확장자 라우팅이 레지스트리 기반이므로).
 4. **동의어 보강**: 새 문서에서 매핑 안 된 라벨이 `extras`에 남으면
-   `src/main/resources/synonyms.json`에 추가 (절차는 §9.1).
+   `src/main/resources/notice_items.json`에 추가 (절차는 §9.1).
 5. **DB는 수정 불필요**: raw JSON 계약만 지키면 `DbLoader`가 그대로 동작.
 6. **테스트**: `src/test/resources/fixtures/`에 픽스처 추가, JUnit 회귀 테스트 작성.
    Python 버전 픽스처를 공유해 두 구현의 결과를 교차 검증.
@@ -1008,20 +1008,20 @@ java -jar extract.jar <서브커맨드> [옵션]
 기관마다 같은 필드를 다른 라벨로 부른다(`고시일자` / `공고일자` / `공시일자`).
 문서를 일일이 보고 판별하는 대신, **매핑 안 된 라벨을 전량 모아 빈도로 판단**한다.
 
-사전 본문은 `src/main/resources/synonyms.json` 하나다. Java 코드에 사전을 두지 않는
+사전 본문은 `src/main/resources/notice_items.json` 하나다. Java 코드에 사전을 두지 않는
 이유는 검토자가 코드를 열지 않고 고칠 수 있어야 하고, 필드 설명·예시를 사전과 같은
 곳에 두어야 문서와 사전이 어긋나지 않기 때문이다.
 
 ```
 1) 전량 처리        java -jar extract.jar pipeline -i input/ -o out/ --tables
 2) 리포트 생성      java -jar extract.jar dict --review out/
-                    → docs/SYNONYMS.md       (사전 검토 문서)
+                    → docs/NOTICE_ITEMS.md       (사전 검토 문서)
                     → docs/EXTRAS_REVIEW.md  (미매핑 라벨 빈도 + 필드 채움률)
 3) 검토·판단        빈도 높은 라벨이 기존 필드와 같은 뜻인가?
                       같음   → 해당 필드의 synonyms에 추가
                       다름   → 여러 기관에서 반복되면 새 표준 컬럼 승격 검토
                       드묾   → extras에 두고 다음 검토 때 재확인
-4) 사전 수정        src/main/resources/synonyms.json
+4) 사전 수정        src/main/resources/notice_items.json
 5) 회귀 확인        mvn test   (중복 등재는 기동 시 오류로 중단됨)
 6) 재적재           pipeline 재실행 — 파일 단위 멱등 적재라 기존 문서도 갱신되어
                     extras에 있던 값이 표준 컬럼으로 승격된다

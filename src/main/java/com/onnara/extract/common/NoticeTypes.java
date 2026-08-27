@@ -16,7 +16,7 @@ import java.util.Set;
  * 공고종류 레지스트리 — 전수 통계가 확정한 55종 + 실입력으로 보탠 1종.
  *
  * <p>{@code notice_types.json}이 단일 정의처이고, {@link com.onnara.extract.db.ReferenceSync}가
- * 기동 시 {@code notice_types} 테이블로 동기화한다. {@link Synonyms}와 같은 방식(정적 로딩 +
+ * 기동 시 {@code notice_types} 테이블로 동기화한다. {@link NoticeItems}와 같은 방식(정적 로딩 +
  * 기동 시 검증)을 쓴다 — 정의처가 코드 쪽에 있고 DB는 그 사본이라는 규칙을 두 사전이 함께 따른다.
  *
  * <p>종류가 왜 별도 축이어야 하는지: 한 기관이 평균 12종을 발행하고(창원시청 32종),

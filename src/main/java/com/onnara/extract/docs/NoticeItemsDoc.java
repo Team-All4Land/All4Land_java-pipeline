@@ -1,6 +1,6 @@
 package com.onnara.extract.docs;
 
-import com.onnara.extract.common.Synonyms;
+import com.onnara.extract.common.NoticeItems;
 
 import java.util.List;
 import java.util.StringJoiner;
@@ -8,28 +8,28 @@ import java.util.StringJoiner;
 /**
  * 동의어 사전을 검토용 Markdown 문서로 렌더링한다.
  *
- * <p>사전 본문은 {@code src/main/resources/synonyms.json}이고 이 문서는 그 파생물이다.
+ * <p>사전 본문은 {@code src/main/resources/notice_items.json}이고 이 문서는 그 파생물이다.
  * 사전을 고칠 때마다 문서를 손으로 맞추면 어긋나므로, 문서는 항상 생성해서 쓴다.
  */
-public final class SynonymsDoc {
+public final class NoticeItemsDoc {
 
     /** 인스턴스화 방지 — 정적 렌더링 함수만 제공하는 유틸리티 클래스. */
-    private SynonymsDoc() {
+    private NoticeItemsDoc() {
     }
 
     /** 사전 전체를 Markdown 문서 문자열로 렌더링한다. */
     public static String render() {
-        List<Synonyms.FieldSpec> fields = Synonyms.fields();
+        List<NoticeItems.FieldSpec> fields = NoticeItems.fields();
         int synonymCount = fields.stream().mapToInt(f -> f.synonyms().size()).sum();
 
         StringBuilder md = new StringBuilder();
         md.append("# 동의어 사전 — 고시문 라벨 → 표준 필드\n\n");
         md.append("> **자동 생성 문서입니다.** 직접 고치지 마세요.\n")
-                .append("> 사전 본문은 `src/main/resources/synonyms.json`이며, 고친 뒤\n")
+                .append("> 사전 본문은 `src/main/resources/notice_items.json`이며, 고친 뒤\n")
                 .append("> `java -jar extract.jar dict`를 다시 실행하면 이 문서가 갱신됩니다.\n\n");
 
         md.append("| 항목 | 값 |\n|---|---|\n");
-        md.append("| 사전 버전 | `").append(Synonyms.version()).append("` |\n");
+        md.append("| 사전 버전 | `").append(NoticeItems.version()).append("` |\n");
         md.append("| 표준 필드 | ").append(fields.size()).append("개 |\n");
         md.append("| 등록된 동의어 | ").append(synonymCount).append("개 |\n\n");
 
@@ -41,12 +41,12 @@ public final class SynonymsDoc {
     }
 
     /** 필드 한 줄 요약표 — 어떤 필드가 있고 어느 계층·계열로 가는지 한눈에 본다. */
-    private static String overview(List<Synonyms.FieldSpec> fields) {
+    private static String overview(List<NoticeItems.FieldSpec> fields) {
         StringBuilder md = new StringBuilder("## 한눈에 보기\n\n");
         md.append("| # | 표준 필드 | 표시명 | 저장 계층 | 계열 | 값 형식 | 주요 | 동의어 수 |\n");
         md.append("|---:|---|---|---|---|---|:-:|---:|\n");
         int i = 1;
-        for (Synonyms.FieldSpec f : fields) {
+        for (NoticeItems.FieldSpec f : fields) {
             md.append("| ").append(i++)
                     .append(" | `").append(f.itemCd()).append('`')
                     .append(" | ").append(Markdown.cell(f.itemNm()))
@@ -62,7 +62,7 @@ public final class SynonymsDoc {
     }
 
     /** 저장 계층 표기 — 항목 행인지, 첨부 컬럼인지, 아니면 적재하지 않는지. */
-    private static String scopeLabel(Synonyms.FieldSpec f) {
+    private static String scopeLabel(NoticeItems.FieldSpec f) {
         if (f.isAttribute()) {
             return "`OS_NOTI_ITEM_VAL_DTL` 행";
         }
@@ -71,9 +71,9 @@ public final class SynonymsDoc {
     }
 
     /** 필드별 상세 — 설명·예시·주의사항과 인식하는 라벨 전체 목록. */
-    private static String details(List<Synonyms.FieldSpec> fields) {
+    private static String details(List<NoticeItems.FieldSpec> fields) {
         StringBuilder md = new StringBuilder("## 필드별 상세\n\n");
-        for (Synonyms.FieldSpec f : fields) {
+        for (NoticeItems.FieldSpec f : fields) {
             md.append("### `").append(f.itemCd()).append("` — ").append(f.itemNm()).append("\n\n");
             md.append("- **저장 계층**: ").append(scopeLabel(f)).append('\n');
             if (f.srsNm() != null) {
@@ -104,7 +104,7 @@ public final class SynonymsDoc {
     }
 
     /** 값 형식 표기 — 가상 필드는 분리 적재된다는 사실을 함께 드러낸다. */
-    private static String typeLabel(Synonyms.FieldSpec f) {
+    private static String typeLabel(NoticeItems.FieldSpec f) {
         return f.virtual() ? f.valTyCd() + " (가상 필드 · 분리 적재)" : f.valTyCd();
     }
 
@@ -140,7 +140,7 @@ public final class SynonymsDoc {
                    - 같은 뜻이면 → 해당 필드의 `synonyms` 배열에 추가한다.
                    - 다른 뜻인데 여러 지자체에서 반복되면 → 새 표준 컬럼 승격을 검토한다.
                    - 한두 건뿐이면 → extras에 그대로 두고 다음 검토 때 다시 본다.
-                3. `src/main/resources/synonyms.json`을 고친다.
+                3. `src/main/resources/notice_items.json`을 고친다.
                    같은 라벨이 두 필드에 중복 등재되면 **기동 시 오류로 중단**되므로,
                    충돌은 배포 전에 드러난다.
                 4. `mvn test`로 회귀를 확인하고, `java -jar extract.jar dict`로 이 문서를 갱신한다.

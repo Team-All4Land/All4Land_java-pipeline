@@ -68,8 +68,8 @@ src/main/java/com/onnara/extract/
 src/main/resources/
 ├── db/migration/V1__init.sql   스키마 (Flyway)
 ├── db/standard_terms.json      DB 표준 사전 — 이름의 정의처
-├── synonyms.json               표준항목·동의어 사전
-└── notice_types.json           공고종류 56종
+├── notice_items.json           공고항목 사전 — 문서 안의 항목을 라벨로 판정
+└── notice_types.json           공고종류 사전 — 문서의 종류를 제목으로 판정
 ```
 
 ## 지원 형식
@@ -260,7 +260,7 @@ erDiagram
 | 고시공고게시물 | `OS_NOTI_BAS` | 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다 |
 | 크롤로그 | `OS_CRWL_LOG_DTL` | 하루치 수집에서 기관 하나를 긁은 결과. 성공도 남겨 "오늘 이 기관을 돌긴 했나"에 답한다. 크롤러만 아는 것만 담고 `OS_NOTI_BAS`에서 유도되는 값은 담지 않는다 |
 | 공고종류 | `OS_NOTI_KND_TC` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
-| 공고항목 | `OS_NOTI_ITEM_TC` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다 |
+| 공고항목 | `OS_NOTI_ITEM_TC` | 표준항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다 |
 | 첨부파일 | `OS_ATCH_FILE_DTL` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
 | 첨부이미지 | `OS_ATCH_IMG_DTL` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다 |
 | 공고항목값 | `OS_NOTI_ITEM_VAL_DTL` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
@@ -303,13 +303,21 @@ erDiagram
 
 고시문은 정보 대부분이 표에 있고 기관마다 서식과 라벨이 다릅니다(`고시일자` / `공고일자` …).
 두 단계로 나눠 다룹니다 — **표 해석**(`*.tables.json`으로 서식 판정과 라벨:값을 남김)과
-**동의어 사전**(`synonyms.json`이 라벨을 표준항목으로 모음).
+**사전 매핑**(`notice_items.json`이 라벨을 표준항목으로 모음).
+
+사전은 짝으로 둘입니다. 둘 다 표준어 하나에 동의어 여럿을 매다는 같은 모양이고,
+`ReferenceSync`가 각각 코드 테이블로 동기화합니다.
+
+| 사전 | 무엇을 판정하나 | 근거 | 어느 테이블로 |
+|---|---|---|---|
+| `notice_types.json` | 문서의 **종류** (56종) | 고시문 **제목** | `OS_NOTI_KND_TC` |
+| `notice_items.json` | 문서 안의 **항목** (40종) | 표·문단의 **라벨** | `OS_NOTI_ITEM_TC` |
 
 표준항목으로 매핑되지 못한 값도 버리지 않고 `OS_NOTI_LBL_VAL_DTL`에 라벨 원문을 키로
 남깁니다. 어느 라벨을 사전에 올릴지는 그 테이블의 빈도로 고릅니다.
 
 사전 보강 절차는 [`PROJECT_STRUCTURE.md` §9.1](PROJECT_STRUCTURE.md),
-인식하는 라벨 전체 목록은 [`docs/SYNONYMS.md`](docs/SYNONYMS.md)에 있습니다.
+인식하는 라벨 전체 목록은 [`docs/NOTICE_ITEMS.md`](docs/NOTICE_ITEMS.md)에 있습니다.
 
 ## 문제가 생겼을 때
 
@@ -360,7 +368,7 @@ mvn test -Dtest=DbStandardTest # DB 표준 검사만
 | 문서 | 내용 |
 |---|---|
 | [`docs/DB_STANDARD.md`](docs/DB_STANDARD.md) | 표준단어·도메인·용어(논리명↔물리명)·코드 |
-| [`docs/SYNONYMS.md`](docs/SYNONYMS.md) | 필드별 설명·값 예시·인식하는 라벨 전체 |
+| [`docs/NOTICE_ITEMS.md`](docs/NOTICE_ITEMS.md) | 필드별 설명·값 예시·인식하는 라벨 전체 |
 | [`docs/EXTRAS_REVIEW.md`](docs/EXTRAS_REVIEW.md) | 미매핑 라벨 빈도순 집계 |
 | [`docs/NOTICE_TYPES_REVIEW.md`](docs/NOTICE_TYPES_REVIEW.md) | 미분류 제목 빈도순 집계 |
 

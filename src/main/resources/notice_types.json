@@ -1,6 +1,6 @@
 {
   "version": "2026-08-13",
-  "description": "공유수면 고시공고 종류 56종. ReferenceSync가 notice_types 테이블로 동기화한다.",
+  "description": "공유수면 고시공고 종류 56종. 고시문 제목으로 종류를 판정한다. 이 파일이 단일 정의처이며 NoticeTypes 클래스가 기동 시 읽고 ReferenceSync가 OS_NOTI_KND_TC 테이블로 동기화한다. 문서 안의 항목을 다루는 notice_items.json과 짝이다.",
   "conventions": {
     "source": "26.08.07 전수 통계 워크북의 핵심 키워드 55종에, 실입력에서 확인해 보탠 1종(ETC_BID_NOT)을 더한 것이다.",
     "family": "종류를 평면으로 두면 조회 화면과 집계가 감당되지 않아 상위 묶음을 둔다. 워크북 키워드명 접두사에서 유도했다.",

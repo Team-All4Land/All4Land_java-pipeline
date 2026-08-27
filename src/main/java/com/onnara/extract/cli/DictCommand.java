@@ -3,7 +3,7 @@ package com.onnara.extract.cli;
 import com.onnara.extract.docs.DbStandardDoc;
 import com.onnara.extract.docs.ExtrasReport;
 import com.onnara.extract.docs.NoticeTypesReport;
-import com.onnara.extract.docs.SynonymsDoc;
+import com.onnara.extract.docs.NoticeItemsDoc;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -18,7 +18,7 @@ import java.util.stream.Stream;
 /**
  * {@code dict}: 동의어 사전과 검토 문서(미매핑 라벨·미분류 제목)를 생성한다 (§9).
  *
- * <p>사전 본문은 {@code src/main/resources/synonyms.json}과 {@code notice_types.json}이고,
+ * <p>사전 본문은 {@code src/main/resources/notice_items.json}과 {@code notice_types.json}이고,
  * 여기서 만드는 문서는 그 파생물이다 — 검토자가 JSON이나 Java를 열지 않고도 무엇이 어떻게
  * 매핑되는지, 무엇이 아직 매핑되지 않는지 확인할 수 있게 한다.
  *
@@ -35,7 +35,7 @@ public class DictCommand implements Callable<Integer> {
     private static final String SCHEMA_SUFFIX = ".schema.json";
 
     /** 동의어 사전 문서 출력 경로. */
-    @Option(names = {"-o", "--output"}, defaultValue = "docs/SYNONYMS.md",
+    @Option(names = {"-o", "--output"}, defaultValue = "docs/NOTICE_ITEMS.md",
             description = "동의어 사전 문서 경로 (기본 ${DEFAULT-VALUE})")
     Path output;
 
@@ -61,7 +61,7 @@ public class DictCommand implements Callable<Integer> {
     /** 사전 문서를 생성하고, --review가 있으면 검토 리포트도 생성한다. */
     @Override
     public Integer call() throws Exception {
-        write(output, SynonymsDoc.render());
+        write(output, NoticeItemsDoc.render());
         System.out.println("동의어 사전 문서: " + output);
 
         write(dbStandardOutput, DbStandardDoc.render());

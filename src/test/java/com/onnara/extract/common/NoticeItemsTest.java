@@ -11,49 +11,49 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** {@link Synonyms} 라벨 정규화·동의어 매핑 단위 테스트. */
-class SynonymsTest {
+/** {@link NoticeItems} 라벨 정규화·동의어 매핑 단위 테스트. */
+class NoticeItemsTest {
 
     /** 선행 번호·공백·후행 콜론이 정규화 과정에서 제거되는지 검증한다. */
     @Test
     void normalizeStripsNumberingWhitespaceAndColon() {
-        assertEquals("점용·사용의장소", Synonyms.normalizeLabel("3. 점용·사용의 장소 :"));
-        assertEquals("주소", Synonyms.normalizeLabel("가. 주    소"));
-        assertEquals("위치", Synonyms.normalizeLabel("- 위  치 ："));
-        assertEquals("면적", Synonyms.normalizeLabel("① 면적"));
+        assertEquals("점용·사용의장소", NoticeItems.normalizeLabel("3. 점용·사용의 장소 :"));
+        assertEquals("주소", NoticeItems.normalizeLabel("가. 주    소"));
+        assertEquals("위치", NoticeItems.normalizeLabel("- 위  치 ："));
+        assertEquals("면적", NoticeItems.normalizeLabel("① 면적"));
     }
 
     /** 다양한 가운뎃점(ㆍ ․ ‧ 등)이 하나(·)로 통일되는지 검증한다. */
     @Test
     void normalizeUnifiesMiddleDots() {
-        assertEquals("점용·사용기간", Synonyms.normalizeLabel("점용ㆍ사용 기간"));
+        assertEquals("점용·사용기간", NoticeItems.normalizeLabel("점용ㆍ사용 기간"));
         // U+2024(ONE DOT LEADER) — 실제 HML 샘플(태항조선)의 "점용․사용 장소" 표기
-        assertEquals("점용·사용장소", Synonyms.normalizeLabel("점용․사용 장소"));
-        assertEquals("점용·사용면적", Synonyms.normalizeLabel("점용‧사용 면적"));
+        assertEquals("점용·사용장소", NoticeItems.normalizeLabel("점용․사용 장소"));
+        assertEquals("점용·사용면적", NoticeItems.normalizeLabel("점용‧사용 면적"));
         // OCR이 가운뎃점을 마침표/쉼표로 읽는 경우도 통일된다
-        assertEquals("점용·사용장소", Synonyms.normalizeLabel("점용.사용 장소"));
-        assertEquals("점용·사용목적", Synonyms.normalizeLabel("점용,사용 목적"));
+        assertEquals("점용·사용장소", NoticeItems.normalizeLabel("점용.사용 장소"));
+        assertEquals("점용·사용목적", NoticeItems.normalizeLabel("점용,사용 목적"));
         // 한글 사이가 아닌 마침표(날짜·번호)는 건드리지 않는다
-        assertEquals("2026.6.11", Synonyms.normalizeLabel("2026. 6. 11"));
+        assertEquals("2026.6.11", NoticeItems.normalizeLabel("2026. 6. 11"));
     }
 
     /** 괄호 병기 라벨이 두 부분으로 분리되는지 검증한다. */
     @Test
     void splitParentheticalSeparatesParts() {
-        assertEquals(List.of("성명", "상호"), Synonyms.splitParenthetical("성명(상호)"));
-        assertEquals(List.of("면적"), Synonyms.splitParenthetical("면적"));
+        assertEquals(List.of("성명", "상호"), NoticeItems.splitParenthetical("성명(상호)"));
+        assertEquals(List.of("면적"), NoticeItems.splitParenthetical("면적"));
     }
 
     /** 실제 고시문 라벨들이 올바른 itemCd 필드로 매핑되는지 검증한다. */
     @Test
     void canonicalForResolvesSampleLabels() {
-        assertEquals(Optional.of("APV_DT"), Synonyms.canonicalFor("1. 허가연월일"));
-        assertEquals(Optional.of("LOC"), Synonyms.canonicalFor("3. 점용·사용의 장소"));
-        assertEquals(Optional.of("AREA"), Synonyms.canonicalFor("4. 점용·사용의 면적"));
-        assertEquals(Optional.of(Synonyms.WORK_PRD), Synonyms.canonicalFor("5 점용·사용의 기간"));
-        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("나. 성    명"));
-        assertEquals(Optional.of("APLC_ADDR"), Synonyms.canonicalFor("가. 주    소"));
-        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("성명(상호)"));
+        assertEquals(Optional.of("APV_DT"), NoticeItems.canonicalFor("1. 허가연월일"));
+        assertEquals(Optional.of("LOC"), NoticeItems.canonicalFor("3. 점용·사용의 장소"));
+        assertEquals(Optional.of("AREA"), NoticeItems.canonicalFor("4. 점용·사용의 면적"));
+        assertEquals(Optional.of(NoticeItems.WORK_PRD), NoticeItems.canonicalFor("5 점용·사용의 기간"));
+        assertEquals(Optional.of("APLC_NM"), NoticeItems.canonicalFor("나. 성    명"));
+        assertEquals(Optional.of("APLC_ADDR"), NoticeItems.canonicalFor("가. 주    소"));
+        assertEquals(Optional.of("APLC_NM"), NoticeItems.canonicalFor("성명(상호)"));
     }
 
     /**
@@ -62,32 +62,32 @@ class SynonymsTest {
      */
     @Test
     void purposeAndBusinessContentAndConstructionNameAreSeparateFields() {
-        assertEquals(Optional.of("PRPS"), Synonyms.canonicalFor("3. 점용·사용의 목적"));
-        assertEquals(Optional.of("BSNS_CTNT"), Synonyms.canonicalFor("공사내용"));
-        assertEquals(Optional.of("CNST_NM"), Synonyms.canonicalFor("공사명칭"));
-        assertEquals(Optional.of("CNST_TY"), Synonyms.canonicalFor("공사의 종류"));
-        assertEquals(Optional.of("CNST_PRD"), Synonyms.canonicalFor("공사기간"));
-        assertEquals(Optional.of("CNST_AREA"), Synonyms.canonicalFor("공사면적"));
-        assertEquals(Optional.of("CMPL_AREA"), Synonyms.canonicalFor("준공면적"));
-        assertEquals(Optional.of("OPER_NM"), Synonyms.canonicalFor("사업시행자"));
+        assertEquals(Optional.of("PRPS"), NoticeItems.canonicalFor("3. 점용·사용의 목적"));
+        assertEquals(Optional.of("BSNS_CTNT"), NoticeItems.canonicalFor("공사내용"));
+        assertEquals(Optional.of("CNST_NM"), NoticeItems.canonicalFor("공사명칭"));
+        assertEquals(Optional.of("CNST_TY"), NoticeItems.canonicalFor("공사의 종류"));
+        assertEquals(Optional.of("CNST_PRD"), NoticeItems.canonicalFor("공사기간"));
+        assertEquals(Optional.of("CNST_AREA"), NoticeItems.canonicalFor("공사면적"));
+        assertEquals(Optional.of("CMPL_AREA"), NoticeItems.canonicalFor("준공면적"));
+        assertEquals(Optional.of("OPER_NM"), NoticeItems.canonicalFor("사업시행자"));
     }
 
     /** 샘플에서 관측돼 사전에 보강한 라벨들이 매핑되는지 검증한다. */
     @Test
     void canonicalForResolvesAugmentedLabels() {
         // 승인사항 고시(부산 강서구) 목록표 헤더
-        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("피승인자"));
-        assertEquals(Optional.of("APV_NO"), Synonyms.canonicalFor("승인번호\n(연월일)"));
-        assertEquals(Optional.of(Synonyms.WORK_PRD), Synonyms.canonicalFor("기간"));
+        assertEquals(Optional.of("APLC_NM"), NoticeItems.canonicalFor("피승인자"));
+        assertEquals(Optional.of("APV_NO"), NoticeItems.canonicalFor("승인번호\n(연월일)"));
+        assertEquals(Optional.of(NoticeItems.WORK_PRD), NoticeItems.canonicalFor("기간"));
         // 허가 고시문(부산 강서구) 목록표 헤더
-        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("대상자"));
-        assertEquals(Optional.of("LOC"), Synonyms.canonicalFor("점용지번"));
-        assertEquals(Optional.of("PRPS"), Synonyms.canonicalFor("점용목적"));
+        assertEquals(Optional.of("APLC_NM"), NoticeItems.canonicalFor("대상자"));
+        assertEquals(Optional.of("LOC"), NoticeItems.canonicalFor("점용지번"));
+        assertEquals(Optional.of("PRPS"), NoticeItems.canonicalFor("점용목적"));
         // 고시양식(태항조선) 2열 표 라벨
-        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("피허가자 성명"));
-        assertEquals(Optional.of("APLC_ADDR"), Synonyms.canonicalFor("피허가자 주소"));
+        assertEquals(Optional.of("APLC_NM"), NoticeItems.canonicalFor("피허가자 성명"));
+        assertEquals(Optional.of("APLC_ADDR"), NoticeItems.canonicalFor("피허가자 주소"));
         // 방치선박 제거공고 서식
-        assertEquals(Optional.of("LOC"), Synonyms.canonicalFor("발견장소"));
+        assertEquals(Optional.of("LOC"), NoticeItems.canonicalFor("발견장소"));
     }
 
     /**
@@ -98,10 +98,10 @@ class SynonymsTest {
      */
     @Test
     void unknownLabelIsEmpty() {
-        assertTrue(Synonyms.canonicalFor("관리번호").isEmpty());
-        assertTrue(Synonyms.canonicalFor("선적항").isEmpty());
-        assertTrue(Synonyms.canonicalFor("").isEmpty());
-        assertTrue(Synonyms.canonicalFor(null).isEmpty());
+        assertTrue(NoticeItems.canonicalFor("관리번호").isEmpty());
+        assertTrue(NoticeItems.canonicalFor("선적항").isEmpty());
+        assertTrue(NoticeItems.canonicalFor("").isEmpty());
+        assertTrue(NoticeItems.canonicalFor(null).isEmpty());
     }
 
     /**
@@ -110,10 +110,10 @@ class SynonymsTest {
      */
     @Test
     void fileSynonymsAreNormalizedOnLoad() {
-        Synonyms.FieldSpec applicant = Synonyms.field("APLC_NM").orElseThrow();
+        NoticeItems.FieldSpec applicant = NoticeItems.field("APLC_NM").orElseThrow();
         assertTrue(applicant.rawSynonyms().contains("허가를 받은 자"), "원문 형태가 보존돼야 함");
         assertTrue(applicant.synonyms().contains("허가를받은자"), "정규화 형태로 매칭돼야 함");
-        assertEquals(Optional.of("APLC_NM"), Synonyms.canonicalFor("허가를 받은 자"));
+        assertEquals(Optional.of("APLC_NM"), NoticeItems.canonicalFor("허가를 받은 자"));
     }
 
     /**
@@ -122,7 +122,7 @@ class SynonymsTest {
      */
     @Test
     void noSynonymIsRegisteredUnderTwoFields() {
-        List<String> all = Synonyms.fields().stream()
+        List<String> all = NoticeItems.fields().stream()
                 .flatMap(f -> f.synonyms().stream())
                 .toList();
         assertEquals(all.size(), Set.copyOf(all).size(), "정규화 후 중복 등재된 동의어가 있음");
@@ -137,11 +137,11 @@ class SynonymsTest {
      */
     @Test
     void everyFieldCarriesReviewMetadata() {
-        for (Synonyms.FieldSpec field : Synonyms.fields()) {
+        for (NoticeItems.FieldSpec field : NoticeItems.fields()) {
             assertFalse(field.itemNm().isBlank(), field.itemCd() + ": 표시명 없음");
             assertFalse(field.description().isBlank(), field.itemCd() + ": 설명 없음");
-            assertTrue(Synonyms.SCOPE_ATTACHMENT.equals(field.scope())
-                            || Synonyms.SCOPE_ATTRIBUTE.equals(field.scope()),
+            assertTrue(NoticeItems.SCOPE_ATTACHMENT.equals(field.scope())
+                            || NoticeItems.SCOPE_ATTRIBUTE.equals(field.scope()),
                     field.itemCd() + ": 저장 계층이 attachment/attribute가 아님");
             assertFalse(field.valTyCd().isBlank(), field.itemCd() + ": 값 형식 없음");
             if (field.synonyms().isEmpty()) {
@@ -149,14 +149,14 @@ class SynonymsTest {
                         field.itemCd() + ": 동의어가 비었으면 사유를 notes에 적어야 함");
             }
         }
-        assertFalse(Synonyms.version().isBlank(), "사전 버전이 있어야 함");
+        assertFalse(NoticeItems.version().isBlank(), "사전 버전이 있어야 함");
     }
 
     /** 기간만 가상 필드다 — Mapper가 start/end로 분리하는 유일한 항목. */
     @Test
     void onlyWorkPeriodIsVirtual() {
-        for (Synonyms.FieldSpec field : Synonyms.fields()) {
-            if (field.itemCd().equals(Synonyms.WORK_PRD)) {
+        for (NoticeItems.FieldSpec field : NoticeItems.fields()) {
+            if (field.itemCd().equals(NoticeItems.WORK_PRD)) {
                 assertTrue(field.virtual(), "기간은 가상 필드여야 함");
             } else {
                 assertFalse(field.virtual(), field.itemCd() + ": 가상 필드가 아니어야 함");
@@ -172,13 +172,13 @@ class SynonymsTest {
      */
     @Test
     void dictionaryMatchesWorkbookComposition() {
-        List<Synonyms.FieldSpec> attributes = Synonyms.fields().stream()
-                .filter(Synonyms.FieldSpec::isAttribute).toList();
+        List<NoticeItems.FieldSpec> attributes = NoticeItems.fields().stream()
+                .filter(NoticeItems.FieldSpec::isAttribute).toList();
         assertEquals(40, attributes.size(), "표준항목은 40종이어야 함");
-        assertEquals(5, Synonyms.fields().size() - attributes.size(), "문서 메타는 5종이어야 함");
+        assertEquals(5, NoticeItems.fields().size() - attributes.size(), "문서 메타는 5종이어야 함");
 
         List<String> core = attributes.stream()
-                .filter(Synonyms.FieldSpec::coreYn).map(Synonyms.FieldSpec::itemCd).sorted().toList();
+                .filter(NoticeItems.FieldSpec::coreYn).map(NoticeItems.FieldSpec::itemCd).sorted().toList();
         assertEquals(List.of("APLC_ADDR", "APLC_NM", "AREA",
                 "LOC", "PRPS", "WORK_PRD"), core, "주요 항목 6종이 달라짐");
     }
@@ -191,10 +191,10 @@ class SynonymsTest {
     void normalizationAbsorbsLeadingBulletSymbols() {
         for (String prefixed : List.of("○ 면적", "□ 면적", "※ 면적", "◦ 면적", "▷ 면적",
                 "∙면적", "․면적", "‧면적", "- 면적", "· 면적", "□ ○ 면적")) {
-            assertEquals(Synonyms.normalizeLabel("면적"), Synonyms.normalizeLabel(prefixed),
+            assertEquals(NoticeItems.normalizeLabel("면적"), NoticeItems.normalizeLabel(prefixed),
                     "머리기호가 흡수되지 않음: " + prefixed);
         }
         // 머리기호만 벗기고 라벨 본문은 건드리지 않는다
-        assertEquals(Synonyms.normalizeLabel("허가면적"), Synonyms.normalizeLabel("□ 허가면적"));
+        assertEquals(NoticeItems.normalizeLabel("허가면적"), NoticeItems.normalizeLabel("□ 허가면적"));
     }
 }

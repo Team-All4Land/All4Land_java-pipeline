@@ -12,7 +12,7 @@
 --   OS_NOTI_BAS           게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이다
 --   OS_CRWL_LOG_DTL       하루치 수집에서 기관 하나를 긁은 결과
 --   OS_NOTI_KND_TC        공고종류 56종
---   OS_NOTI_ITEM_TC       공고항목 40종. synonyms.json이 정의처이고 ReferenceSync가 동기화한다
+--   OS_NOTI_ITEM_TC       공고항목 40종. notice_items.json이 정의처이고 ReferenceSync가 동기화한다
 --   OS_ATCH_FILE_DTL      파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
 --   OS_ATCH_IMG_DTL       첨부에 딸린 이미지
 --   OS_NOTI_ITEM_VAL_DTL  항목값. 40개 표준항목을 전부 동등하게 행으로 담는다
@@ -267,9 +267,9 @@ CREATE TABLE OS_NOTI_ITEM_TC (
     CONSTRAINT OS_NOTI_ITEM_TC_PK PRIMARY KEY (NOTI_ITEM_CD)
 );
 COMMENT ON TABLE OS_NOTI_ITEM_TC IS
-    '공고항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다';
+    '공고항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다';
 COMMENT ON COLUMN OS_NOTI_ITEM_TC.NOTI_ITEM_CD IS
-    '공고항목코드 = synonyms.json의 canonical. 컬럼명이 아니라 행으로 쌓이는 코드 데이터이므로 표준단어로 분해되지 않는다';
+    '공고항목코드 = notice_items.json의 canonical. 컬럼명이 아니라 행으로 쌓이는 코드 데이터이므로 표준단어로 분해되지 않는다';
 COMMENT ON COLUMN OS_NOTI_ITEM_TC.ITEM_SRS_NM IS
     '항목계열명 — 같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음. 준공·완료 수리 문서에는 점용·사용 면적이 아니라 준공면적이 오므로, 누락 검증은 항목이 아니라 계열 단위로 봐야 오탐이 없다';
 COMMENT ON COLUMN OS_NOTI_ITEM_TC.ITEM_VAL_TY_CD IS
@@ -389,7 +389,7 @@ COMMENT ON INDEX OS_NOTI_ITEM_VAL_DTL_IX01 IS '항목코드별 집계용';
 -- OS_NOTI_ITEM_TC로 가는 FK를 두지 않는 것이 이 테이블의 전부다. FK가 있으면 사전에 없는 라벨은
 -- INSERT가 거부되고, 배치 삽입이라 그 첨부의 항목값·이미지가 통째로 롤백된다 — 문서 하나가
 -- 라벨 한 줄 때문에 DB에서 사라진다. 그렇다고 라벨을 OS_NOTI_ITEM_TC에 자동 등재하면
--- "서해배타적경제수역(eez)" 같은 것이 표준항목이 되므로, 등재는 사람이 synonyms.json을 고칠
+-- "서해배타적경제수역(eez)" 같은 것이 표준항목이 되므로, 등재는 사람이 notice_items.json을 고칠
 -- 때만 일어나고 그때까지 값은 여기에 머문다.
 --
 -- 값을 정규화하지 않는다. 표준항목이 아니라 값 유형(OS_NOTI_ITEM_TC.ITEM_VAL_TY_CD)을 모르므로

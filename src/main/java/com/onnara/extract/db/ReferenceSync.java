@@ -2,7 +2,7 @@ package com.onnara.extract.db;
 
 import com.onnara.extract.common.DbStandard;
 import com.onnara.extract.common.NoticeTypes;
-import com.onnara.extract.common.Synonyms;
+import com.onnara.extract.common.NoticeItems;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -13,7 +13,7 @@ import java.sql.Types;
 /**
  * 코드 쪽 사전을 DB 레퍼런스 테이블로 동기화한다.
  *
- * <p>{@code synonyms.json} → {@code OS_NOTI_ITEM_TC}, {@code notice_types.json} →
+ * <p>{@code notice_items.json} → {@code OS_NOTI_ITEM_TC}, {@code notice_types.json} →
  * {@code OS_NOTI_KND_TC}. 정의처는 항상 코드 쪽이고 DB는 그 사본이다 — 파이프라인을 돌릴 때마다
  * 없으면 넣고 달라졌으면 갱신한다.
  *
@@ -73,7 +73,7 @@ public final class ReferenceSync {
     private static int syncAttributes(Connection conn) throws SQLException {
         int count = 0;
         try (PreparedStatement ps = conn.prepareStatement(UPSERT_ATTRIBUTE)) {
-            for (Synonyms.FieldSpec field : Synonyms.fields()) {
+            for (NoticeItems.FieldSpec field : NoticeItems.fields()) {
                 if (!field.isAttribute()) {
                     continue;
                 }

@@ -1,7 +1,7 @@
 package com.onnara.extract.docs;
 
 import com.onnara.extract.common.Json;
-import com.onnara.extract.common.Synonyms;
+import com.onnara.extract.common.NoticeItems;
 import com.onnara.extract.common.model.NoticeRecord;
 import com.onnara.extract.common.model.SchemaResult;
 
@@ -37,9 +37,9 @@ public final class ExtrasReport {
      *
      * <p>기간은 가상 필드라 사전의 {@code work_period} 자리에 분리된 두 컬럼을 대신 넣는다.
      */
-    private static final List<String> STANDARD_FIELDS = Synonyms.fields().stream()
+    private static final List<String> STANDARD_FIELDS = NoticeItems.fields().stream()
             .flatMap(f -> f.virtual()
-                    ? Stream.of(Synonyms.WORK_PRD_ST, Synonyms.WORK_PRD_EN)
+                    ? Stream.of(NoticeItems.WORK_PRD_ST, NoticeItems.WORK_PRD_EN)
                     : Stream.of(f.itemCd()))
             .toList();
 
@@ -102,7 +102,7 @@ public final class ExtrasReport {
         md.append("| 미매핑 라벨 | ").append(entries.size()).append("종 |\n");
         md.append("| 미매핑 값 | ").append(counts.values().stream().mapToInt(Integer::intValue).sum())
                 .append("건 |\n");
-        md.append("| 사전 버전 | `").append(Synonyms.version()).append("` |\n\n");
+        md.append("| 사전 버전 | `").append(NoticeItems.version()).append("` |\n\n");
 
         md.append(unmappedTable(entries));
         md.append(coverageTable(filled, recordCount));
@@ -173,11 +173,11 @@ public final class ExtrasReport {
      * 사전에 그 이름이 없다. 접미사를 떼어 원 필드의 표시명에 방향을 덧붙인다.
      */
     private static String displayFor(String field) {
-        return Synonyms.field(field).map(Synonyms.FieldSpec::itemNm).orElseGet(() -> {
+        return NoticeItems.field(field).map(NoticeItems.FieldSpec::itemNm).orElseGet(() -> {
             if (field.startsWith("WORK_PRD")) {
                 String suffix = field.endsWith("_start") ? " (시작)" : " (종료)";
-                return Synonyms.field(Synonyms.WORK_PRD)
-                        .map(Synonyms.FieldSpec::itemNm).orElse(field) + suffix;
+                return NoticeItems.field(NoticeItems.WORK_PRD)
+                        .map(NoticeItems.FieldSpec::itemNm).orElse(field) + suffix;
             }
             return field;
         });

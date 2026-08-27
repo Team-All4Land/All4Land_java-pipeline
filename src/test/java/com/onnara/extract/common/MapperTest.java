@@ -89,7 +89,7 @@ class MapperTest {
         assertNull(record.workPeriodStart());
         assertNull(record.workPeriodEnd());
         assertNotNull(record.extras());
-        assertEquals("’25.", record.extras().get(Synonyms.WORK_PRD));
+        assertEquals("’25.", record.extras().get(NoticeItems.WORK_PRD));
     }
 
     /** 빈 문서도 레코드 1건(모든 필드 null)을 내보내는지 검증한다. */

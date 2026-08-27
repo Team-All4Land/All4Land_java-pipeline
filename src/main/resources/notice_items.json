@@ -1,6 +1,6 @@
 {
   "version": "2026-08-13",
-  "description": "고시문 라벨 → 표준 항목 동의어 사전. 이 파일이 단일 정의처이며, Synonyms 클래스가 기동 시 읽고 ReferenceSync가 attribute_defs 테이블로 동기화한다.",
+  "description": "공유수면 고시공고 항목 사전. 고시문 라벨을 표준항목으로 모은다. 이 파일이 단일 정의처이며 NoticeItems 클래스가 기동 시 읽고 ReferenceSync가 OS_NOTI_ITEM_TC 테이블로 동기화한다. 문서의 종류를 다루는 notice_types.json과 짝이다.",
   "conventions": {
     "scope": "attachment = 문서 단위 메타(OS_ATCH_FILE_DTL 컬럼). attribute = 처분 단위 값(OS_NOTI_ITEM_VAL_DTL 행). OS_NOTI_ITEM_TC 테이블에는 scope=attribute만 동기화된다.",
     "series": "같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음. 누락 검증을 항목이 아니라 계열 단위로 해야 '준공·완료 수리 문서에 점용·사용 면적이 없다' 같은 오탐이 없다.",
@@ -11,7 +11,7 @@
     "canonical_form": "코드는 대문자이고 12자를 넘지 않는다 — 행안부 공공데이터 공통표준도메인의 코드 도메인 상한이 코드C12(12자)다. scope=attribute는 뜻을 DB 표준 사전(db/standard_terms.json)의 영문약어로 줄여 잇는다 — 처분사유는 DSPS_RSN, 공사시행 장소는 CNST_LOC이다. scope=attachment 5종은 이 규칙을 따르지 않고 도착 컬럼명을 그대로 쓴다 — 값이 아니라 컬럼으로 직행하므로 코드와 컬럼 이름이 어긋나면 매핑을 읽을 수 없다.",
     "stored": "false면 추출만 하고 적재하지 않는다. BODY_AGNCY_NM·NOTI_PSN이 그렇다 — 기관 추적은 입력 폴더에서 온 OS_INSTT_BAS로 충분해 컬럼을 뺐지만, 사전에서까지 빼면 매핑이 깨진다. Heuristics.agencyAndNoticeNo가 기관과 고시번호를 한 정규식으로 함께 떼어 내고, looksLikeSigner는 제목이 서명 줄을 삼키는 것을 막는 가드로 쓰인다."
   },
-  "fields": [
+  "items": [
     {
       "canonical": "BODY_AGNCY_NM",
       "display": "고시기관",

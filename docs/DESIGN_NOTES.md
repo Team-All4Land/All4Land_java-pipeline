@@ -157,8 +157,8 @@ NOTI_NO      동의어 = 고시번호, 공고번호
 APV_NO  동의어 = 허가번호, 승인번호, 협의번호, 신고번호, 수리번호, 허가증번호
 ```
 
-겹칠 수도 없습니다 — `synonyms.json`의 `uniqueness` 규약이 "정규화 결과가 두 필드에 중복
-등록되면 기동 시 오류로 중단"이고 `Synonyms`가 로드 때 실제로 검증합니다. 낱말이 정해지면
+겹칠 수도 없습니다 — `notice_items.json`의 `uniqueness` 규약이 "정규화 결과가 두 필드에 중복
+등록되면 기동 시 오류로 중단"이고 `NoticeItems`가 로드 때 실제로 검증합니다. 낱말이 정해지면
 `scope`가 목적지를 정하고(`attachment`→컬럼 / `attribute`→항목 행),
 `AttributeRows`가 그 플래그로 가릅니다. 표에 `고시번호` 라벨이 있어도 컬럼으로 가고,
 문단에 허가번호가 있어도 문단 스캐너(`Heuristics.agencyAndNoticeNo`, 정규식에 `고시|공고`가

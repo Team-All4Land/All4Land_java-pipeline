@@ -145,7 +145,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 고시공고게시물 | `OS_NOTI_BAS` | `NOTI_SN` | 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다 |
 | 크롤로그 | `OS_CRWL_LOG_DTL` | `CRWL_LOG_SN` | 하루치 수집에서 기관 하나를 긁은 결과. 성공도 행으로 남겨 "오늘 이 기관을 돌았나"에 답한다. 크롤러만… |
 | 공고종류 | `OS_NOTI_KND_TC` | `NOTI_KND_CD` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
-| 공고항목 | `OS_NOTI_ITEM_TC` | `NOTI_ITEM_CD` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upser… |
+| 공고항목 | `OS_NOTI_ITEM_TC` | `NOTI_ITEM_CD` | 표준항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 u… |
 | 첨부파일 | `OS_ATCH_FILE_DTL` | `NOTI_SN`, `ATCH_SN` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
 | 첨부이미지 | `OS_ATCH_IMG_DTL` | `NOTI_SN`, `ATCH_SN`, `IMG_SN` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일… |
 | 공고항목값 | `OS_NOTI_ITEM_VAL_DTL` | `NOTI_SN`, `ATCH_SN`, `DSPS_SN`, `NOTI_ITEM_CD`, `RPT_SN` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
@@ -311,7 +311,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 공고종류코드 | `NOTI_KND_CD` | 고시공고 + 종류 + 코드 | `D_CD` | `CD_NOTI_KND` | {상위분류}_{행위} 조합. 코드만 보고도 계열을 알 수 있어야 필터가 쉽다 |
 | 공고종류명 | `NOTI_KND_NM` | 고시공고 + 종류 + 명 | `D_NM` | — | 공고종류의 한글 이름 |
 | 상위공고종류명 | `HRNK_NOTI_KND_NM` | 상위 + 고시공고 + 종류 + 명 | `D_NM` | — | 점용·사용 / 실시계획 / 매립 / 점용료·사용료 / 혼합 / 기타. UPPER_로 시작하면 SQL 함수명… |
-| 공고항목코드 | `NOTI_ITEM_CD` | 고시공고 + 항목 + 코드 | `D_CD` | `CD_NOTI_ITEM` | 표준항목코드 = synonyms.json의 canonical |
+| 공고항목코드 | `NOTI_ITEM_CD` | 고시공고 + 항목 + 코드 | `D_CD` | `CD_NOTI_ITEM` | 표준항목코드 = notice_items.json의 canonical |
 | 공고항목명 | `NOTI_ITEM_NM` | 고시공고 + 항목 + 명 | `D_NM` | — | 표준항목의 한글 표시명 |
 | 항목계열명 | `ITEM_SRS_NM` | 항목 + 계열 + 명 | `D_NM` | — | 같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음. 누락 검증은 항목이 아니라 계열 단위로 봐야 오탐이 없다 |
 | 항목값유형코드 | `ITEM_VAL_TY_CD` | 항목 + 값 + 유형 + 코드 | `D_CD` | `CD_ITEM_VAL_TY` | 값의 정규화 방식을 정한다 |
@@ -454,7 +454,7 @@ detect.FailureKind가 정의처다. 이미 대문자 영문이라 값을 그대�
 
 적용 컬럼: `OS_NOTI_ITEM_TC.ITEM_VAL_TY_CD`
 
-synonyms.json의 value_type이 정의처다
+notice_items.json의 value_type이 정의처다
 
 | 코드 | 뜻 |
 |---|---|
@@ -489,7 +489,7 @@ synonyms.json의 value_type이 정의처다
 
 적용 컬럼: `OS_NOTI_ITEM_TC.NOTI_ITEM_CD`, `OS_NOTI_ITEM_VAL_DTL.NOTI_ITEM_CD`
 
-표준항목 40종(+ 컬럼으로 직행하는 attachment 5종). 값 목록은 synonyms.json이 정의처다. 컬럼명이 아니라 행으로 쌓이는 코드 데이터이므로 표준단어로 분해될 필요가 없다
+표준항목 40종(+ 컬럼으로 직행하는 attachment 5종). 값 목록은 notice_items.json이 정의처다. 컬럼명이 아니라 행으로 쌓이는 코드 데이터이므로 표준단어로 분해될 필요가 없다
 
-> 값 목록의 정의처는 `synonyms.json`이고 `OS_NOTI_ITEM_TC` 테이블로 동기화됩니다 — 여기에 복사해 두면 두 곳이 어긋납니다.
+> 값 목록의 정의처는 `notice_items.json`이고 `OS_NOTI_ITEM_TC` 테이블로 동기화됩니다 — 여기에 복사해 두면 두 곳이 어긋납니다.
 

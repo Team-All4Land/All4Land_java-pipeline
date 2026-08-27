@@ -1,7 +1,7 @@
 package com.onnara.extract.common.table;
 
 import com.onnara.extract.common.Labels;
-import com.onnara.extract.common.Synonyms;
+import com.onnara.extract.common.NoticeItems;
 import com.onnara.extract.common.model.RawContent;
 import com.onnara.extract.common.model.RawDocument;
 import com.onnara.extract.common.model.RawTable;
@@ -180,7 +180,7 @@ public final class TableInterpreter {
             String rawLabel = levels.isEmpty() ? "" : levels.get(0);
             Optional<String> itemCd = Optional.empty();
             for (String level : levels) {
-                itemCd = Synonyms.canonicalFor(level);
+                itemCd = NoticeItems.canonicalFor(level);
                 if (itemCd.isPresent()) {
                     rawLabel = level;
                     break;
@@ -190,13 +190,13 @@ public final class TableInterpreter {
             // (사전에 "피승인자 성명"처럼 등재된 항목 대응)
             for (int i = 1; i < levels.size() && itemCd.isEmpty(); i++) {
                 String composite = levels.get(i) + " " + levels.get(0);
-                itemCd = Synonyms.canonicalFor(composite);
+                itemCd = NoticeItems.canonicalFor(composite);
                 if (itemCd.isPresent()) {
                     rawLabel = composite;
                 }
             }
             columns.add(new TableColumn(cleaned.colIndex()[c], rawLabel,
-                    Synonyms.normalizeLabel(rawLabel), itemCd.orElse(null)));
+                    NoticeItems.normalizeLabel(rawLabel), itemCd.orElse(null)));
         }
         return columns;
     }
@@ -220,7 +220,7 @@ public final class TableInterpreter {
         }
         int mapped = 0;
         for (String cell : cells) {
-            if (Synonyms.canonicalFor(cell).isPresent()) {
+            if (NoticeItems.canonicalFor(cell).isPresent()) {
                 mapped++;
             }
         }
@@ -253,11 +253,11 @@ public final class TableInterpreter {
                 }
                 TableGrid.Cell valueCell = row.get(j + 1);
                 String value = flatten(valueCell.text());
-                if (value.isEmpty() || Synonyms.canonicalFor(value).isPresent()) {
+                if (value.isEmpty() || NoticeItems.canonicalFor(value).isPresent()) {
                     continue;
                 }
-                String normalized = Synonyms.normalizeLabel(labelCell);
-                Optional<String> itemCd = Synonyms.canonicalFor(labelCell);
+                String normalized = NoticeItems.normalizeLabel(labelCell);
+                Optional<String> itemCd = NoticeItems.canonicalFor(labelCell);
                 if (itemCd.isPresent()) {
                     facts.add(new TableFact(TableFact.ORIGIN_LABEL_PAIR, r, valueCell.col(),
                             labelCell, normalized, itemCd.get(), value));
@@ -283,8 +283,8 @@ public final class TableInterpreter {
                     continue;
                 }
                 for (Labels.Pair pair : Labels.scan(List.of(text.split("\n")))) {
-                    String normalized = Synonyms.normalizeLabel(pair.label());
-                    Optional<String> itemCd = Synonyms.canonicalFor(pair.label());
+                    String normalized = NoticeItems.normalizeLabel(pair.label());
+                    Optional<String> itemCd = NoticeItems.canonicalFor(pair.label());
                     if (itemCd.isPresent()) {
                         facts.add(new TableFact(TableFact.ORIGIN_IN_CELL, r, cell.col(),
                                 pair.label(), normalized, itemCd.get(), pair.value()));

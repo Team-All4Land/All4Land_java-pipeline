@@ -1,7 +1,7 @@
 # 동의어 사전 — 고시문 라벨 → 표준 필드
 
 > **자동 생성 문서입니다.** 직접 고치지 마세요.
-> 사전 본문은 `src/main/resources/synonyms.json`이며, 고친 뒤
+> 사전 본문은 `src/main/resources/notice_items.json`이며, 고친 뒤
 > `java -jar extract.jar dict`를 다시 실행하면 이 문서가 갱신됩니다.
 
 | 항목 | 값 |
@@ -594,7 +594,7 @@
    - 같은 뜻이면 → 해당 필드의 `synonyms` 배열에 추가한다.
    - 다른 뜻인데 여러 지자체에서 반복되면 → 새 표준 컬럼 승격을 검토한다.
    - 한두 건뿐이면 → extras에 그대로 두고 다음 검토 때 다시 본다.
-3. `src/main/resources/synonyms.json`을 고친다.
+3. `src/main/resources/notice_items.json`을 고친다.
    같은 라벨이 두 필드에 중복 등재되면 **기동 시 오류로 중단**되므로,
    충돌은 배포 전에 드러난다.
 4. `mvn test`로 회귀를 확인하고, `java -jar extract.jar dict`로 이 문서를 갱신한다.

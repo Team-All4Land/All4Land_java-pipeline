@@ -79,7 +79,7 @@ public final class AttributeRows {
                 // 사전에 없는 파생 필드다 — 아래 사전 조회보다 먼저 걸러야 라벨로 새지 않는다.
                 continue;
             }
-            Optional<Synonyms.FieldSpec> field = Synonyms.field(itemCd);
+            Optional<NoticeItems.FieldSpec> field = NoticeItems.field(itemCd);
             if (field.isEmpty()) {
                 put(labels, itemCd, value);
             } else if (field.get().isAttribute()) {
@@ -89,7 +89,7 @@ public final class AttributeRows {
 
         String period = periodRange(record);
         if (period != null) {
-            items.add(new Row(Synonyms.WORK_PRD, period));
+            items.add(new Row(NoticeItems.WORK_PRD, period));
         }
 
         if (record.extras() != null) {
@@ -156,7 +156,7 @@ public final class AttributeRows {
 
     /** 기간 분리 파생 필드인지 — daterange 한 행으로 합쳐 넣으므로 개별로는 넣지 않는다. */
     private static boolean isPeriodPart(String itemCd) {
-        return Synonyms.WORK_PRD_ST.equals(itemCd)
-                || Synonyms.WORK_PRD_EN.equals(itemCd);
+        return NoticeItems.WORK_PRD_ST.equals(itemCd)
+                || NoticeItems.WORK_PRD_EN.equals(itemCd);
     }
 }
