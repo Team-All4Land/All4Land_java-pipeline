@@ -41,6 +41,9 @@ public final class DbStandard {
     private static final List<Word> WORDS;
     private static final List<Domain> DOMAINS;
     private static final List<TableSuffix> SUFFIXES;
+
+    /** 주제영역(업무코드) 전체. 테이블 이름 앞에 붙는다. */
+    private static final List<BusinessCode> BUSINESS_CODES;
     private static final List<TableSpec> TABLES;
     private static final List<TermSpec> TERMS;
     private static final List<CodeGroup> CODES;
@@ -62,6 +65,7 @@ public final class DbStandard {
         WORDS = loadWords(root);
         DOMAINS = loadDomains(root);
         SUFFIXES = loadSuffixes(root);
+        BUSINESS_CODES = loadBusinessCodes(root);
         TERMS = loadTerms(root);
         TABLES = loadTables(root);
         CODES = loadCodes(root);
@@ -85,7 +89,8 @@ public final class DbStandard {
      * @param notes   약어를 그렇게 정한 사유 등(없으면 null)
      */
     public record Word(String term, String abbr, String english, String role,
-                       String domain, String notes) {
+                       String domain, String notes,
+                       List<String> synonyms, List<String> banned) {
 
         /** 이 낱말이 물리명의 마지막에 올 수 있는 분류어인지. */
         public boolean isClassifier() {
@@ -120,6 +125,23 @@ public final class DbStandard {
      * @param used        현재 스키마에서 실제로 쓰이는지 — false는 앞으로를 위한 예비 등록이다
      */
     public record TableSuffix(String suffix, String term, String description, boolean used) {
+    }
+
+    /**
+     * 주제영역(업무코드) 1건 — 테이블 이름은 {@code [업무코드]_[테이블의미]}다(OFBD-2210-01 §3.2.3).
+     *
+     * <p>업무코드는 <b>표준단어가 아니다.</b> 표준단어 사전은 컬럼과 테이블의미를 이루는 낱말을
+     * 담는 곳이고, 업무코드는 그 앞에 붙는 별개의 분류 축이다. 여기에 섞어 두면 컬럼 이름에
+     * OS가 낱말로 끼어들 수 있다.
+     *
+     * @param code        두 자리 축약어
+     * @param term        한글 주제영역명
+     * @param english     영문명
+     * @param description 어떤 데이터가 이 영역에 속하는지
+     * @param used        이 스키마가 실제로 쓰는 코드인지 — 하나만 true다
+     */
+    public record BusinessCode(String code, String term, String english,
+                               String description, boolean used) {
     }
 
     /**
@@ -198,6 +220,25 @@ public final class DbStandard {
     /** 테이블 유형 접미사 전체. */
     public static List<TableSuffix> tableSuffixes() {
         return SUFFIXES;
+    }
+
+    /** 주제영역(업무코드) 전체. */
+    public static List<BusinessCode> businessCodes() {
+        return BUSINESS_CODES;
+    }
+
+    /**
+     * 이 스키마가 쓰는 업무코드 — 테이블 이름 앞에 붙는 두 자리다.
+     *
+     * @throws IllegalStateException {@code used}가 정확히 하나가 아니면
+     */
+    public static String businessCode() {
+        List<BusinessCode> used = BUSINESS_CODES.stream().filter(BusinessCode::used).toList();
+        if (used.size() != 1) {
+            throw new IllegalStateException(
+                    "쓰이는 업무코드는 정확히 하나여야 합니다 — 지금 " + used.size() + "개");
+        }
+        return used.get(0).code();
     }
 
     /** 표준용어(테이블) 전체. */
@@ -330,7 +371,8 @@ public final class DbStandard {
             list.add(new Word(
                     text(n, "term"), text(n, "abbr"), text(n, "english"),
                     n.path("role").asText(ROLE_MODIFIER),
-                    optional(n, "domain"), optional(n, "notes")));
+                    optional(n, "domain"), optional(n, "notes"),
+                    strings(n, "synonyms"), strings(n, "banned")));
         }
         return List.copyOf(list);
     }
@@ -341,6 +383,17 @@ public final class DbStandard {
         for (JsonNode n : require(root, "domains")) {
             list.add(new Domain(text(n, "id"), text(n, "term"), text(n, "sqlType"),
                     optional(n, "check"), n.path("description").asText("")));
+        }
+        return List.copyOf(list);
+    }
+
+    /** 주제영역(업무코드) 배열을 읽는다. */
+    private static List<BusinessCode> loadBusinessCodes(JsonNode root) {
+        List<BusinessCode> list = new ArrayList<>();
+        for (JsonNode n : require(root, "businessCodes")) {
+            list.add(new BusinessCode(text(n, "code"), text(n, "term"),
+                    n.path("english").asText(""), n.path("description").asText(""),
+                    n.path("used").asBoolean(false)));
         }
         return List.copyOf(list);
     }
@@ -437,6 +490,26 @@ public final class DbStandard {
         for (TableSuffix s : SUFFIXES) {
             suffixes.add(s.suffix());
         }
+        // 금칙어는 표준단어와 겹칠 수 없고, 한 글자여서도 안 된다 — 한 글자는 정상 한국어
+        // 안에 늘 박혀 있어 검사가 오탐만 낸다(부서의 "과", 사람의 "자").
+        Set<String> termNames = new java.util.LinkedHashSet<>();
+        WORDS.forEach(w -> termNames.add(w.term()));
+        for (Word w : WORDS) {
+            for (String b : w.banned()) {
+                if (b.length() < 2) {
+                    errors.add(w.term() + ": 한 글자 금칙어는 두지 않는다 — " + b);
+                }
+                if (termNames.contains(b)) {
+                    errors.add(w.term() + ": 금칙어가 표준단어와 겹칩니다 — " + b);
+                }
+            }
+            for (String x : w.synonyms()) {
+                if (termNames.contains(x)) {
+                    errors.add(w.term() + ": 이음동의어가 표준단어로도 등재돼 있습니다 — " + x);
+                }
+            }
+        }
+
         for (TableSpec table : TABLES) {
             if (!suffixes.contains(table.suffix())) {
                 errors.add(table.physical() + ": 등록되지 않은 유형 접미사 — " + table.suffix());
@@ -447,8 +520,16 @@ public final class DbStandard {
             if (table.physical().length() > 30) {
                 errors.add(table.physical() + ": 30바이트를 넘습니다");
             }
+            // [업무코드]_[테이블의미]_[유형접미사]에서 가운데만 표준단어로 분해된다.
+            // 업무코드는 표준단어가 아니라 주제영역이므로 먼저 떼어 낸다.
             String stem = table.physical().substring(
                     0, table.physical().length() - table.suffix().length() - 1);
+            String prefix = businessCode() + "_";
+            if (!stem.startsWith(prefix)) {
+                errors.add(table.physical() + ": 업무코드 " + prefix + "로 시작하지 않습니다");
+                continue;
+            }
+            stem = stem.substring(prefix.length());
             try {
                 decompose(stem);
             } catch (IllegalArgumentException e) {

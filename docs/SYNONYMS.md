@@ -15,50 +15,50 @@
 | # | 표준 필드 | 표시명 | 저장 계층 | 계열 | 값 형식 | 주요 | 동의어 수 |
 |---:|---|---|---|---|---|:-:|---:|
 | 1 | `BODY_AGNCY_NM` | 고시기관 | 추출만(적재 안 함) | — | TEXT |  | 4 |
-| 2 | `NOTI_NO` | 고시번호 | `ATCH_FILE_DTL` 컬럼 | — | TEXT |  | 2 |
-| 3 | `NOTI_DT` | 고시일자 | `ATCH_FILE_DTL` 컬럼 | — | DATE |  | 6 |
-| 4 | `NOTI_TTL` | 제목 | `ATCH_FILE_DTL` 컬럼 | — | TEXT |  | 3 |
+| 2 | `NOTI_NO` | 고시번호 | `OS_ATCH_FILE_DTL` 컬럼 | — | TEXT |  | 2 |
+| 3 | `NOTI_DT` | 고시일자 | `OS_ATCH_FILE_DTL` 컬럼 | — | DATE |  | 6 |
+| 4 | `NOTI_TTL` | 제목 | `OS_ATCH_FILE_DTL` 컬럼 | — | TEXT |  | 3 |
 | 5 | `NOTI_PSN` | 고시자 | 추출만(적재 안 함) | — | TEXT |  | 2 |
-| 6 | `LOC` | 점용·사용 장소 | `NOTI_ITEM_VAL_DTL` 행 | 위치 | TEXT | ● | 17 |
-| 7 | `AREA` | 점용·사용 면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT | ● | 12 |
-| 8 | `PRPS` | 점용·사용 목적 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT | ● | 8 |
-| 9 | `APLC_NM` | 허가·승인 대상자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT | ● | 24 |
-| 10 | `WORK_PRD` | 점용·사용 기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG (가상 필드 · 분리 적재) | ● | 9 |
-| 11 | `APLC_ADDR` | 허가·승인 대상자 주소 | `NOTI_ITEM_VAL_DTL` 행 | 주소 | TEXT | ● | 6 |
-| 12 | `APV_NO` | 허가·승인번호 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 7 |
-| 13 | `APV_DT` | 허가·승인일자 | `NOTI_ITEM_VAL_DTL` 행 | — | DATE |  | 18 |
-| 14 | `RMRK` | 비고 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
-| 15 | `SBJT_ADDR` | 공고·처분 대상자 주소 | `NOTI_ITEM_VAL_DTL` 행 | 주소 | TEXT |  | 0 |
-| 16 | `BSNS_CTNT` | 사업내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 5 |
-| 17 | `CNST_PRD` | 공사시행 기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG |  | 3 |
-| 18 | `CHG_AFT` | 변경 후 값 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 19 | `CHG_SMRY` | 변경사항 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 20 | `SBJT_NM` | 공고·처분 대상자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT |  | 1 |
-| 21 | `CHG_BFR` | 변경 전 값 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 22 | `WTR_TY` | 수면 종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 23 | `STRC_TY` | 공작물 종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 24 | `CMPL_DT` | 준공·완료 처리일자 | `NOTI_ITEM_VAL_DTL` 행 | 날짜 | DATE |  | 4 |
-| 25 | `OPER_NM` | 사업 시행자 성명 | `NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT |  | 4 |
-| 26 | `PRPS_CTNT` | 점용·사용 목적·사업내용(복합) | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
-| 27 | `CNTC_PNT` | 문의처 | `NOTI_ITEM_VAL_DTL` 행 | 연락 | TEXT |  | 2 |
-| 28 | `APV_NO_DT` | 허가·승인번호·일자(복합) | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 0 |
-| 29 | `CNST_NM` | 공사명칭 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
-| 30 | `CNST_LOC` | 공사시행 장소 | `NOTI_ITEM_VAL_DTL` 행 | 위치 | TEXT |  | 3 |
-| 31 | `CNTC_NO` | 연락처 | `NOTI_ITEM_VAL_DTL` 행 | 연락 | TEXT |  | 3 |
-| 32 | `PRJ_COST` | 사업비 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 33 | `APV_CTNT` | 허가내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
-| 34 | `CNST_AREA` | 공사시행 면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT |  | 2 |
-| 35 | `CNST_TY` | 공사종류 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 36 | `LAND_PLAN` | 토지이용계획 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 37 | `CNCL_DT` | 취소일자 | `NOTI_ITEM_VAL_DTL` 행 | 날짜 | DATE |  | 3 |
-| 38 | `CMPL_AREA` | 준공면적 | `NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT |  | 1 |
-| 39 | `CNCL_RSN` | 취소사유 | `NOTI_ITEM_VAL_DTL` 행 | 사유 | TEXT |  | 2 |
-| 40 | `NOTI_PRD` | 공고기간 | `NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG |  | 1 |
-| 41 | `DSPS_CTNT` | 처분내용 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
-| 42 | `NOTI_SBJT` | 공고대상 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
-| 43 | `DSPS_RSN` | 처분사유 | `NOTI_ITEM_VAL_DTL` 행 | 사유 | TEXT |  | 1 |
-| 44 | `OPIN_SBMS` | 의견제출 기간·방법 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 4 |
-| 45 | `LAW_BASE` | 근거법령 | `NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
+| 6 | `LOC` | 점용·사용 장소 | `OS_NOTI_ITEM_VAL_DTL` 행 | 위치 | TEXT | ● | 17 |
+| 7 | `AREA` | 점용·사용 면적 | `OS_NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT | ● | 12 |
+| 8 | `PRPS` | 점용·사용 목적 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT | ● | 8 |
+| 9 | `APLC_NM` | 허가·승인 대상자 성명 | `OS_NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT | ● | 24 |
+| 10 | `WORK_PRD` | 점용·사용 기간 | `OS_NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG (가상 필드 · 분리 적재) | ● | 9 |
+| 11 | `APLC_ADDR` | 허가·승인 대상자 주소 | `OS_NOTI_ITEM_VAL_DTL` 행 | 주소 | TEXT | ● | 6 |
+| 12 | `APV_NO` | 허가·승인번호 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 7 |
+| 13 | `APV_DT` | 허가·승인일자 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | DATE |  | 18 |
+| 14 | `RMRK` | 비고 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
+| 15 | `SBJT_ADDR` | 공고·처분 대상자 주소 | `OS_NOTI_ITEM_VAL_DTL` 행 | 주소 | TEXT |  | 0 |
+| 16 | `BSNS_CTNT` | 사업내용 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 5 |
+| 17 | `CNST_PRD` | 공사시행 기간 | `OS_NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG |  | 3 |
+| 18 | `CHG_AFT` | 변경 후 값 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 19 | `CHG_SMRY` | 변경사항 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 20 | `SBJT_NM` | 공고·처분 대상자 성명 | `OS_NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT |  | 1 |
+| 21 | `CHG_BFR` | 변경 전 값 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 22 | `WTR_TY` | 수면 종류 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 23 | `STRC_TY` | 공작물 종류 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 24 | `CMPL_DT` | 준공·완료 처리일자 | `OS_NOTI_ITEM_VAL_DTL` 행 | 날짜 | DATE |  | 4 |
+| 25 | `OPER_NM` | 사업 시행자 성명 | `OS_NOTI_ITEM_VAL_DTL` 행 | 인적 | TEXT |  | 4 |
+| 26 | `PRPS_CTNT` | 점용·사용 목적·사업내용(복합) | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
+| 27 | `CNTC_PNT` | 문의처 | `OS_NOTI_ITEM_VAL_DTL` 행 | 연락 | TEXT |  | 2 |
+| 28 | `APV_NO_DT` | 허가·승인번호·일자(복합) | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 0 |
+| 29 | `CNST_NM` | 공사명칭 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 3 |
+| 30 | `CNST_LOC` | 공사시행 장소 | `OS_NOTI_ITEM_VAL_DTL` 행 | 위치 | TEXT |  | 3 |
+| 31 | `CNTC_NO` | 연락처 | `OS_NOTI_ITEM_VAL_DTL` 행 | 연락 | TEXT |  | 3 |
+| 32 | `PRJ_COST` | 사업비 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 33 | `APV_CTNT` | 허가내용 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
+| 34 | `CNST_AREA` | 공사시행 면적 | `OS_NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT |  | 2 |
+| 35 | `CNST_TY` | 공사종류 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 36 | `LAND_PLAN` | 토지이용계획 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 37 | `CNCL_DT` | 취소일자 | `OS_NOTI_ITEM_VAL_DTL` 행 | 날짜 | DATE |  | 3 |
+| 38 | `CMPL_AREA` | 준공면적 | `OS_NOTI_ITEM_VAL_DTL` 행 | 면적 | TEXT |  | 1 |
+| 39 | `CNCL_RSN` | 취소사유 | `OS_NOTI_ITEM_VAL_DTL` 행 | 사유 | TEXT |  | 2 |
+| 40 | `NOTI_PRD` | 공고기간 | `OS_NOTI_ITEM_VAL_DTL` 행 | 기간 | DTRG |  | 1 |
+| 41 | `DSPS_CTNT` | 처분내용 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
+| 42 | `NOTI_SBJT` | 공고대상 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 2 |
+| 43 | `DSPS_RSN` | 처분사유 | `OS_NOTI_ITEM_VAL_DTL` 행 | 사유 | TEXT |  | 1 |
+| 44 | `OPIN_SBMS` | 의견제출 기간·방법 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 4 |
+| 45 | `LAW_BASE` | 근거법령 | `OS_NOTI_ITEM_VAL_DTL` 행 | — | TEXT |  | 1 |
 
 ## 필드별 상세
 
@@ -76,7 +76,7 @@
 
 ### `NOTI_NO` — 고시번호
 
-- **저장 계층**: `ATCH_FILE_DTL` 컬럼
+- **저장 계층**: `OS_ATCH_FILE_DTL` 컬럼
 - **값 형식**: TEXT
 - **설명**: 고시·공고의 문서번호.
 - **값 예시**: `고시 제2026-47호`
@@ -88,7 +88,7 @@
 
 ### `NOTI_DT` — 고시일자
 
-- **저장 계층**: `ATCH_FILE_DTL` 컬럼
+- **저장 계층**: `OS_ATCH_FILE_DTL` 컬럼
 - **값 형식**: DATE
 - **설명**: 고시·공고가 공표된 날짜.
 - **값 예시**: `2026. 6. 17.`
@@ -100,7 +100,7 @@
 
 ### `NOTI_TTL` — 제목
 
-- **저장 계층**: `ATCH_FILE_DTL` 컬럼
+- **저장 계층**: `OS_ATCH_FILE_DTL` 컬럼
 - **값 형식**: TEXT
 - **설명**: 고시문 제목. 라벨이 없으면 고시번호 다음 문단에서 추정한다.
 - **값 예시**: `공유수면 점용·사용 변경허가 고시`
@@ -123,7 +123,7 @@
 
 ### `LOC` — 점용·사용 장소
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 위치 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **주요 항목**: 전수 표본 출현율 60% 이상
@@ -137,7 +137,7 @@
 
 ### `AREA` — 점용·사용 면적
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 면적 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **주요 항목**: 전수 표본 출현율 60% 이상
@@ -151,7 +151,7 @@
 
 ### `PRPS` — 점용·사용 목적
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **주요 항목**: 전수 표본 출현율 60% 이상
 - **설명**: 점용·사용의 목적. 공사명칭·사업내용과 값의 역할이 달라 합치지 않는다.
@@ -164,7 +164,7 @@
 
 ### `APLC_NM` — 허가·승인 대상자 성명
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 인적 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **주요 항목**: 전수 표본 출현율 60% 이상
@@ -178,7 +178,7 @@
 
 ### `WORK_PRD` — 점용·사용 기간
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 기간 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: DTRG (가상 필드 · 분리 적재)
 - **주요 항목**: 전수 표본 출현율 60% 이상
@@ -192,7 +192,7 @@
 
 ### `APLC_ADDR` — 허가·승인 대상자 주소
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 주소 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **주요 항목**: 전수 표본 출현율 60% 이상
@@ -205,7 +205,7 @@
 
 ### `APV_NO` — 허가·승인번호
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 처분(허가/승인/신고수리/협의) 번호.
 - **값 예시**: `제2026-26호`, `2018-1`
@@ -216,7 +216,7 @@
 
 ### `APV_DT` — 허가·승인일자
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: DATE
 - **설명**: 처분일자. ISO(yyyy-MM-dd)로 정규화한다.
 - **값 예시**: `2026. 6. 5.`
@@ -228,7 +228,7 @@
 
 ### `RMRK` — 비고
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 비고·기타 참고사항.
 - **값 예시**: `없음`
@@ -239,7 +239,7 @@
 
 ### `SBJT_ADDR` — 공고·처분 대상자 주소
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 주소 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **설명**: 공고·처분의 대상이 된 자의 주소. 허가를 받은 자와 구분한다.
@@ -251,7 +251,7 @@
 
 ### `BSNS_CTNT` — 사업내용
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 공사·사업의 내용. 점용·사용 목적이나 공사명칭으로 합치지 않는다.
 - **값 예시**: `호안 축조 및 부지 조성`
@@ -262,7 +262,7 @@
 
 ### `CNST_PRD` — 공사시행 기간
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 기간 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: DTRG
 - **설명**: 공사를 시행하는 기간. 점용·사용 기간과 효력 범위가 달라 구분한다.
@@ -273,7 +273,7 @@
 
 ### `CHG_AFT` — 변경 후 값
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 당초/변경 대비표에서 변경 후에 해당하는 값.
 
@@ -283,7 +283,7 @@
 
 ### `CHG_SMRY` — 변경사항
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 변경의 요지. 같은 표에 변경 전 값이 있으면 그쪽이 우선한다.
 
@@ -293,7 +293,7 @@
 
 ### `SBJT_NM` — 공고·처분 대상자 성명
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 인적 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **설명**: 공고·처분의 대상이 된 자의 성명. 허가를 받은 자와 구분한다.
@@ -304,7 +304,7 @@
 
 ### `CHG_BFR` — 변경 전 값
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 당초/변경 대비표에서 변경 전에 해당하는 값.
 
@@ -314,7 +314,7 @@
 
 ### `WTR_TY` — 수면 종류
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 공유수면의 종류.
 - **값 예시**: `공유수면(인천북항 내)`
@@ -326,7 +326,7 @@
 
 ### `STRC_TY` — 공작물 종류
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 설치하는 공작물의 종류.
 - **값 예시**: `선가대(6기)`
@@ -338,7 +338,7 @@
 
 ### `CMPL_DT` — 준공·완료 처리일자
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 날짜 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: DATE
 - **설명**: 준공검사확인증 발급일 또는 공사완료신고 수리일.
@@ -349,7 +349,7 @@
 
 ### `OPER_NM` — 사업 시행자 성명
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 인적 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **설명**: 사업·공사를 시행하는 자. 허가를 받은 자와 다를 수 있다.
@@ -360,7 +360,7 @@
 
 ### `PRPS_CTNT` — 점용·사용 목적·사업내용(복합)
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 목적과 사업내용이 원문 한 항목에 합쳐진 경우. 어느 쪽으로도 단정할 수 없어 별도 항목으로 둔다.
 - **값 예시**: `목적 및 사유`
@@ -371,7 +371,7 @@
 
 ### `CNTC_PNT` — 문의처
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 연락 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **설명**: 공고 문의처(부서·담당).
@@ -382,7 +382,7 @@
 
 ### `APV_NO_DT` — 허가·승인번호·일자(복합)
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 번호와 일자가 한 셀에 병기된 경우.
 - **값 예시**: `제2026-26호(2026. 6. 11.)`
@@ -394,7 +394,7 @@
 
 ### `CNST_NM` — 공사명칭
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 공사·사업의 명칭. 공사종류·사업내용과 분리한다.
 
@@ -404,7 +404,7 @@
 
 ### `CNST_LOC` — 공사시행 장소
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 위치 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **설명**: 공사를 시행하는 장소. 점용·사용 장소와 역할이 다를 수 있다.
@@ -415,7 +415,7 @@
 
 ### `CNTC_NO` — 연락처
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 연락 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **설명**: 대상자 또는 담당자의 연락처.
@@ -426,7 +426,7 @@
 
 ### `PRJ_COST` — 사업비
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 사업비. 금액 단위는 원문을 보존한다.
 - **값 예시**: `198백만원`
@@ -437,7 +437,7 @@
 
 ### `APV_CTNT` — 허가내용
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 허가의 내용을 통째로 적은 항목. 개별 목적·장소·면적과 함께 나타날 수 있다.
 
@@ -447,7 +447,7 @@
 
 ### `CNST_AREA` — 공사시행 면적
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 면적 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **설명**: 공사를 시행하는 면적.
@@ -458,7 +458,7 @@
 
 ### `CNST_TY` — 공사종류
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 공사의 종류. 공사명칭·사업내용과 분리한다.
 
@@ -468,7 +468,7 @@
 
 ### `LAND_PLAN` — 토지이용계획
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 매립지 등의 토지이용계획.
 
@@ -478,7 +478,7 @@
 
 ### `CNCL_DT` — 취소일자
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 날짜 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: DATE
 - **설명**: 취소 처분일자.
@@ -489,7 +489,7 @@
 
 ### `CMPL_AREA` — 준공면적
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 면적 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **설명**: 준공 확인된 면적. 허가받은 점용·사용 면적과 다를 수 있다.
@@ -500,7 +500,7 @@
 
 ### `CNCL_RSN` — 취소사유
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 사유 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **설명**: 취소 처분의 사유.
@@ -511,7 +511,7 @@
 
 ### `NOTI_PRD` — 공고기간
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 기간 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: DTRG
 - **설명**: 공고·열람 기간. 점용·사용 기간과 효력 범위가 다르다.
@@ -522,7 +522,7 @@
 
 ### `DSPS_CTNT` — 처분내용
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 처분의 내용. 처분사유·근거법령과 분리한다.
 
@@ -532,7 +532,7 @@
 
 ### `NOTI_SBJT` — 공고대상
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 공고의 대상. 허가·승인 대상자와 구분한다.
 
@@ -542,7 +542,7 @@
 
 ### `DSPS_RSN` — 처분사유
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **계열**: 사유 — 누락 검증은 항목이 아니라 계열 단위로 본다
 - **값 형식**: TEXT
 - **설명**: 처분의 원인이 되는 사실.
@@ -553,7 +553,7 @@
 
 ### `OPIN_SBMS` — 의견제출 기간·방법
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 의견제출 기간과 방법. 원문에서 별도 라벨이어도 한 항목군으로 본다.
 
@@ -563,7 +563,7 @@
 
 ### `LAW_BASE` — 근거법령
 
-- **저장 계층**: `NOTI_ITEM_VAL_DTL` 행
+- **저장 계층**: `OS_NOTI_ITEM_VAL_DTL` 행
 - **값 형식**: TEXT
 - **설명**: 처분의 근거 법령. 조문 값은 원문을 보존한다.
 

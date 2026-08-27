@@ -96,7 +96,7 @@ LoadPolicy (본문 분량 측정 → 안내문류면 excl_rsn_ctnt 기록, 적�
         ▼
 DbLoader (PostgreSQL JDBC + HikariCP)
         ▼
-PostgreSQL (AGNCY_BAS → NOTI_BAS → ATCH_FILE_DTL → NOTI_ITEM_VAL_DTL) + images/ 폴더
+PostgreSQL (OS_INSTT_BAS → OS_NOTI_BAS → OS_ATCH_FILE_DTL → OS_NOTI_ITEM_VAL_DTL) + images/ 폴더
 ```
 
 ## 디렉터리 구조
@@ -185,7 +185,7 @@ java -jar target/extract-pipeline-1.0.0.jar <서브커맨드> [옵션]
 DB 접속·OCR 실행 정보는 CLI 옵션이 아니라 `application.properties` 및
 `.env`에서 읽습니다(우선순위: OS 환경변수 > `.env` > `application.properties`).
 파일 단위 실패는 `[실패] <파일>: (<단계>) <사유>` 로그만 남기고 배치는 계속
-진행합니다(배치 격리). `ATCH_IMG_DTL.IMG_FILE_PATH`에는 저장된 이미지의 **절대경로**가
+진행합니다(배치 격리). `OS_ATCH_IMG_DTL.IMG_FILE_PATH`에는 저장된 이미지의 **절대경로**가
 기록됩니다(리눅스 서버에서 파일을 절대경로로 참조).
 
 ### 예시
@@ -284,25 +284,25 @@ DB를 다시 만듭니다([개발 DB 초기화](#개발-db-초기화)).
 
 ```mermaid
 erDiagram
-    AGNCY_BAS         ||--o{ NOTI_BAS          : "발령"
-    NOTI_BAS          ||--o{ ATCH_FILE_DTL     : "첨부"
-    ATCH_FILE_DTL     ||--o{ ATCH_IMG_DTL      : "포함"
-    ATCH_FILE_DTL     ||--o{ NOTI_ITEM_VAL_DTL : "보유"
-    NOTI_KND_TC       ||--o{ ATCH_FILE_DTL     : "분류"
-    NOTI_ITEM_TC      ||--o{ NOTI_ITEM_VAL_DTL : "정의"
-    ATCH_FILE_DTL     ||--o{ NOTI_LBL_VAL_DTL  : "보유"
-    AGNCY_BAS         ||--o{ CRWL_LOG_DTL      : "크롤기록"
+    OS_INSTT_BAS         ||--o{ OS_NOTI_BAS          : "발령"
+    OS_NOTI_BAS          ||--o{ OS_ATCH_FILE_DTL     : "첨부"
+    OS_ATCH_FILE_DTL     ||--o{ OS_ATCH_IMG_DTL      : "포함"
+    OS_ATCH_FILE_DTL     ||--o{ OS_NOTI_ITEM_VAL_DTL : "보유"
+    OS_NOTI_KND_TC       ||--o{ OS_ATCH_FILE_DTL     : "분류"
+    OS_NOTI_ITEM_TC      ||--o{ OS_NOTI_ITEM_VAL_DTL : "정의"
+    OS_ATCH_FILE_DTL     ||--o{ OS_NOTI_LBL_VAL_DTL  : "보유"
+    OS_INSTT_BAS         ||--o{ OS_CRWL_LOG_DTL      : "크롤기록"
 
-    AGNCY_BAS["기관 · AGNCY_BAS"] {
-        D_SN   AGNCY_SN     PK "기관일련번호"
-        D_NM   AGNCY_NM        "기관명"
-        D_CD   AGNCY_KND_CD    "기관종류코드 · MOF 지방해양수산청 / LOCL 지자체 / CNTL 중앙행정기관 / GZT 전자관보"
+    OS_INSTT_BAS["기관 · OS_INSTT_BAS"] {
+        D_SN   INSTT_SN     PK "기관일련번호"
+        D_NM   INSTT_NM        "기관명"
+        D_CD   INSTT_KND_CD    "기관종류코드 · MOF 지방해양수산청 / LOCL 지자체 / CNTL 중앙행정기관 / GZT 전자관보"
         D_DTM  FRST_REG_DTM    "최초등록일시"
         D_DTM  LAST_CHG_DTM    "최종변경일시"
     }
-    NOTI_BAS["고시공고게시물 · NOTI_BAS"] {
+    OS_NOTI_BAS["고시공고게시물 · OS_NOTI_BAS"] {
         D_SN   NOTI_SN      PK "고시공고일련번호 · 크롤러 게시물목록 엑셀의 번호"
-        D_SN   AGNCY_SN     FK "기관일련번호"
+        D_SN   INSTT_SN     FK "기관일련번호"
         D_CD   BBS_STTS_CD     "게시상태코드 · POST 게시중 / CLSD 게시완료"
         D_CTNT SRC_KEY_CTNT    "원문키내용 · 지자체 홈페이지가 게시물을 식별하는 키 원문"
         D_HASH SRC_KEY_HASH UK "원문키해시 · 원문키의 SHA-256, 중복 수집 차단"
@@ -317,21 +317,21 @@ erDiagram
         D_DTM  FRST_REG_DTM    "최초등록일시"
         D_DTM  LAST_CHG_DTM    "최종변경일시"
     }
-    CRWL_LOG_DTL["크롤로그 · CRWL_LOG_DTL"] {
+    OS_CRWL_LOG_DTL["크롤로그 · OS_CRWL_LOG_DTL"] {
         D_SN   CRWL_LOG_SN    PK "크롤로그일련번호"
-        D_SN   AGNCY_SN       FK "기관일련번호"
+        D_SN   INSTT_SN       FK "기관일련번호"
         D_DT   CRWL_DT           "크롤일자 · 이 수집이 돈 날"
         D_CD   CRWL_KND_CD       "크롤종류코드 · SAMPLE / FULL_CRAWL / DAILY_NEW"
         D_CD   CRWL_STTS_CD      "크롤상태코드 · OK 수집완료 / FAIL 실패"
         D_CD   CRWL_STEP_CD      "크롤단계코드 · 넘어진 단계, 성공 행은 비어 있음"
-        D_URL  AGNCY_BBS_URL     "기관게시판URL · 긁은 게시판 목록 주소"
+        D_URL  INSTT_BBS_URL     "기관게시판URL · 긁은 게시판 목록 주소"
         D_CNT  NOTI_CNT          "고시공고건수 · 크롤러 집계, 실제 행수와 대조용"
         D_CNT  ATCH_FILE_CNT     "첨부파일건수 · 크롤러가 내려받은 첨부 수"
         D_CTNT FAIL_MSG_CTNT     "실패메시지내용 · 실패 원인"
         D_DTM  FRST_REG_DTM      "최초등록일시"
         D_DTM  LAST_CHG_DTM      "최종변경일시"
     }
-    ATCH_FILE_DTL["첨부파일 · ATCH_FILE_DTL"] {
+    OS_ATCH_FILE_DTL["첨부파일 · OS_ATCH_FILE_DTL"] {
         D_SN   NOTI_SN            PK,FK "고시공고일련번호"
         D_SN   ATCH_SN            PK    "첨부일련번호"
         D_NM   ATCH_FILE_NM             "첨부파일명"
@@ -351,7 +351,7 @@ erDiagram
         D_DTM  FRST_REG_DTM             "최초등록일시"
         D_DTM  LAST_CHG_DTM             "최종변경일시"
     }
-    ATCH_IMG_DTL["첨부이미지 · ATCH_IMG_DTL"] {
+    OS_ATCH_IMG_DTL["첨부이미지 · OS_ATCH_IMG_DTL"] {
         D_SN   NOTI_SN       PK,FK "고시공고일련번호"
         D_SN   ATCH_SN       PK,FK "첨부일련번호"
         D_SN   IMG_SN        PK    "이미지일련번호"
@@ -360,7 +360,7 @@ erDiagram
         D_DTM  FRST_REG_DTM        "최초등록일시"
         D_DTM  LAST_CHG_DTM        "최종변경일시"
     }
-    NOTI_ITEM_VAL_DTL["공고항목값 · NOTI_ITEM_VAL_DTL"] {
+    OS_NOTI_ITEM_VAL_DTL["공고항목값 · OS_NOTI_ITEM_VAL_DTL"] {
         D_SN   NOTI_SN       PK,FK "고시공고일련번호"
         D_SN   ATCH_SN       PK,FK "첨부일련번호"
         D_SN   DSPS_SN       PK    "처분일련번호 · 목록표의 N번째 행"
@@ -370,14 +370,14 @@ erDiagram
         D_DTM  FRST_REG_DTM        "최초등록일시"
         D_DTM  LAST_CHG_DTM        "최종변경일시"
     }
-    NOTI_KND_TC["공고종류 · NOTI_KND_TC"] {
+    OS_NOTI_KND_TC["공고종류 · OS_NOTI_KND_TC"] {
         D_CD   NOTI_KND_CD      PK "공고종류코드"
         D_NM   NOTI_KND_NM         "공고종류명"
         D_NM   HRNK_NOTI_KND_NM    "상위공고종류명"
         D_DTM  FRST_REG_DTM        "최초등록일시"
         D_DTM  LAST_CHG_DTM        "최종변경일시"
     }
-    NOTI_LBL_VAL_DTL["고시공고라벨값 · NOTI_LBL_VAL_DTL"] {
+    OS_NOTI_LBL_VAL_DTL["고시공고라벨값 · OS_NOTI_LBL_VAL_DTL"] {
         D_SN   NOTI_SN       PK,FK "고시공고일련번호"
         D_SN   ATCH_SN       PK,FK "첨부일련번호"
         D_SN   DSPS_SN       PK    "처분일련번호"
@@ -386,7 +386,7 @@ erDiagram
         D_DTM  FRST_REG_DTM        "최초등록일시"
         D_DTM  LAST_CHG_DTM        "최종변경일시"
     }
-    NOTI_ITEM_TC["공고항목 · NOTI_ITEM_TC"] {
+    OS_NOTI_ITEM_TC["공고항목 · OS_NOTI_ITEM_TC"] {
         D_CD   NOTI_ITEM_CD    PK "공고항목코드"
         D_NM   NOTI_ITEM_NM       "공고항목명"
         D_NM   ITEM_SRS_NM        "항목계열명"
@@ -399,15 +399,15 @@ erDiagram
 
 | 논리명 | 물리명 | 무엇의 단위인가 |
 |---|---|---|
-| 기관 | `AGNCY_BAS` | 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다 |
-| 고시공고게시물 | `NOTI_BAS` | 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다 |
-| 크롤로그 | `CRWL_LOG_DTL` | 하루치 수집에서 기관 하나를 긁은 결과. 성공도 남겨 "오늘 이 기관을 돌긴 했나"에 답한다. 크롤러만 아는 것만 담고 `NOTI_BAS`에서 유도되는 값은 담지 않는다 |
-| 공고종류 | `NOTI_KND_TC` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
-| 공고항목 | `NOTI_ITEM_TC` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다 |
-| 첨부파일 | `ATCH_FILE_DTL` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
-| 첨부이미지 | `ATCH_IMG_DTL` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다 |
-| 공고항목값 | `NOTI_ITEM_VAL_DTL` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
-| 고시공고라벨값 | `NOTI_LBL_VAL_DTL` | 표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — `NOTI_ITEM_TC`로 가는 FK가 없는 것이 이 테이블의 전부다 |
+| 기관 | `OS_INSTT_BAS` | 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다 |
+| 고시공고게시물 | `OS_NOTI_BAS` | 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다 |
+| 크롤로그 | `OS_CRWL_LOG_DTL` | 하루치 수집에서 기관 하나를 긁은 결과. 성공도 남겨 "오늘 이 기관을 돌긴 했나"에 답한다. 크롤러만 아는 것만 담고 `OS_NOTI_BAS`에서 유도되는 값은 담지 않는다 |
+| 공고종류 | `OS_NOTI_KND_TC` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
+| 공고항목 | `OS_NOTI_ITEM_TC` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다 |
+| 첨부파일 | `OS_ATCH_FILE_DTL` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
+| 첨부이미지 | `OS_ATCH_IMG_DTL` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다 |
+| 공고항목값 | `OS_NOTI_ITEM_VAL_DTL` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
+| 고시공고라벨값 | `OS_NOTI_LBL_VAL_DTL` | 표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — `OS_NOTI_ITEM_TC`로 가는 FK가 없는 것이 이 테이블의 전부다 |
 
 컬럼 단위 논리명↔물리명 대응표는 [`docs/DB_STANDARD.md`](docs/DB_STANDARD.md)에 있습니다 —
 `db/standard_terms.json`에서 생성되므로 손으로 옮겨 적은 사본과 달리 어긋날 수 없습니다.
@@ -422,24 +422,24 @@ erDiagram
 - **멱등 단위는 첨부파일**(`NOTI_SN`, `ATCH_SN`)입니다. 재적재 시 첨부 행을 지우면
   이미지와 항목값이 CASCADE로 함께 정리됩니다. 게시물 단위로 지우면 파일을 한 건씩
   처리하는 도중 같은 게시물의 앞선 첨부가 함께 날아갑니다.
-- **표준항목으로 매핑되지 못한 값도 남깁니다** — `NOTI_LBL_VAL_DTL`에 라벨 원문을 키로 넣습니다.
-  이 테이블에는 `NOTI_ITEM_TC`로 가는 FK가 없습니다. 있으면 사전에 없는 라벨이 FK 위반을 내고,
+- **표준항목으로 매핑되지 못한 값도 남깁니다** — `OS_NOTI_LBL_VAL_DTL`에 라벨 원문을 키로 넣습니다.
+  이 테이블에는 `OS_NOTI_ITEM_TC`로 가는 FK가 없습니다. 있으면 사전에 없는 라벨이 FK 위반을 내고,
   배치 삽입이라 그 첨부의 항목값·이미지가 통째로 롤백돼 문서 하나가 라벨 한 줄 때문에 DB에서
-  사라집니다. 그렇다고 라벨을 `NOTI_ITEM_TC`에 자동 등재하지는 않습니다 — 등재는 사람이
+  사라집니다. 그렇다고 라벨을 `OS_NOTI_ITEM_TC`에 자동 등재하지는 않습니다 — 등재는 사람이
   `synonyms.json`을 고칠 때만 일어나고, 그때까지 값은 이 테이블에 머뭅니다.
 - **실패·적재제외도 행으로 남깁니다**(`PROC_STTS_CD`). 성공만 넣으면 "첨부 401건 중
   추출 0건"인 기관이 DB에서 아예 보이지 않아, 추출 누락과 애초에 없던 자료를 구분할 수 없습니다.
 - 첨부 단위로 세이브포인트를 잡아 한 건의 실패가 배치 전체를 막지 않습니다.
-- 사전 동기화(`ReferenceSync`)가 적재보다 **먼저** 돕니다 — `NOTI_ITEM_VAL_DTL`이
-  `NOTI_ITEM_TC`을 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패합니다.
-- **기관도 첨부보다 먼저** 넣습니다 — `NOTI_BAS.AGNCY_SN`가 FK라 같은 이유로 깨집니다.
-- **같은 게시물을 두 번 담지 않습니다** — `NOTI_BAS.SRC_KEY_HASH`가 UNIQUE입니다.
+- 사전 동기화(`ReferenceSync`)가 적재보다 **먼저** 돕니다 — `OS_NOTI_ITEM_VAL_DTL`이
+  `OS_NOTI_ITEM_TC`을 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패합니다.
+- **기관도 첨부보다 먼저** 넣습니다 — `OS_NOTI_BAS.INSTT_SN`가 FK라 같은 이유로 깨집니다.
+- **같은 게시물을 두 번 담지 않습니다** — `OS_NOTI_BAS.SRC_KEY_HASH`가 UNIQUE입니다.
   크롤 산출물이 아닌 행은 이 값이 NULL이고, PostgreSQL의 UNIQUE는 NULL을 서로 다른
   값으로 보므로 음수 `NOTI_SN` 행이 여럿 있어도 부딪히지 않습니다.
-- **크롤로그(`CRWL_LOG_DTL`)도 기관보다 나중에 넣습니다** — `AGNCY_SN`이 FK입니다.
+- **크롤로그(`OS_CRWL_LOG_DTL`)도 기관보다 나중에 넣습니다** — `INSTT_SN`이 FK입니다.
   결과가 0건인 기관도 기관 행은 만들어지므로(아래 "규약 밖의 파일" 참고) FK가 막을 일이
   없고, 그래서 기관명을 로그에 중복해 담지 않습니다. 기관을 특정조차 못 한 실패만
-  `AGNCY_SN`이 NULL이고, 그때는 `FAIL_MSG_CTNT`가 설명을 떠맡습니다.
+  `INSTT_SN`이 NULL이고, 그때는 `FAIL_MSG_CTNT`가 설명을 떠맡습니다.
 - **성공한 수집도 로그로 남깁니다.** 실패만 적재하면 "돌았는데 새 고시가 없었다"와
   "아예 안 돌았다"가 둘 다 "행 없음"이 돼 조용한 수집 누락을 못 잡습니다.
 
@@ -447,7 +447,7 @@ erDiagram
 
 ```sql
 SELECT NOTI_SN, count(*) AS 수집, max(ATCH_SN) AS 최대순번
-  FROM ATCH_FILE_DTL GROUP BY NOTI_SN HAVING count(*) <> max(ATCH_SN);
+  FROM OS_ATCH_FILE_DTL GROUP BY NOTI_SN HAVING count(*) <> max(ATCH_SN);
 ```
 
 어느 라벨을 사전에 올릴지는 이 한 줄로 고릅니다 — 전에는 `dict --review`로 문서를 다시 만들어야
@@ -455,24 +455,24 @@ SELECT NOTI_SN, count(*) AS 수집, max(ATCH_SN) AS 최대순번
 
 ```sql
 SELECT ITEM_LBL_NM, count(*) AS 건수, count(DISTINCT NOTI_SN) AS 문서수
-  FROM NOTI_LBL_VAL_DTL GROUP BY 1 ORDER BY 2 DESC LIMIT 20;
+  FROM OS_NOTI_LBL_VAL_DTL GROUP BY 1 ORDER BY 2 DESC LIMIT 20;
 ```
 
-기관별 수집 현황은 폴더명이 채운 `AGNCY_SN`로 봅니다:
+기관별 수집 현황은 폴더명이 채운 `INSTT_SN`로 봅니다:
 
 ```sql
 -- 기관·게시판별 수집·성공 건수
-SELECT A.AGNCY_NM, A.AGNCY_KND_CD, N.BBS_STTS_CD,
+SELECT A.INSTT_NM, A.INSTT_KND_CD, N.BBS_STTS_CD,
        count(*) AS 첨부, count(*) FILTER (WHERE F.PROC_STTS_CD = 'OK') AS 성공
-  FROM ATCH_FILE_DTL F JOIN NOTI_BAS N USING (NOTI_SN) JOIN AGNCY_BAS A USING (AGNCY_SN)
+  FROM OS_ATCH_FILE_DTL F JOIN OS_NOTI_BAS N USING (NOTI_SN) JOIN OS_INSTT_BAS A USING (INSTT_SN)
  GROUP BY 1, 2, 3 ORDER BY 1, 3;
 
 -- 긁긴 했는데 첨부가 한 건도 없는 기관
-SELECT A.AGNCY_NM FROM AGNCY_BAS A
-  LEFT JOIN NOTI_BAS N USING (AGNCY_SN) WHERE N.NOTI_SN IS NULL;
+SELECT A.INSTT_NM FROM OS_INSTT_BAS A
+  LEFT JOIN OS_NOTI_BAS N USING (INSTT_SN) WHERE N.NOTI_SN IS NULL;
 
 -- 기관이 안 붙은 게시물 = 입력 루트 직속이거나 폴더명 규약 위반
-SELECT count(*) FROM NOTI_BAS WHERE AGNCY_SN IS NULL;
+SELECT count(*) FROM OS_NOTI_BAS WHERE INSTT_SN IS NULL;
 ```
 
 "긁긴 했는데 아무것도 못 건진 기관"과 "아예 못 긁은 기관"은 크롤로그로 갈립니다 —
@@ -480,30 +480,30 @@ SELECT count(*) FROM NOTI_BAS WHERE AGNCY_SN IS NULL;
 
 ```sql
 -- 어느 단계에서 몇 번 넘어졌나
-SELECT A.AGNCY_NM, L.CRWL_STEP_CD, count(*) AS 실패
-  FROM CRWL_LOG_DTL L LEFT JOIN AGNCY_BAS A USING (AGNCY_SN)
+SELECT A.INSTT_NM, L.CRWL_STEP_CD, count(*) AS 실패
+  FROM OS_CRWL_LOG_DTL L LEFT JOIN OS_INSTT_BAS A USING (INSTT_SN)
  WHERE L.CRWL_STTS_CD = 'FAIL' GROUP BY 1, 2 ORDER BY 3 DESC;
 
 -- 크롤은 성공했는데 게시물이 한 건도 안 생긴 기관
-SELECT DISTINCT A.AGNCY_NM
-  FROM CRWL_LOG_DTL L JOIN AGNCY_BAS A USING (AGNCY_SN)
-  LEFT JOIN NOTI_BAS N USING (AGNCY_SN)
+SELECT DISTINCT A.INSTT_NM
+  FROM OS_CRWL_LOG_DTL L JOIN OS_INSTT_BAS A USING (INSTT_SN)
+  LEFT JOIN OS_NOTI_BAS N USING (INSTT_SN)
  WHERE L.CRWL_STTS_CD = 'OK' AND N.NOTI_SN IS NULL;
 
 -- 크롤러가 지금까지 수집했다고 집계한 누계 vs 실제 적재된 누계 = 수집 누락 후보.
 -- 두 쪽을 각각 접은 뒤 견준다 — 로그와 게시물을 곧장 조인하면 행이 서로 곱해진다.
-WITH 크롤러 AS (SELECT AGNCY_SN, sum(NOTI_CNT) AS 집계 FROM CRWL_LOG_DTL GROUP BY 1),
-     실제   AS (SELECT AGNCY_SN, count(*) AS 건수
-                  FROM NOTI_BAS WHERE AGNCY_SN IS NOT NULL GROUP BY 1)
-SELECT A.AGNCY_NM, c.집계, coalesce(r.건수, 0) AS 실제
-  FROM 크롤러 c JOIN AGNCY_BAS A USING (AGNCY_SN)
-  LEFT JOIN 실제 r USING (AGNCY_SN)
+WITH 크롤러 AS (SELECT INSTT_SN, sum(NOTI_CNT) AS 집계 FROM OS_CRWL_LOG_DTL GROUP BY 1),
+     실제   AS (SELECT INSTT_SN, count(*) AS 건수
+                  FROM OS_NOTI_BAS WHERE INSTT_SN IS NOT NULL GROUP BY 1)
+SELECT A.INSTT_NM, c.집계, coalesce(r.건수, 0) AS 실제
+  FROM 크롤러 c JOIN OS_INSTT_BAS A USING (INSTT_SN)
+  LEFT JOIN 실제 r USING (INSTT_SN)
  WHERE c.집계 <> coalesce(r.건수, 0);
 
 -- 오늘 안 돈 기관 = 스케줄 누락
-SELECT A.AGNCY_NM FROM AGNCY_BAS A
- WHERE NOT EXISTS (SELECT 1 FROM CRWL_LOG_DTL L
-                    WHERE L.AGNCY_SN = A.AGNCY_SN AND L.CRWL_DT = current_date);
+SELECT A.INSTT_NM FROM OS_INSTT_BAS A
+ WHERE NOT EXISTS (SELECT 1 FROM OS_CRWL_LOG_DTL L
+                    WHERE L.INSTT_SN = A.INSTT_SN AND L.CRWL_DT = current_date);
 ```
 
 08.07 산출물을 실제로 밀어 넣으면 첫 질의가 **2건**을 돌려줍니다 — 영광군청 465/466과
@@ -523,7 +523,7 @@ psql -U extract -d extract -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;
 java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out
 ```
 
-**테이블만 지우면 안 됩니다.** 표준도메인(`D_SN`·`D_CD` …)과 `iso_daterange` 함수는 테이블이
+**테이블만 지우면 안 됩니다.** 표준도메인(`D_SN`·`D_CD` …)과 `FC_OS_ISO_DATERANGE` 함수는 테이블이
 아니라 스키마 객체라 `DROP TABLE`로는 사라지지 않고, 남아 있으면 재적용이 이렇게 죽습니다:
 
 ```
@@ -574,14 +574,14 @@ psql -U postgres -c 'DROP DATABASE extract;' \
 
 | 산출물 | 무엇이 들어 있나 | 어느 테이블로 |
 |---|---|---|
-| **수집 결과 엑셀** | 시트 3장 — 게시물 목록 · 기관별 검증요약 · 특이사항 | `AGNCY_BAS` · `NOTI_BAS` · `CRWL_LOG_DTL` |
-| **첨부파일 폴더** | 게시물에 딸린 실제 파일 | `ATCH_FILE_DTL` 이하 (아래 폴더 규약 그대로) |
+| **수집 결과 엑셀** | 시트 3장 — 게시물 목록 · 기관별 검증요약 · 특이사항 | `OS_INSTT_BAS` · `OS_NOTI_BAS` · `OS_CRWL_LOG_DTL` |
+| **첨부파일 폴더** | 게시물에 딸린 실제 파일 | `OS_ATCH_FILE_DTL` 이하 (아래 폴더 규약 그대로) |
 
 **기관 정보와 게시물 정보는 모두 이 엑셀에서 옵니다.** 폴더명 파싱은 크롤 산출물이 아닌
 파일(수동 수집분)에만 남는 폴백입니다.
 
 > **운영 전제 — 스케줄러가 하루에 한 번 돌고, 새로 게시된 것만 긁습니다.** 크롤로그
-> (`CRWL_LOG_DTL`)가 지금 모양인 근거가 이것입니다. 과거 게시판(게시완료)까지 뒤진 것은
+> (`OS_CRWL_LOG_DTL`)가 지금 모양인 근거가 이것입니다. 과거 게시판(게시완료)까지 뒤진 것은
 > 과거 데이터를 전수로 확보해야 했던 **첫 수집 때뿐**이고 그건 이미 끝났으므로, 앞으로
 > 새로 긁히는 게시물은 전부 게시중(`POST`)입니다. 그래서 로그에는 게시상태를 두지 않고,
 > 로그 한 줄을 가리키는 날짜도 수집 기간이 아니라 **`CRWL_DT`(이 수집이 돈 날) 하나**입니다.
@@ -590,33 +590,33 @@ psql -U postgres -c 'DROP DATABASE extract;' \
 
 아래 수치는 `26.08.07 공유수면 고시 전체 크롤링.xlsx` 실측입니다.
 
-**① 수집결과** (21,759행) — 게시물 한 줄이 한 행. `NOTI_BAS`로 갑니다.
+**① 수집결과** (21,759행) — 게시물 한 줄이 한 행. `OS_NOTI_BAS`로 갑니다.
 
 | 엑셀 칸 | 채워짐 | 최대 길이 | 어디로 |
 |---|---|---|---|
-| 순번 | 100% | — | `NOTI_BAS.NOTI_SN` (PK) |
-| 지자체명 | 100% | 18 | `AGNCY_BAS`를 거쳐 `NOTI_BAS.AGNCY_SN` |
-| 제목 | 100% | 72 | `NOTI_BAS.BBS_TTL` |
-| 담당부서 | 98.3% | 14 | `NOTI_BAS.CHRG_DEPT_NM` |
-| 담당자 | 49.3% | 3 | `NOTI_BAS.CHRG_PSN_NM` |
-| 전화번호 | 41.2% | 13 | `NOTI_BAS.TEL_NO` |
-| 고시공고번호 | 86.8% | 9 | `NOTI_BAS.NOTI_NO` |
-| 등록일/게시일 | 100% | 116 | `NOTI_BAS.NOTI_DT` |
-| 첨부파일명(순번+다운로드파일명) | 91.6% | 524 | `ATCH_FILE_DTL` (개행으로 이어 붙인 다중 첨부) |
+| 순번 | 100% | — | `OS_NOTI_BAS.NOTI_SN` (PK) |
+| 지자체명 | 100% | 18 | `OS_INSTT_BAS`를 거쳐 `OS_NOTI_BAS.INSTT_SN` |
+| 제목 | 100% | 72 | `OS_NOTI_BAS.BBS_TTL` |
+| 담당부서 | 98.3% | 14 | `OS_NOTI_BAS.CHRG_DEPT_NM` |
+| 담당자 | 49.3% | 3 | `OS_NOTI_BAS.CHRG_PSN_NM` |
+| 전화번호 | 41.2% | 13 | `OS_NOTI_BAS.TEL_NO` |
+| 고시공고번호 | 86.8% | 9 | `OS_NOTI_BAS.NOTI_NO` |
+| 등록일/게시일 | 100% | 116 | `OS_NOTI_BAS.NOTI_DT` |
+| 첨부파일명(순번+다운로드파일명) | 91.6% | 524 | `OS_ATCH_FILE_DTL` (개행으로 이어 붙인 다중 첨부) |
 | 비고 | 9.1% | 61 | — (적재하지 않습니다. 전자관보 행의 기관을 가를 때만 읽습니다) |
 
-**② 검증요약** (90행) — **게시판** 하나가 한 행. `AGNCY_BAS`와 `CRWL_LOG_DTL`로 갑니다.
+**② 검증요약** (90행) — **게시판** 하나가 한 행. `OS_INSTT_BAS`와 `OS_CRWL_LOG_DTL`로 갑니다.
 기관 하나가 게시판을 둘 운영하면 두 줄입니다(`12_1 목포시청` 1건 + `12_2 목포시청_지난자료`
 304건) — 90행이 기관 73개로 접힙니다.
 
 | 엑셀 칸 | 어디로 |
 |---|---|
-| 번호 (`1`·`12_1`·`72_2`) | `AGNCY_BAS.AGNCY_SN` |
-| 기관명 (`목포시청_지난자료`) | `AGNCY_BAS.AGNCY_NM` + `AGNCY_KND_CD` + `NOTI_BAS.BBS_STTS_CD` |
-| 사이트 URL | `CRWL_LOG_DTL.AGNCY_BBS_URL` |
-| 고시공고 건수 | `CRWL_LOG_DTL.NOTI_CNT` |
-| 첨부파일 다운로드 건수 | `CRWL_LOG_DTL.ATCH_FILE_CNT` |
-| 수집 기간 (`2006-11-14 ~ 2026-07-30`) | — (`min/max(NOTI_BAS.NOTI_DT)`로 그대로 나옵니다) |
+| 번호 (`1`·`12_1`·`72_2`) | `OS_INSTT_BAS.INSTT_SN` |
+| 기관명 (`목포시청_지난자료`) | `OS_INSTT_BAS.INSTT_NM` + `INSTT_KND_CD` + `OS_NOTI_BAS.BBS_STTS_CD` |
+| 사이트 URL | `OS_CRWL_LOG_DTL.INSTT_BBS_URL` |
+| 고시공고 건수 | `OS_CRWL_LOG_DTL.NOTI_CNT` |
+| 첨부파일 다운로드 건수 | `OS_CRWL_LOG_DTL.ATCH_FILE_CNT` |
+| 수집 기간 (`2006-11-14 ~ 2026-07-30`) | — (`min/max(OS_NOTI_BAS.NOTI_DT)`로 그대로 나옵니다) |
 | 첨부파일 없음 확인 시작일 | — (뜻이 확정되지 않아 담지 않습니다) |
 
 **③ 특이사항** (1,820행) — **적재하지 않습니다.** 수집결과에서 비고가 채워진 행을 뽑아
@@ -625,7 +625,7 @@ psql -U postgres -c 'DROP DATABASE extract;' \
 
 ### 번호 두 가지
 
-**게시물 번호(순번)는 `NOTI_BAS.NOTI_SN`입니다.** 1~21,759, **결번 0개**이고 기관마다 연속
+**게시물 번호(순번)는 `OS_NOTI_BAS.NOTI_SN`입니다.** 1~21,759, **결번 0개**이고 기관마다 연속
 블록을 차지합니다(인천 1~1108, 군산 1109~1660, 평택 1661~1821 …). 실행마다 1로 되돌아가지
 않고 마지막에 쓴 번호 뒤로 이어지며, 첨부파일명 앞자리와 같은 값입니다.
 
@@ -643,9 +643,9 @@ psql -U postgres -c 'DROP DATABASE extract;' \
 
 | 컬럼 | 없어서 못 하는 것 |
 |---|---|
-| `NOTI_BAS.SRC_KEY_CTNT` · `SRC_KEY_HASH` | **중복 수집 차단(UNIQUE)이 동작하지 않습니다** |
-| `NOTI_BAS.BBS_URL` | 적재된 게시물에서 원본 페이지로 되돌아갈 수 없습니다 |
-| `NOTI_BAS.CRWL_KND_CD` · `CRWL_LOG_DTL.CRWL_KND_CD` | 전수 수집분과 증분분을 갈라 셀 수 없습니다 |
+| `OS_NOTI_BAS.SRC_KEY_CTNT` · `SRC_KEY_HASH` | **중복 수집 차단(UNIQUE)이 동작하지 않습니다** |
+| `OS_NOTI_BAS.BBS_URL` | 적재된 게시물에서 원본 페이지로 되돌아갈 수 없습니다 |
+| `OS_NOTI_BAS.CRWL_KND_CD` · `OS_CRWL_LOG_DTL.CRWL_KND_CD` | 전수 수집분과 증분분을 갈라 셀 수 없습니다 |
 
 > **해시가 들어오기 시작하면 소문자 16진 64자여야 합니다.** `D_HASH` 도메인이
 > `CHECK (VALUE ~ '^[0-9a-f]{64}$')`로 형태를 강제합니다. `CHAR(64)`만으로는 부족합니다 —
@@ -678,17 +678,17 @@ psql -U postgres -c 'DROP DATABASE extract;' \
 이고, 나머지 168건은 `2023.01.02`처럼 점으로 구분됐거나(정규화 가능) `로부터 14 일간`처럼
 본문 조각입니다. `D_DT`로 그냥 넣으면 캐스팅에서 죽으므로 **정규화하고 실패하면 NULL**입니다.
 
-**③ 크롤러 집계와 실제 행수가 어긋나는 기관이 있습니다.** `NOTI_CNT`를 실제 `NOTI_BAS`
+**③ 크롤러 집계와 실제 행수가 어긋나는 기관이 있습니다.** `NOTI_CNT`를 실제 `OS_NOTI_BAS`
 행수와 대조하라고 담는 이유입니다. 08.07 산출물에서는 기관 73개 중 둘 — 영광군청 465/466,
 양양군청 120/121 — 이 어긋났습니다.
 
-**고시번호·고시일자는 두 곳에 있고 근거가 다릅니다.** `NOTI_BAS` 쪽은 게시판이 목록에
-표기한 값, `ATCH_FILE_DTL` 쪽은 문서 본문에서 추출한 값입니다. 이름을 일부러 같게 둔
+**고시번호·고시일자는 두 곳에 있고 근거가 다릅니다.** `OS_NOTI_BAS` 쪽은 게시판이 목록에
+표기한 값, `OS_ATCH_FILE_DTL` 쪽은 문서 본문에서 추출한 값입니다. 이름을 일부러 같게 둔
 것이며, **두 값이 어긋난 행이 곧 추출 검증 대상**입니다:
 
 ```sql
 SELECT N.NOTI_SN, N.NOTI_NO AS 게시판, F.NOTI_NO AS 본문, N.BBS_TTL
-  FROM NOTI_BAS N JOIN ATCH_FILE_DTL F USING (NOTI_SN)
+  FROM OS_NOTI_BAS N JOIN OS_ATCH_FILE_DTL F USING (NOTI_SN)
  WHERE F.NOTI_NO IS DISTINCT FROM N.NOTI_NO AND N.NOTI_NO IS NOT NULL;
 ```
 
@@ -729,7 +729,7 @@ input/
 앞자리 순번은 기관을 넘어 하나의 크롤 시퀀스이고, **크롤러 수집결과 시트의 순번과 같은
 값**입니다 — 08.07 산출물 기준 1~21,759에 **결번 0개**이고, 기관마다 연속 블록을 차지해
 (인천 1~1108, 군산 1109~1660, 평택 1661~1821 …) 폴더 간 충돌이 없으므로
-`NOTI_BAS.NOTI_SN`을 전역 PK로 둡니다.
+`OS_NOTI_BAS.NOTI_SN`을 전역 PK로 둡니다.
 
 첨부파일명은 엑셀 `첨부파일명(순번+다운로드파일명)` 칸에도 그대로 실려 옵니다. 한 게시물에
 첨부가 여럿이면 **개행으로 이어 붙습니다**(최대 10건). 08.07 산출물의 조각 20,537개는
@@ -745,21 +745,21 @@ input/
 
 | 조각 | 규칙 |
 |---|---|
-| 번호 | `AGNCY_BAS.AGNCY_SN`의 후보. 한 기관이 게시판을 여럿 운영하면 하위번호로 갈립니다 |
+| 번호 | `OS_INSTT_BAS.INSTT_SN`의 후보. 한 기관이 게시판을 여럿 운영하면 하위번호로 갈립니다 |
 | 기관명 | 남은 조각을 공백으로 잇습니다 — `57_경상남도_고성군청` → `경상남도 고성군청` |
 | 게시판구분 | **마지막 조각**만 봅니다. `지난`·`이전`·`완료`·`종료`·`만료`가 들어 있으면 `게시완료`, `게시중`·`고시공고`·`공고`·`고시`·`자료`로 시작하면 `게시중`, 꼬리표가 아예 없어도 `게시중` |
 
 **모르는 낱말은 기관명으로 남깁니다.** 마지막 조각을 무조건 꼬리표로 보면
 경상남도 고성군청과 강원도 고성군청이 한 기관으로 뭉칩니다.
 
-`전자관보`로 시작하는 폴더는 그 조각을 이름에서 빼고 `AGNCY_KND_CD = 'GZT'`로 옮깁니다.
+`전자관보`로 시작하는 폴더는 그 조각을 이름에서 빼고 `INSTT_KND_CD = 'GZT'`로 옮깁니다.
 같은 부처를 자체 게시판(`central`)과 전자관보 양쪽에서 긁으므로, 이름이 같은 두 행을
 이 값으로 가릅니다.
 
 ### 기관번호를 언제 새로 발급하는가
 
 **기관번호의 정의처는 엑셀 검증요약 시트의 `번호`입니다.** 크롤러가 발급한 번호를 그대로
-`AGNCY_BAS.AGNCY_SN`으로 씁니다 — 그래야 크롤러와 DB의 기관번호가 영원히 같습니다.
+`OS_INSTT_BAS.INSTT_SN`으로 씁니다 — 그래야 크롤러와 DB의 기관번호가 영원히 같습니다.
 아래 규칙은 그 `번호`에도, 폴백 경로(폴더명)에도 똑같이 적용됩니다.
 
 보통은 앞 번호가 곧 기관번호입니다. `12_1_목포시청`과 `12_2_목포시청_지난자료`는
@@ -780,7 +780,7 @@ input/
 ### 규약 밖의 파일
 
 규약에 맞지 않는 폴더와 입력 루트 직속 파일은 경고 한 줄을 남기고 기관 없이 적재됩니다
-(`NOTI_BAS.AGNCY_SN`·`BBS_STTS_CD`가 NULL). 첨부와 항목값은 그대로 들어갑니다 —
+(`OS_NOTI_BAS.INSTT_SN`·`BBS_STTS_CD`가 NULL). 첨부와 항목값은 그대로 들어갑니다 —
 기관을 모른다고 적재를 거르면 그 파일의 값이 통째로 사라집니다.
 
 ```
@@ -790,7 +790,7 @@ input/
 **결과가 0건인 기관도 기관으로 등록합니다.** 폴더에 첨부가 하나도 없든, 엑셀 검증요약에는
 있는데 수집결과에 게시물이 한 줄도 없든 마찬가지입니다. 그래야 "긁긴 했는데 아무것도 못
 건진 기관"이 DB에서 보입니다 — 실패·적재제외를 행으로 남기는 것과 같은 이유이고,
-`CRWL_LOG_DTL.AGNCY_SN`이 FK일 수 있는 근거이기도 합니다.
+`OS_CRWL_LOG_DTL.INSTT_SN`이 FK일 수 있는 근거이기도 합니다.
 
 **전자관보 게시물만은 지자체명 대신 비고를 봅니다.** 수집결과의 지자체명이 `72_1`·`72_2`
 둘 다 `전자관보` 한 값이라, 비고에서 발령 기관을 읽어 기관을 정합니다
@@ -1093,15 +1093,15 @@ java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out --unmapped
 목록에 없어 매칭에 실패했습니다. **사전 구멍이 데이터 손실로 이어진 자리**이고, 그것을 사람이
 볼 수 있게 하는 것이 이 옵션입니다.
 
-> 값 자체는 이제 `NOTI_LBL_VAL_DTL`에 라벨 원문으로 남으므로 잃지 않습니다. 이 옵션이 여전히
+> 값 자체는 이제 `OS_NOTI_LBL_VAL_DTL`에 라벨 원문으로 남으므로 잃지 않습니다. 이 옵션이 여전히
 > 필요한 이유는 **표준항목을 하나도 못 뽑은 문서가 어떤 문서인지** 본문 발췌까지 함께 보여
 > 주기 때문입니다 — 라벨만 쌓인 문서는 SQL로는 "값이 있다"로 보입니다.
 
 DB 쪽 건수와 대조할 수 있습니다. 어긋나면 적재 판정(`AttributeRows`)이 갈린 것입니다:
 
 ```sql
-SELECT count(*) FROM ATCH_FILE_DTL F
-  LEFT JOIN NOTI_ITEM_VAL_DTL V USING (NOTI_SN, ATCH_SN)
+SELECT count(*) FROM OS_ATCH_FILE_DTL F
+  LEFT JOIN OS_NOTI_ITEM_VAL_DTL V USING (NOTI_SN, ATCH_SN)
  WHERE F.PROC_STTS_CD = 'OK' AND F.EXCL_RSN_CTNT IS NULL AND V.NOTI_ITEM_CD IS NULL;
 ```
 
@@ -1124,18 +1124,23 @@ SELECT count(*) FROM ATCH_FILE_DTL F
 - 한글 3.0 파일도 확장자는 똑같이 `.hwp`라, 서명(`HWP Document File V3.00`)으로만 갈립니다.
 
 판정할 수 없는 파일은 지금까지처럼 **확장자로 폴백**합니다 — 새 규칙이 기존 동작을 좁히지
-않습니다. `ATCH_FILE_DTL.FILE_EXTN_NM`은 파일명 확장자를 그대로 유지하고, 판정된 실제 형식은
-`ATCH_FILE_DTL.ACTL_FILE_EXTN_NM`에 따로 남깁니다. 둘이 다른 행이 곧 확장자가 어긋난 파일 목록입니다.
+않습니다. `OS_ATCH_FILE_DTL.FILE_EXTN_NM`은 파일명 확장자를 그대로 유지하고, 판정된 실제 형식은
+`OS_ATCH_FILE_DTL.ACTL_FILE_EXTN_NM`에 따로 남깁니다. 둘이 다른 행이 곧 확장자가 어긋난 파일 목록입니다.
 
 ```sql
 SELECT ATCH_FILE_NM, FILE_EXTN_NM, ACTL_FILE_EXTN_NM
-  FROM ATCH_FILE_DTL WHERE ACTL_FILE_EXTN_NM IS NOT NULL AND FILE_EXTN_NM <> ACTL_FILE_EXTN_NM;
+  FROM OS_ATCH_FILE_DTL WHERE ACTL_FILE_EXTN_NM IS NOT NULL AND FILE_EXTN_NM <> ACTL_FILE_EXTN_NM;
 ```
 
 ### 이름은 표준 사전이 정합니다
 
 테이블·컬럼 이름은 사람이 그때그때 짓지 않고 `src/main/resources/db/standard_terms.json`의
 4단 사전에서 조합해 만듭니다.
+
+> **상위 근거.** 이 사전이 따르는 것은 이 사업의 [데이터 표준화 지침(OFBD-2210-01)]과
+> [데이터 표준 관리체계 정의서(OFBD-3210-02)]이고, 그 둘은 행정안전부의
+> **공공기관의 데이터베이스 표준화 지침**과 **행정표준용어사전**을 근거로 삼습니다.
+> 두 문서가 정하지 않은 것만 이 사전이 정합니다 — PostgreSQL `DOMAIN` 이름(`D_*`)이 그렇습니다.
 
 | 단계 | 무엇인가 | 예 |
 |---|---|---|
@@ -1156,18 +1161,61 @@ SELECT ATCH_FILE_NM, FILE_EXTN_NM, ACTL_FILE_EXTN_NM
 일련번호(`SN`)입니다. 도메인은 문서가 아니라 PostgreSQL `CREATE DOMAIN`으로 실제
 강제되므로, `SCAN_YN`에 `'X'`를 넣으면 DB가 거부합니다.
 
-테이블은 접두사 없이 `[의미] + [유형 접미사]`입니다 — 기준 `_BAS`, 명세 `_DTL`, 코드 `_TC`.
-업무영역 접두사는 두지 않습니다. 이 저장소가 단일 업무영역이라 모든 테이블에 같은 접두사가
-붙어 아무것도 가르지 못하기 때문입니다. 코드 테이블이 `_CD`가 아니라 `_TC`인 이유는
-`_CD`로 하면 `SELECT NOTI_KND_CD FROM NOTI_KND_CD`가 되기 때문입니다.
+#### 개체 이름 — `[업무코드]_[의미]`
+
+테이블은 `[업무코드]_[테이블의미]`입니다(OFBD-2210-01 §3.2.3). 업무코드는 주제영역을 가르는
+두 자리이고, **이 스키마는 해양공간이므로 `OS`**입니다. 크롤러 DB의
+`MSP.OS_PUBLIC_WATERS_NOTICE`도 같은 코드를 씁니다 — 같은 사업의 두 저장소가 같은 축으로
+갈립니다.
+
+| 주제영역 | 코드 | | 주제영역 | 코드 |
+|---|---|---|---|---|
+| 기준 | `ST` | | 메타데이터 | `MD` |
+| 시스템관리 | `SM` | | 연계 | `CT` |
+| 레이어 | `LY` | | **해양공간** | **`OS`** ← 이 스키마 |
+
+의미 뒤에는 유형 접미사가 붙습니다 — 기준 `_BAS`, 명세 `_DTL`, 코드 `_TC`. 코드 테이블이
+`_CD`가 아니라 `_TC`인 이유는 `_CD`로 하면 `SELECT NOTI_KND_CD FROM OS_NOTI_KND_CD`가
+되기 때문입니다.
+
+제약조건과 인덱스는 **테이블명을 앞에 두고 유형과 두 자리 일련번호를 뒤에** 붙입니다:
+
+| | 형식 | 예 |
+|---|---|---|
+| 기본키 | `[테이블명]_PK` | `OS_NOTI_BAS_PK` |
+| 외래키 | `[테이블명]_FK[두자리]` | `OS_ATCH_FILE_DTL_FK02` |
+| 유일키 | `[테이블명]_UK[두자리]` | `OS_NOTI_BAS_UK01` |
+| 인덱스 | `[테이블명]_IX[두자리]` | `OS_NOTI_BAS_IX01` |
+| 함수 | `FC_[업무코드]_[역할명]` | `FC_OS_ISO_DATERANGE` |
+
+일련번호는 **이름만 봐서 무엇을 위한 인덱스인지 알려 주지 못합니다.** 그 자리는
+`COMMENT ON INDEX`가 메웁니다 — `\di+`나 `obj_description()`으로 읽히고, 주석이 빠지면
+`DbStandardTest`가 막습니다.
+
+#### 기관은 `INSTT`입니다
+
+지침의 기본 원칙이 *"한글명, 영문명 부여 시 행정표준용어사전(행정안전부)을 우선하여
+사용한다"*이고, 크롤러 DB도 `INSTT_NO`·`INSTT_NM`을 씁니다. 한때 `AGNCY`로 적었지만
+같은 사업 안에서 기관이 두 이름을 갖는 것이 표준화가 막으려는 바로 그 상황이라
+`INSTT`로 옮겼습니다. 5자라 *"영문약어는 4자리 이하"* 규칙을 넘지만 관용 약어 예외에
+해당합니다.
+
+#### 검사되지 않는 규칙은 규칙이 아닙니다
 
 `DbStandardTest`가 사전과 DDL을 대조합니다 — 모든 컬럼이 사전의 낱말로만 분해되는지,
 분류어가 지시하는 도메인과 DDL 선언이 같은지, 감사 컬럼이 전 테이블에 있는지, 예약어를
-쓰지 않았는지, 그리고 표준화 이전 이름이 소스에 남아 있지 않은지 검사합니다. 사전을
-지나치고 컬럼을 보태면 빌드가 막힙니다.
+쓰지 않았는지, **테이블이 업무코드로 시작하는지**, **제약조건·인덱스가 표준 형식인지**,
+**금칙어가 논리명에 새어 들어왔는지**, 그리고 표준화 이전 이름이 소스에 남아 있지 않은지
+검사합니다. 사전을 지나치고 컬럼을 보태면 빌드가 막힙니다.
+
+금칙어는 지침이 요구하는 항목입니다 — *"이음동의어들 중 하나만 표준어로 선정하고 나머지는
+금칙어로 등록하여 관리한다"*. 문서로만 두면 다시 새어 들어오므로 사전에 등재하고 검사가
+잡습니다(`에러`→`실패`, `메세지`→`메시지`, `카운트`→`건수` …). 다만 **한 글자 금칙어는 두지
+않습니다** — `과`·`자` 같은 낱말은 정상 한국어 안에 늘 박혀 있어 오탐만 냅니다. 이것도
+사전이 스스로 막습니다.
 
 > **웹 개발 관행과 갈리는 지점.** 웹에서는 "테이블명을 컬럼에 반복하지 마라(`users.name`)"가
-> 원칙이지만, 표준용어 체계에서는 컬럼명이 전사에서 유일한 뜻을 가져야 하므로 `AGNCY_NM`처럼
+> 원칙이지만, 표준용어 체계에서는 컬럼명이 전사에서 유일한 뜻을 가져야 하므로 `INSTT_NM`처럼
 > 수식어를 붙이는 쪽이 정석입니다. 어느 한쪽이 맞다기보다 체계가 다릅니다.
 
 ### 왜 값 컬럼이 아니라 EAV인가
@@ -1184,10 +1232,10 @@ SELECT ATCH_FILE_NM, FILE_EXTN_NM, ACTL_FILE_EXTN_NM
 ```sql
 -- 2026년에 만료되는 점용·사용 허가
 SELECT F.ATCH_FILE_NM, V.ITEM_VAL_CTNT
-  FROM NOTI_ITEM_VAL_DTL V
-  JOIN ATCH_FILE_DTL F USING (NOTI_SN, ATCH_SN)
+  FROM OS_NOTI_ITEM_VAL_DTL V
+  JOIN OS_ATCH_FILE_DTL F USING (NOTI_SN, ATCH_SN)
  WHERE V.NOTI_ITEM_CD = 'WORK_PRD'
-   AND iso_daterange(V.ITEM_VAL_CTNT) && '[2026-01-01,2027-01-01)'::daterange;
+   AND FC_OS_ISO_DATERANGE(V.ITEM_VAL_CTNT) && '[2026-01-01,2027-01-01)'::daterange;
 ```
 
 ### 고시번호와 허가번호는 다른 것입니다
@@ -1197,9 +1245,9 @@ SELECT F.ATCH_FILE_NM, V.ITEM_VAL_CTNT
 
 | | 예 | 어디서 | 어디로 |
 |---|---|---|---|
-| 고시번호 (본문) | `고시 제2008-42호` | 본문 문단 `인천지방해양항만청 고시 제2008-42호` | `ATCH_FILE_DTL.NOTI_NO` |
-| 고시번호 (게시판) | `고시 제2008-42호` | 크롤러가 긁은 게시판 목록 칸 | `NOTI_BAS.NOTI_NO` |
-| 허가번호 | `제2008-46호` | 표의 `허가번호` 라벨 행 | `NOTI_ITEM_VAL_DTL` (`NOTI_ITEM_CD='APV_NO'`) |
+| 고시번호 (본문) | `고시 제2008-42호` | 본문 문단 `인천지방해양항만청 고시 제2008-42호` | `OS_ATCH_FILE_DTL.NOTI_NO` |
+| 고시번호 (게시판) | `고시 제2008-42호` | 크롤러가 긁은 게시판 목록 칸 | `OS_NOTI_BAS.NOTI_NO` |
+| 허가번호 | `제2008-46호` | 표의 `허가번호` 라벨 행 | `OS_NOTI_ITEM_VAL_DTL` (`NOTI_ITEM_CD='APV_NO'`) |
 
 앞의 둘은 이 고시문이 실린 번호를 서로 다른 근거로 읽은 것이고, 마지막은 신청인이 받은
 허가의 번호입니다. 전수에서 **고시번호와 허가번호가 같은 행은 0 / 1,067**입니다.
@@ -1228,7 +1276,7 @@ APV_NO  동의어 = 허가번호, 승인번호, 협의번호, 신고번호, 수�
 
 ### 공고종류는 제목으로 판정합니다
 
-`ATCH_FILE_DTL.NOTI_KND_CD`는 제목 키워드 규칙으로 채웁니다. 규칙은
+`OS_ATCH_FILE_DTL.NOTI_KND_CD`는 제목 키워드 규칙으로 채웁니다. 규칙은
 `notice_types.json`의 `keywords`·`priority`에 있고 `NoticeTypes.classify`가 읽습니다.
 
 ```json
@@ -1338,5 +1386,13 @@ PaddleOCR-VL 설치 없이도 실행됩니다(Windows에서는 해당 테스트 
 | [`docs/NOTICE_TYPES_REVIEW.md`](docs/NOTICE_TYPES_REVIEW.md) | 미분류 제목 빈도순 집계 — 공고종류를 보탤 후보 |
 | [`ocr-cli/README.md`](ocr-cli/README.md) | PaddleOCR-VL CLI 설치·실행 계약 |
 | [`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md) | 파일·클래스 단위 구조 설명 |
+
+DB 이름 규칙의 상위 근거는 사업 산출물 두 건입니다 — 저장소에 두지 않고 사업 문서로
+관리합니다.
+
+| 문서 | 이 저장소가 따르는 것 |
+|---|---|
+| 데이터 표준화 지침 (`OFBD-2210-01`) | 표준 기본 원칙, 표준단어·도메인·코드 원칙, **Naming Rule**(주제영역·개체별 명명규칙) |
+| 데이터 표준 관리체계 정의서 (`OFBD-3210-02`) | 표준단어·용어·도메인 항목 정의, **금칙단어 선정 규칙**, 코드 설계·명명 규칙 |
 
 `docs/`의 네 문서는 손으로 고치지 않습니다 — `dict` 서브커맨드가 생성합니다.

@@ -6,8 +6,8 @@
 
 파이프라인 흐름·계약(raw JSON, 표준 스키마, DB 적재)은 Python 버전과 동일하다.
 앞단에는 크롤러가 붙어 수집 결과 엑셀과 첨부파일 폴더를 내놓는다. 엑셀은 시트 3장이고
-그중 **수집결과**가 게시물(`NOTI_BAS`)을, **검증요약**이 기관(`AGNCY_BAS`)과 크롤
-기록(`CRWL_LOG_DTL`)을 채운다. 특이사항 시트는 수집결과의 파생이라 적재하지 않는다.
+그중 **수집결과**가 게시물(`OS_NOTI_BAS`)을, **검증요약**이 기관(`OS_INSTT_BAS`)과 크롤
+기록(`OS_CRWL_LOG_DTL`)을 채운다. 특이사항 시트는 수집결과의 파생이라 적재하지 않는다.
 기관·게시물의 정의처는 이 엑셀이고, 폴더명 파싱은 수동 수집분 폴백이다. 전자관보 게시물만은
 지자체명이 한 값("전자관보")이라 비고에서 발령 기관을 읽는다(`SourceFolder.gazetteAgencyOf`).
 단, **PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 Python CLI 스크립트로
@@ -51,8 +51,8 @@ Mapper.mapToSchema (문단 메타·라벨 + 표 해석 결과 적용 + 값 정�
         ▼
 DbLoader (PostgreSQL JDBC + HikariCP)
         ▼
-PostgreSQL (AGNCY_BAS → NOTI_BAS → ATCH_FILE_DTL → NOTI_ITEM_VAL_DTL) + images/ 폴더
-                    └ 기관별 크롤 기록은 CRWL_LOG_DTL (AGNCY_BAS로 FK)
+PostgreSQL (OS_INSTT_BAS → OS_NOTI_BAS → OS_ATCH_FILE_DTL → OS_NOTI_ITEM_VAL_DTL) + images/ 폴더
+                    └ 기관별 크롤 기록은 OS_CRWL_LOG_DTL (OS_INSTT_BAS로 FK)
 ```
 
 핵심 원칙 유지: **판별(detect) → 추출(engine) → 매핑(common) → 적재(db) 4계층 분리**.
@@ -297,7 +297,7 @@ Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 �
 - `caption`(표·이미지)은 선택 필드다. **캡션이 없으면 키 자체가 나오지 않는다**
   (`@JsonInclude(NON_NULL)`) — 그래야 캡션 없는 문서의 산출물이 이 필드가 생기기 전과
   바이트 단위로 같아 Python 호환이 유지된다(§4.2).
-- 이미지 `path`(저장된 이미지의 절대경로)는 DB 적재(`ATCH_IMG_DTL.IMG_FILE_PATH`)에 필요하므로 필수.
+- 이미지 `path`(저장된 이미지의 절대경로)는 DB 적재(`OS_ATCH_IMG_DTL.IMG_FILE_PATH`)에 필요하므로 필수.
   `ocr_text`는 선택 필드 — 현재 Java 파이프라인은 채우지 않지만 계약 호환을 위해 유지.
 - 이미지 추출 대상 판정(§4.1): 정보가 없는 이미지·도장은 저장하지 않는다.
   스캔본은 CLI 측 seal 레이블에 맡긴다.
@@ -558,28 +558,30 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 ### 6.1 이름 규칙
 
 물리명은 `[수식어] + … + [분류어]` 조합이고 마지막 낱말(분류어)이 도메인을 지시한다
-(`NM` → `D_NM` = `VARCHAR(300)`). 테이블은 접두사 없이 `[의미] + [유형 접미사]`이며
+(`NM` → `D_NM` = `VARCHAR(300)`). 테이블은 `[업무코드]_[의미]_[유형 접미사]`이고 업무코드는
+해양공간을 뜻하는 `OS`다(데이터 표준화 지침 OFBD-2210-01 §3.2.3). 제약조건·인덱스는
+`[테이블명]_PK` · `[테이블명]_FK01` · `[테이블명]_IX01` 형식이며
 기준 `_BAS` · 명세 `_DTL` · 코드 `_TC`를 쓴다. 낱말·도메인·용어·코드는 전부
 `standard_terms.json`이 단일 정의처이고, `DbStandardTest`가 DDL과 대조한다.
 
 ### 6.2 구성
 
-**기관** `AGNCY_BAS` — 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다
+**기관** `OS_INSTT_BAS` — 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
-| 기관일련번호 | `AGNCY_SN` | `D_SN` | PK
-| 기관명 | `AGNCY_NM` | `D_NM` |
-| 기관종류코드 | `AGNCY_KND_CD` | `D_CD` |
+| 기관일련번호 | `INSTT_SN` | `D_SN` | PK
+| 기관명 | `INSTT_NM` | `D_NM` |
+| 기관종류코드 | `INSTT_KND_CD` | `D_CD` |
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**고시공고게시물** `NOTI_BAS` — 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다
+**고시공고게시물** `OS_NOTI_BAS` — 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
 | 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK · 엑셀의 번호
-| 기관일련번호 | `AGNCY_SN` | `D_SN` |
+| 기관일련번호 | `INSTT_SN` | `D_SN` |
 | 게시상태코드 | `BBS_STTS_CD` | `D_CD` |
 | 원문키내용 | `SRC_KEY_CTNT` | `D_CTNT` |
 | 원문키해시 | `SRC_KEY_HASH` | `D_HASH` | UNIQUE · 중복 수집 차단
@@ -597,32 +599,32 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 크롤러가 준 컬럼에는 `NOT NULL`이 없다 — 크롤 산출물이 아닌 파일은 음수 `NOTI_SN`으로
 같은 테이블에 들어오고 그 행에는 원문키도 URL도 없다.
 
-**크롤로그** `CRWL_LOG_DTL` — 하루치 수집에서 기관 하나를 긁은 결과
+**크롤로그** `OS_CRWL_LOG_DTL` — 하루치 수집에서 기관 하나를 긁은 결과
 
 | 논리명 | 물리명 | 도메인 | 엑셀 출처 |
 |---|---|---|---|
 | 크롤로그일련번호 | `CRWL_LOG_SN` | `D_SN` | PK
-| 기관일련번호 | `AGNCY_SN` | `D_SN` | FK · 번호
+| 기관일련번호 | `INSTT_SN` | `D_SN` | FK · 번호
 | 크롤일자 | `CRWL_DT` | `D_DT` | 이 수집이 돈 날
 | 크롤종류코드 | `CRWL_KND_CD` | `D_CD` | (엑셀에 없음)
 | 크롤상태코드 | `CRWL_STTS_CD` | `D_CD` | 판정
 | 크롤단계코드 | `CRWL_STEP_CD` | `D_CD` | 실패 시
-| 기관게시판URL | `AGNCY_BBS_URL` | `D_URL` | 사이트 URL
+| 기관게시판URL | `INSTT_BBS_URL` | `D_URL` | 사이트 URL
 | 고시공고건수 | `NOTI_CNT` | `D_CNT` | 고시공고 건수
 | 첨부파일건수 | `ATCH_FILE_CNT` | `D_CNT` | 첨부파일 다운로드 건수
 | 실패메시지내용 | `FAIL_MSG_CTNT` | `D_CTNT` | 실패 시
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-크롤러만 아는 것(자기 집계·상태·언제 돌았나)만 담는다. 수집 기간은 `min/max(NOTI_BAS.NOTI_DT)`로
+크롤러만 아는 것(자기 집계·상태·언제 돌았나)만 담는다. 수집 기간은 `min/max(OS_NOTI_BAS.NOTI_DT)`로
 그대로 나오고, 게시상태는 운영 단계에서 전부 `POST`라 가를 값이 없어 둘 다 빼냈다 —
 게시완료 게시판까지 뒤진 것은 과거 데이터를 전수로 긁던 첫 수집 때뿐이고 그건 이미 끝났다.
 성공도 행으로 남긴다 — 실패만 적재하면 "돌았는데 새 고시가 없었다"와 "아예 안 돌았다"가
-둘 다 "행 없음"이 돼 조용한 수집 누락을 못 잡는다. `AGNCY_SN`은 FK다: 이 레포는 결과가
+둘 다 "행 없음"이 돼 조용한 수집 누락을 못 잡는다. `INSTT_SN`은 FK다: 이 레포는 결과가
 0건이어도 기관을 등록하므로(`AgencyRegistry`) FK가 막을 일이 없고, 그래서 기관명을 여기
 중복해 담지 않는다.
 
-**공고종류** `NOTI_KND_TC` — 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다
+**공고종류** `OS_NOTI_KND_TC` — 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -632,7 +634,7 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**공고항목** `NOTI_ITEM_TC` — 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다
+**공고항목** `OS_NOTI_ITEM_TC` — 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -644,7 +646,7 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**첨부파일** `ATCH_FILE_DTL` — 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
+**첨부파일** `OS_ATCH_FILE_DTL` — 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -667,7 +669,7 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**첨부이미지** `ATCH_IMG_DTL` — 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다
+**첨부이미지** `OS_ATCH_IMG_DTL` — 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -679,7 +681,7 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**공고항목값** `NOTI_ITEM_VAL_DTL` — 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다
+**공고항목값** `OS_NOTI_ITEM_VAL_DTL` — 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -699,9 +701,9 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
   정리되므로 재적재가 안전하다.
 - **실패·적재제외도 행으로 남긴다**(`PROC_STTS_CD`). 성공만 적재하면 "첨부 401건 중 추출
   0건"인 기관이 DB에서 아예 보이지 않는다.
-- **사전 동기화(`ReferenceSync`)가 적재보다 먼저** 돈다 — `NOTI_ITEM_VAL_DTL`이
-  `NOTI_ITEM_TC`를 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
-  기관도 같은 이유로 첨부보다 먼저 넣는다(`NOTI_BAS.AGNCY_SN`가 FK).
+- **사전 동기화(`ReferenceSync`)가 적재보다 먼저** 돈다 — `OS_NOTI_ITEM_VAL_DTL`이
+  `OS_NOTI_ITEM_TC`를 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
+  기관도 같은 이유로 첨부보다 먼저 넣는다(`OS_NOTI_BAS.INSTT_SN`가 FK).
 - **스키마 마이그레이션은 Flyway**로 관리한다(`resources/db/migration/V*.sql`). 런타임에
   `ALTER TABLE`로 컬럼을 자동 추가하지 않고 버전 파일을 얹어 이력을 남긴다.
 - 배치 적재는 **트랜잭션 + `addBatch`/`executeBatch`**로 수행하고, 파일 단위 실패는
@@ -752,7 +754,7 @@ Python 의존성을 최소화한다.
 
 **OCR 경로는 스캔 판정(§3) 파일 전용이다.** 네이티브 문서에 붙임 현장사진·위치도·표
 캡처가 들어 있어도 `PipelineSupport`는 그 이미지를 `images/`에 저장하고 `images` 메타
-(`ATCH_IMG_DTL` 적재용)만 기록한다 — 서브프로세스를 띄우지 않는다.
+(`OS_ATCH_IMG_DTL` 적재용)만 기록한다 — 서브프로세스를 띄우지 않는다.
 
 한동안은 네이티브 경로에서도 삽입 이미지를 OCR해 본문 뒤에 이어 붙였다. 그 방식은
 다음을 대가로 치렀고, 그래서 걷어냈다.
@@ -768,7 +770,7 @@ Python 의존성을 최소화한다.
 
 그 대가로 포기하는 것은 분명히 적어 둔다: **본문이 사진 안에만 있는 네이티브 문서는 그
 내용이 추출되지 않는다.** 사진 속 텍스트가 필요해지면 별도 단계로 다루고(적재된
-`ATCH_IMG_DTL.IMG_FILE_PATH`로 이미지에 접근할 수 있다), 추출 본문에 섞지 않는다.
+`OS_ATCH_IMG_DTL.IMG_FILE_PATH`로 이미지에 접근할 수 있다), 추출 본문에 섞지 않는다.
 
 - **실패 등급**: 스캔본은 이미지가 유일한 본문 출처라 OCR 실패를 `[실패]`로 격리한다.
   네이티브 경로에는 OCR이 없으므로 스크립트 부재가 영향을 주지 않는다.

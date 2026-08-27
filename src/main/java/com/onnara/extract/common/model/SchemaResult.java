@@ -13,7 +13,7 @@ import java.util.List;
 /**
  * 표준 스키마 JSON(§5): {"atch_file_nm", "records": [...], "images": [...]}.
  *
- * <p>file_extn / scan_yn / engn_nm은 DbLoader가 ATCH_FILE_DTL 컬럼(§6)을 채우는 데
+ * <p>file_extn / scan_yn / engn_nm은 DbLoader가 OS_ATCH_FILE_DTL 컬럼(§6)을 채우는 데
  * 필요해 함께 실어 나른다.
  *
  * <p>{@code body_chars}·{@code db_skip_reason}은 <b>적재 판단</b>을 실어 나른다. 판단을 매핑 단계에
@@ -38,14 +38,14 @@ public class SchemaResult {
     /** 형식 식별자: hwp / hwpx / hml / pdf — <b>파일명 확장자</b>가 기준이다. */
     private String fileExtnNm;
     /**
-     * 내용으로 판정한 실제 형식: hwp / hwp3 / hwpx / hml / pdf (ATCH_FILE_DTL.ACTL_FILE_EXTN_NM).
+     * 내용으로 판정한 실제 형식: hwp / hwp3 / hwpx / hml / pdf (OS_ATCH_FILE_DTL.ACTL_FILE_EXTN_NM).
      *
      * <p>{@code fileExtnNm}과 다른 행이 곧 "확장자가 어긋난 파일" 목록이 된다.
      */
     private String actlFileExtnNm;
     /** 스캔본 여부. */
     private boolean scanYn;
-    /** 실제 사용된 추출 엔진 식별자(ATCH_FILE_DTL.EXTC_ENGN_NM). */
+    /** 실제 사용된 추출 엔진 식별자(OS_ATCH_FILE_DTL.EXTC_ENGN_NM). */
     private String extcEngnNm;
     /** 본문 글자 수({@link com.onnara.extract.common.DocumentSize#bodyCharCnt}) — 적재 판단 근거. */
     private int bodyCharCnt;
@@ -53,14 +53,14 @@ public class SchemaResult {
     private String exclRsnCtnt;
     /** 한 파일에서 추출된 표준 레코드들(다건 목록이면 N개). */
     private List<NoticeRecord> records = new ArrayList<>();
-    /** 파일에 딸린 이미지 메타(ATCH_IMG_DTL 적재용). */
+    /** 파일에 딸린 이미지 메타(OS_ATCH_IMG_DTL 적재용). */
     private List<RawImage> images = new ArrayList<>();
 
     /** Jackson 역직렬화용 기본 생성자. */
     public SchemaResult() {
     }
 
-    /** ATCH_FILE_DTL 컬럼에 필요한 메타 4필드를 지정해 생성한다. */
+    /** OS_ATCH_FILE_DTL 컬럼에 필요한 메타 4필드를 지정해 생성한다. */
     public SchemaResult(String atchFileNm, String fileExtnNm, boolean scanYn, String extcEngnNm) {
         this.atchFileNm = atchFileNm;
         this.fileExtnNm = fileExtnNm;
@@ -128,7 +128,7 @@ public class SchemaResult {
      * 폴더는 {@code pipeline} 경로에서만 보이므로, 여기 적어 두지 않으면
      * {@code map} → {@code load}로 나눠 돌릴 때 기관이 사라진다.
      *
-     * <p>{@code records[].agency}(본문에서 읽은 발령 기관, → {@code ATCH_FILE_DTL.BODY_AGNCY_NM})와
+     * <p>{@code records[].agency}(본문에서 읽은 발령 기관, → {@code OS_ATCH_FILE_DTL.BODY_AGNCY_NM})와
      * 다른 층이다. 수집처와 발령 주체는 서로 다를 수 있다.
      */
     @JsonProperty("source_board")
@@ -143,7 +143,7 @@ public class SchemaResult {
     }
 
     /**
-     * 공고종류코드를 반환한다({@code ATCH_FILE_DTL.NOTI_KND_CD}). 못 가렸으면 null.
+     * 공고종류코드를 반환한다({@code OS_ATCH_FILE_DTL.NOTI_KND_CD}). 못 가렸으면 null.
      *
      * <p>{@code noti_sn}과 같은 이유로 매핑 시점에 확정해 여기 실어 나른다 — 적재 때 다시
      * 분류하면 {@code pipeline} 경로와 {@code map} → {@code load} 경로가 갈릴 수 있다.
@@ -170,7 +170,7 @@ public class SchemaResult {
         this.fileExtnNm = fileExtnNm;
     }
 
-    /** 내용으로 판정한 실제 형식을 반환한다(ATCH_FILE_DTL.ACTL_FILE_EXTN_NM). 판정 전이면 null. */
+    /** 내용으로 판정한 실제 형식을 반환한다(OS_ATCH_FILE_DTL.ACTL_FILE_EXTN_NM). 판정 전이면 null. */
     @JsonProperty("actl_file_extn_nm")
     public String getActlFileExtnNm() {
         return actlFileExtnNm;

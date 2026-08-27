@@ -17,7 +17,7 @@ import java.util.Optional;
  *
  * <p>레코드의 필드가 그대로 행이 되지 않는다. 두 가지가 빠지고 하나가 합쳐진다:
  * <ul>
- *   <li>문서 단위 메타({@code scope=attachment})는 {@code ATCH_FILE_DTL} 컬럼으로 가거나
+ *   <li>문서 단위 메타({@code scope=attachment})는 {@code OS_ATCH_FILE_DTL} 컬럼으로 가거나
  *       아예 적재하지 않으므로 항목값 행이 아니다.</li>
  *   <li>기간 시작/종료는 개별로 넣지 않고 daterange 리터럴 한 행으로 합친다.</li>
  * </ul>
@@ -25,7 +25,7 @@ import java.util.Optional;
  * <p><b>사전에 없는 것은 버리지 않고 라벨 행으로 돌린다.</b> 표준항목으로 매핑되지 못한 라벨
  * ({@code extras})과, 사전에 없는 항목코드가 여기 속한다. 뒤쪽은 {@code map}과 {@code load}를
  * 따로 돌릴 때 생긴다 — {@code NoticeRecord.fromJson}이 JSON 키를 검증 없이 항목코드로 받으므로
- * 옛 산출물이 옛 코드를 들고 들어온다. 그것을 표준항목 행으로 만들면 {@code NOTI_ITEM_TC} FK를
+ * 옛 산출물이 옛 코드를 들고 들어온다. 그것을 표준항목 행으로 만들면 {@code OS_NOTI_ITEM_TC} FK를
  * 위반하고, 배치 삽입이라 그 첨부의 항목값·이미지·첨부 행이 통째로 롤백된다.
  */
 public final class AttributeRows {
@@ -33,7 +33,7 @@ public final class AttributeRows {
     /**
      * 표준항목 행 1건.
      *
-     * @param itemCd 표준항목코드({@code NOTI_ITEM_VAL_DTL.NOTI_ITEM_CD})
+     * @param itemCd 표준항목코드({@code OS_NOTI_ITEM_VAL_DTL.NOTI_ITEM_CD})
      * @param value  정규화된 값({@code ITEM_VAL_CTNT})
      */
     public record Row(String itemCd, String value) {
@@ -42,7 +42,7 @@ public final class AttributeRows {
     /**
      * 라벨 행 1건 — 표준항목이 아닌 값.
      *
-     * @param itemLblNm 라벨 원문({@code NOTI_LBL_VAL_DTL.ITEM_LBL_NM})
+     * @param itemLblNm 라벨 원문({@code OS_NOTI_LBL_VAL_DTL.ITEM_LBL_NM})
      * @param value     원문 값({@code ITEM_VAL_CTNT}) — 값 유형을 모르므로 정규화하지 않는다
      */
     public record LabelRow(String itemLblNm, String value) {
@@ -51,8 +51,8 @@ public final class AttributeRows {
     /**
      * 레코드 하나가 낳는 행 전부.
      *
-     * @param items  {@code NOTI_ITEM_VAL_DTL}에 들어갈 표준항목 행
-     * @param labels {@code NOTI_LBL_VAL_DTL}에 들어갈 라벨 행
+     * @param items  {@code OS_NOTI_ITEM_VAL_DTL}에 들어갈 표준항목 행
+     * @param labels {@code OS_NOTI_LBL_VAL_DTL}에 들어갈 라벨 행
      */
     public record Split(List<Row> items, List<LabelRow> labels) {
     }
@@ -68,7 +68,7 @@ public final class AttributeRows {
      */
     public static Split of(NoticeRecord record) {
         List<Row> items = new ArrayList<>();
-        // 라벨은 맵으로 모은다 — NOTI_LBL_VAL_DTL의 PK가 (첨부, 처분, 라벨)이라 한 레코드 안에서
+        // 라벨은 맵으로 모은다 — OS_NOTI_LBL_VAL_DTL의 PK가 (첨부, 처분, 라벨)이라 한 레코드 안에서
         // 라벨이 겹치면 그대로 PK 위반이 된다. 먼저 온 값을 지키는 것은 extras와 같은 규칙이다.
         Map<String, String> labels = new LinkedHashMap<>();
 

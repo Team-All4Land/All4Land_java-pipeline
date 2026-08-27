@@ -156,7 +156,7 @@ class NoticeTypesTest {
     /**
      * 규칙이 가리키는 코드는 전부 레지스트리에 있어야 한다.
      *
-     * <p>{@code ATCH_FILE_DTL.NOTI_KND_CD}가 {@code NOTI_KND_TC}를 참조하는 FK라,
+     * <p>{@code OS_ATCH_FILE_DTL.NOTI_KND_CD}가 {@code OS_NOTI_KND_TC}를 참조하는 FK라,
      * 레지스트리에 없는 코드를 내면 첫 적재가 FK 위반으로 죽는다. 그때는 이미 배치 중반이다.
      */
     @Test

@@ -76,7 +76,7 @@ public record NoticeRecord(
     }
 
     // ── 편의 접근자 ──────────────────────────────────────────────────
-    // 문서 메타(ATCH_FILE_DTL 컬럼이 되는 5개)와 자주 쓰는 처분 값들.
+    // 문서 메타(OS_ATCH_FILE_DTL 컬럼이 되는 5개)와 자주 쓰는 처분 값들.
 
     /** 고시·공고를 발령한 행정기관명. */
     public String bodyAgncyNm() {

@@ -43,7 +43,7 @@ import java.util.stream.Stream;
  *
  * <p>결과가 0건인 기관도 등록한다. 성공한 파일만 적재하면 "첨부 401건 중 추출 0건"인 기관이
  * DB에서 아예 보이지 않는다는 문제를, 폴더가 통째로 비었을 때도 똑같이 막는다. 이 성질이
- * {@code CRWL_LOG_DTL.AGNCY_SN}을 FK로 둘 수 있는 근거이기도 하다 — 수집에 실패해 게시물이
+ * {@code OS_CRWL_LOG_DTL.INSTT_SN}을 FK로 둘 수 있는 근거이기도 하다 — 수집에 실패해 게시물이
  * 하나도 없는 기관도 부모 행이 있으므로 그 실패 로그가 FK 위반으로 거부되지 않는다.
  */
 public final class AgencyRegistry {
@@ -61,10 +61,10 @@ public final class AgencyRegistry {
     /**
      * 파일 한 건의 수집처 — 어느 기관의 어느 게시판에서 긁어 왔는가.
      *
-     * @param agncyNo   기관번호({@code NOTI_BAS.AGNCY_SN})
-     * @param agncyNm 기관명({@code AGNCY_BAS.AGNCY_NM})
-     * @param kndCd   기관 종류({@code AGNCY_BAS.AGNCY_KND_CD})
-     * @param boardCd  게시판 구분({@code NOTI_BAS.BBS_STTS_CD})
+     * @param agncyNo   기관번호({@code OS_NOTI_BAS.INSTT_SN})
+     * @param agncyNm 기관명({@code OS_INSTT_BAS.INSTT_NM})
+     * @param kndCd   기관 종류({@code OS_INSTT_BAS.INSTT_KND_CD})
+     * @param boardCd  게시판 구분({@code OS_NOTI_BAS.BBS_STTS_CD})
      */
     public record SourceBoard(
             @JsonProperty("agncy_no") int agncyNo,

@@ -65,7 +65,7 @@ public final class NoticeTypes {
     /**
      * 공고종류 1건.
      *
-     * @param notiKndCd  안정 식별자(= NOTI_KND_TC.NOTI_KND_CD)
+     * @param notiKndCd  안정 식별자(= OS_NOTI_KND_TC.NOTI_KND_CD)
      * @param notiKndNm  워크북 핵심 키워드명
      * @param upperKndNm 상위 묶음 — 종류를 평면으로 두면 조회·집계가 감당되지 않는다
      */

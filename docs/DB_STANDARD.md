@@ -6,7 +6,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 사전 버전 | `2026-08-28` |
+| 사전 버전 | `2026-08-29` |
 | 표준단어 | 61개 (수식어 41 · 분류어 20) |
 | 표준도메인 | 20개 |
 | 표준용어 | 테이블 9 · 컬럼 51 |
@@ -34,14 +34,14 @@
 
 | 표준단어 | 영문약어 | 영문명 | 비고 |
 |---|---|---|---|
-| 기관 | `AGNCY` | AGENCY | — |
+| 기관 | `INSTT` | INSTITUTION | 행정표준용어사전을 우선하라는 지침(OFBD-2210-01 §2.1)을 따른 약어다. 크롤러 DB도 INST… |
 | 게시판 | `BBS` | BULLETIN BOARD | 게시판뿐 아니라 게시·게시물까지 받는다 — 게시상태코드(BBS_STTS_CD)·게시물제목(BBS_TTL)이… |
 | 고시공고 | `NOTI` | NOTICE | — |
 | 첨부 | `ATCH` | ATTACHMENT | — |
 | 파일 | `FILE` | FILE | — |
 | 이미지 | `IMG` | IMAGE | — |
 | 항목 | `ITEM` | ITEM | — |
-| 라벨 | `LBL` | LABEL | 고시문에 적힌 항목 이름 원문. 표준항목으로 매핑되지 못한 값을 담는 NOTI_LBL_VAL_DTL에만 쓴다 |
+| 라벨 | `LBL` | LABEL | 고시문에 적힌 항목 이름 원문. 표준항목으로 매핑되지 못한 값을 담는 OS_NOTI_LBL_VAL_DTL에… |
 | 값 | `VAL` | VALUE | 분류어로는 쓰지 않는다 — 자유 텍스트 값은 CTNT가 받는다 |
 | 종류 | `KND` | KIND | — |
 | 유형 | `TY` | TYPE | TYPE은 예약어라 TY로 줄인다 |
@@ -141,34 +141,34 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 
 | 논리명 | 물리명 | PK | 무엇의 단위인가 |
 |---|---|---|---|
-| 기관 | `AGNCY_BAS` | `AGNCY_SN` | 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다 |
-| 고시공고게시물 | `NOTI_BAS` | `NOTI_SN` | 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다 |
-| 크롤로그 | `CRWL_LOG_DTL` | `CRWL_LOG_SN` | 하루치 수집에서 기관 하나를 긁은 결과. 성공도 행으로 남겨 "오늘 이 기관을 돌았나"에 답한다. 크롤러만… |
-| 공고종류 | `NOTI_KND_TC` | `NOTI_KND_CD` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
-| 공고항목 | `NOTI_ITEM_TC` | `NOTI_ITEM_CD` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upser… |
-| 첨부파일 | `ATCH_FILE_DTL` | `NOTI_SN`, `ATCH_SN` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
-| 첨부이미지 | `ATCH_IMG_DTL` | `NOTI_SN`, `ATCH_SN`, `IMG_SN` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일… |
-| 공고항목값 | `NOTI_ITEM_VAL_DTL` | `NOTI_SN`, `ATCH_SN`, `DSPS_SN`, `NOTI_ITEM_CD`, `RPT_SN` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
-| 고시공고라벨값 | `NOTI_LBL_VAL_DTL` | `NOTI_SN`, `ATCH_SN`, `DSPS_SN`, `ITEM_LBL_NM` | 표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — NOTI_ITEM_TC로 가는 FK가 없어야 … |
+| 기관 | `OS_INSTT_BAS` | `INSTT_SN` | 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다 |
+| 고시공고게시물 | `OS_NOTI_BAS` | `NOTI_SN` | 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다 |
+| 크롤로그 | `OS_CRWL_LOG_DTL` | `CRWL_LOG_SN` | 하루치 수집에서 기관 하나를 긁은 결과. 성공도 행으로 남겨 "오늘 이 기관을 돌았나"에 답한다. 크롤러만… |
+| 공고종류 | `OS_NOTI_KND_TC` | `NOTI_KND_CD` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
+| 공고항목 | `OS_NOTI_ITEM_TC` | `NOTI_ITEM_CD` | 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upser… |
+| 첨부파일 | `OS_ATCH_FILE_DTL` | `NOTI_SN`, `ATCH_SN` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
+| 첨부이미지 | `OS_ATCH_IMG_DTL` | `NOTI_SN`, `ATCH_SN`, `IMG_SN` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일… |
+| 공고항목값 | `OS_NOTI_ITEM_VAL_DTL` | `NOTI_SN`, `ATCH_SN`, `DSPS_SN`, `NOTI_ITEM_CD`, `RPT_SN` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
+| 고시공고라벨값 | `OS_NOTI_LBL_VAL_DTL` | `NOTI_SN`, `ATCH_SN`, `DSPS_SN`, `ITEM_LBL_NM` | 표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — OS_NOTI_ITEM_TC로 가는 FK가 없… |
 
 ### 테이블별 구성 컬럼
 
-**기관** `AGNCY_BAS`
+**기관** `OS_INSTT_BAS`
 
 | 논리명 | 물리명 | 도메인 | PK |
 |---|---|---|:-:|
-| 기관일련번호 | `AGNCY_SN` | `D_SN` | ● |
-| 기관명 | `AGNCY_NM` | `D_NM` |  |
-| 기관종류코드 | `AGNCY_KND_CD` | `D_CD` |  |
+| 기관일련번호 | `INSTT_SN` | `D_SN` | ● |
+| 기관명 | `INSTT_NM` | `D_NM` |  |
+| 기관종류코드 | `INSTT_KND_CD` | `D_CD` |  |
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |  |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |  |
 
-**고시공고게시물** `NOTI_BAS`
+**고시공고게시물** `OS_NOTI_BAS`
 
 | 논리명 | 물리명 | 도메인 | PK |
 |---|---|---|:-:|
 | 고시공고일련번호 | `NOTI_SN` | `D_SN` | ● |
-| 기관일련번호 | `AGNCY_SN` | `D_SN` |  |
+| 기관일련번호 | `INSTT_SN` | `D_SN` |  |
 | 게시상태코드 | `BBS_STTS_CD` | `D_CD` |  |
 | 원문키내용 | `SRC_KEY_CTNT` | `D_CTNT` |  |
 | 원문키해시 | `SRC_KEY_HASH` | `D_HASH` |  |
@@ -183,24 +183,24 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |  |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |  |
 
-**크롤로그** `CRWL_LOG_DTL`
+**크롤로그** `OS_CRWL_LOG_DTL`
 
 | 논리명 | 물리명 | 도메인 | PK |
 |---|---|---|:-:|
 | 크롤로그일련번호 | `CRWL_LOG_SN` | `D_SN` | ● |
-| 기관일련번호 | `AGNCY_SN` | `D_SN` |  |
+| 기관일련번호 | `INSTT_SN` | `D_SN` |  |
 | 크롤일자 | `CRWL_DT` | `D_DT` |  |
 | 크롤종류코드 | `CRWL_KND_CD` | `D_CD` |  |
 | 크롤상태코드 | `CRWL_STTS_CD` | `D_CD` |  |
 | 크롤단계코드 | `CRWL_STEP_CD` | `D_CD` |  |
-| 기관게시판URL | `AGNCY_BBS_URL` | `D_URL` |  |
+| 기관게시판URL | `INSTT_BBS_URL` | `D_URL` |  |
 | 고시공고건수 | `NOTI_CNT` | `D_CNT` |  |
 | 첨부파일건수 | `ATCH_FILE_CNT` | `D_CNT` |  |
 | 실패메시지내용 | `FAIL_MSG_CTNT` | `D_CTNT` |  |
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |  |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |  |
 
-**공고종류** `NOTI_KND_TC`
+**공고종류** `OS_NOTI_KND_TC`
 
 | 논리명 | 물리명 | 도메인 | PK |
 |---|---|---|:-:|
@@ -210,7 +210,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |  |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |  |
 
-**공고항목** `NOTI_ITEM_TC`
+**공고항목** `OS_NOTI_ITEM_TC`
 
 | 논리명 | 물리명 | 도메인 | PK |
 |---|---|---|:-:|
@@ -222,7 +222,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |  |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |  |
 
-**첨부파일** `ATCH_FILE_DTL`
+**첨부파일** `OS_ATCH_FILE_DTL`
 
 | 논리명 | 물리명 | 도메인 | PK |
 |---|---|---|:-:|
@@ -245,7 +245,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |  |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |  |
 
-**첨부이미지** `ATCH_IMG_DTL`
+**첨부이미지** `OS_ATCH_IMG_DTL`
 
 | 논리명 | 물리명 | 도메인 | PK |
 |---|---|---|:-:|
@@ -257,7 +257,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |  |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |  |
 
-**공고항목값** `NOTI_ITEM_VAL_DTL`
+**공고항목값** `OS_NOTI_ITEM_VAL_DTL`
 
 | 논리명 | 물리명 | 도메인 | PK |
 |---|---|---|:-:|
@@ -270,7 +270,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |  |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |  |
 
-**고시공고라벨값** `NOTI_LBL_VAL_DTL`
+**고시공고라벨값** `OS_NOTI_LBL_VAL_DTL`
 
 | 논리명 | 물리명 | 도메인 | PK |
 |---|---|---|:-:|
@@ -288,9 +288,9 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 
 | 논리명 | 물리명 | 조합 | 도메인 | 코드 | 설명 |
 |---|---|---|---|---|---|
-| 기관일련번호 | `AGNCY_SN` | 기관 + 일련번호 | `D_SN` | — | 크롤러가 발급한 기관번호가 정의처다. 크롤 산출물이 아닌 파일은 입력 폴더명 앞 번호로 AgencyRegi… |
-| 기관명 | `AGNCY_NM` | 기관 + 명 | `D_NM` | — | 수집처 기관명. 크롤러 엑셀에서 오고, 크롤 산출물이 아니면 입력 폴더명에서 온다. 크롤로그에도 담는 이유… |
-| 기관종류코드 | `AGNCY_KND_CD` | 기관 + 종류 + 코드 | `D_CD` | `CD_AGNCY_KND` | GZT는 기관 종류가 아니라 수집 경로다 — 같은 부처를 자체 게시판과 전자관보 양쪽에서 긁으므로 이름이 … |
+| 기관일련번호 | `INSTT_SN` | 기관 + 일련번호 | `D_SN` | — | 크롤러가 발급한 기관번호가 정의처다. 크롤 산출물이 아닌 파일은 입력 폴더명 앞 번호로 AgencyRegi… |
+| 기관명 | `INSTT_NM` | 기관 + 명 | `D_NM` | — | 수집처 기관명. 크롤러 엑셀에서 오고, 크롤 산출물이 아니면 입력 폴더명에서 온다. 크롤로그에도 담는 이유… |
+| 기관종류코드 | `INSTT_KND_CD` | 기관 + 종류 + 코드 | `D_CD` | `CD_INSTT_KND` | GZT는 기관 종류가 아니라 수집 경로다 — 같은 부처를 자체 게시판과 전자관보 양쪽에서 긁으므로 이름이 … |
 | 고시공고일련번호 | `NOTI_SN` | 고시공고 + 일련번호 | `D_SN` | — | 크롤 일련번호 = 크롤러 게시물 목록 엑셀의 번호이며 첨부파일명 앞자리다. 실행마다 1로 되돌아가지 않고 … |
 | 게시상태코드 | `BBS_STTS_CD` | 게시판 + 상태 + 코드 | `D_CD` | `CD_BBS_STTS` | 엑셀 검증요약의 기관명 꼬리표(목포시청_지난자료)로 가른다. 같은 기관이 게시판을 둘 운영하면 기관은 하나… |
 | 원문키내용 | `SRC_KEY_CTNT` | 원문 + 키 + 내용 | `D_CTNT` | — | 지자체 홈페이지가 게시물을 식별하는 사람이 읽는 키 원문 — [기관번호:게시물 식별 방식:게시물 번호]. … |
@@ -304,7 +304,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 크롤로그일련번호 | `CRWL_LOG_SN` | 크롤 + 로그 + 일련번호 | `D_SN` | — | 크롤러가 발급한 실행 로그 순번을 그대로 받는다. 크롤러 쪽은 BIGSERIAL이지만 실행당 수십~수백 행… |
 | 크롤상태코드 | `CRWL_STTS_CD` | 크롤 + 상태 + 코드 | `D_CD` | `CD_CRWL_STTS` | 로그 한 줄이 완료 표시인지 실패인지. 처리상태코드(PROC_STTS_CD)와 같은 자리를 크롤 쪽에서 맡… |
 | 크롤단계코드 | `CRWL_STEP_CD` | 크롤 + 단계 + 코드 | `D_CD` | `CD_CRWL_STEP` | 실패한 크롤 단계. 완료 행은 비어 있다 |
-| 기관게시판URL | `AGNCY_BBS_URL` | 기관 + 게시판 + URL | `D_URL` | — | 기관 고시공고 게시판의 목록 페이지 주소. 게시물 하나를 가리키는 게시물URL(BBS_URL)과는 다른 것… |
+| 기관게시판URL | `INSTT_BBS_URL` | 기관 + 게시판 + URL | `D_URL` | — | 기관 고시공고 게시판의 목록 페이지 주소. 게시물 하나를 가리키는 게시물URL(BBS_URL)과는 다른 것… |
 | 고시공고건수 | `NOTI_CNT` | 고시공고 + 건수 | `D_CNT` | — | 크롤러가 그 기관에서 수집했다고 집계한 게시물 수. 실제 적재된 행수와 대조하는 것이 이 컬럼의 용도다 —… |
 | 첨부파일건수 | `ATCH_FILE_CNT` | 첨부 + 파일 + 건수 | `D_CNT` | — | 크롤러가 그 기관에서 내려받았다고 집계한 첨부파일 수. 게시물보다 많을 수도(다중 첨부) 적을 수도(첨부 … |
 | 크롤일자 | `CRWL_DT` | 크롤 + 일자 | `D_DT` | — | 이 수집이 돈 날. 스케줄러가 하루에 한 번 도므로 로그 한 줄을 가리키는 업무 날짜가 이 하나로 충분하다… |
@@ -327,8 +327,8 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 | 실제파일확장자명 | `ACTL_FILE_EXTN_NM` | 실제 + 파일 + 확장자 + 명 | `D_NM` | `CD_FILE_EXTN` | 매직바이트로 판정한 실제 형식. FILE_EXTN_NM과 다른 행이 곧 확장자가 어긋난 파일 목록이다 |
 | 스캔여부 | `SCAN_YN` | 스캔 + 여부 | `D_YN` | — | 본문이 텍스트가 아니라 이미지인 스캔본 여부 |
 | 추출엔진명 | `EXTC_ENGN_NM` | 추출 + 엔진 + 명 | `D_NM` | — | 본문을 읽어 낸 엔진 |
-| 고시번호 | `NOTI_NO` | 고시공고 + 번호 | `D_NO` | — | "고시 제2026-47호". 근거는 테이블이 가른다 — NOTI_BAS는 게시판이 목록에 표기한 값, AT… |
-| 고시일자 | `NOTI_DT` | 고시공고 + 일자 | `D_DT` | — | 고시 날짜. 고시번호와 같이 NOTI_BAS는 게시판 표기, ATCH_FILE_DTL은 문서 본문 추출값이다 |
+| 고시번호 | `NOTI_NO` | 고시공고 + 번호 | `D_NO` | — | "고시 제2026-47호". 근거는 테이블이 가른다 — OS_NOTI_BAS는 게시판이 목록에 표기한 값,… |
+| 고시일자 | `NOTI_DT` | 고시공고 + 일자 | `D_DT` | — | 고시 날짜. 고시번호와 같이 OS_NOTI_BAS는 게시판 표기, OS_ATCH_FILE_DTL은 문서 본… |
 | 고시제목 | `NOTI_TTL` | 고시공고 + 제목 | `D_TTL` | — | 고시문 제목. 공고종류 판정의 입력이다 |
 | 이미지일련번호 | `IMG_SN` | 이미지 + 일련번호 | `D_SN` | — | 한 첨부 안에서의 이미지 순번 |
 | 이미지캡션내용 | `IMG_CPTN_CTNT` | 이미지 + 캡션 + 내용 | `D_CTNT` | — | 그림 아래 캡션 원문 |
@@ -342,9 +342,9 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 
 ## ④ 표준코드
 
-### 기관종류코드 `CD_AGNCY_KND`
+### 기관종류코드 `CD_INSTT_KND`
 
-적용 컬럼: `AGNCY_BAS.AGNCY_KND_CD`
+적용 컬럼: `OS_INSTT_BAS.INSTT_KND_CD`
 
 수집처의 갈래. GZT만은 기관 종류가 아니라 수집 경로다
 
@@ -357,7 +357,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 
 ### 게시상태코드 `CD_BBS_STTS`
 
-적용 컬럼: `NOTI_BAS.BBS_STTS_CD`
+적용 컬럼: `OS_NOTI_BAS.BBS_STTS_CD`
 
 입력 폴더명 꼬리표로 판정한다
 
@@ -368,7 +368,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 
 ### 크롤종류코드 `CD_CRWL_KND`
 
-적용 컬럼: `NOTI_BAS.CRWL_KND_CD`, `CRWL_LOG_DTL.CRWL_KND_CD`
+적용 컬럼: `OS_NOTI_BAS.CRWL_KND_CD`, `OS_CRWL_LOG_DTL.CRWL_KND_CD`
 
 크롤러의 CRAWL_MODE가 정의처다. 이미 대문자 영문이라 값을 그대로 등재한다 — 여기서 짧은 약어로 번역하면 크롤러와 DB가 어긋난다
 
@@ -380,7 +380,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 
 ### 크롤상태코드 `CD_CRWL_STTS`
 
-적용 컬럼: `CRWL_LOG_DTL.CRWL_STTS_CD`
+적용 컬럼: `OS_CRWL_LOG_DTL.CRWL_STTS_CD`
 
 한 실행에서 기관 하나를 수집한 결과. 성공도 행으로 남긴다 — 실패만 적재하면 "돌았는데 새 고시가 없었다"와 "아예 안 돌았다"가 둘 다 "행 없음"이 돼 조용한 수집 누락을 못 잡는다
 
@@ -391,7 +391,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 
 ### 크롤단계코드 `CD_CRWL_STEP`
 
-적용 컬럼: `CRWL_LOG_DTL.CRWL_STEP_CD` — **강제하지 않는 참고 목록**
+적용 컬럼: `OS_CRWL_LOG_DTL.CRWL_STEP_CD` — **강제하지 않는 참고 목록**
 
 크롤러가 넘어진 단계. 허용값은 크롤러의 실패단계 정의가 정의처이므로 확인 전까지 비워 둔다 — 여기에 지어낸 값을 채우면 크롤러가 실제로 쓰는 값과 조용히 어긋난다
 
@@ -399,7 +399,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 
 ### 처리상태코드 `CD_PROC_STTS`
 
-적용 컬럼: `ATCH_FILE_DTL.PROC_STTS_CD`
+적용 컬럼: `OS_ATCH_FILE_DTL.PROC_STTS_CD`
 
 첨부파일 1건의 처리 결과
 
@@ -411,7 +411,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 
 ### 실패단계코드 `CD_FAIL_STEP`
 
-적용 컬럼: `ATCH_FILE_DTL.FAIL_STEP_CD`
+적용 컬럼: `OS_ATCH_FILE_DTL.FAIL_STEP_CD`
 
 파이프라인 단계. 콘솔에는 한글 표시명이 나가고 DB에는 코드가 들어간다
 
@@ -425,7 +425,7 @@ PostgreSQL `CREATE DOMAIN`으로 실제 강제합니다 — 문서로만 두면 
 
 ### 실패종류코드 `CD_FAIL_KND`
 
-적용 컬럼: `ATCH_FILE_DTL.FAIL_KND_CD`
+적용 컬럼: `OS_ATCH_FILE_DTL.FAIL_KND_CD`
 
 detect.FailureKind가 정의처다. 이미 대문자 영문이라 값을 그대로 등재한다
 
@@ -452,7 +452,7 @@ detect.FailureKind가 정의처다. 이미 대문자 영문이라 값을 그대�
 
 ### 항목값유형코드 `CD_ITEM_VAL_TY`
 
-적용 컬럼: `NOTI_ITEM_TC.ITEM_VAL_TY_CD`
+적용 컬럼: `OS_NOTI_ITEM_TC.ITEM_VAL_TY_CD`
 
 synonyms.json의 value_type이 정의처다
 
@@ -465,7 +465,7 @@ synonyms.json의 value_type이 정의처다
 
 ### 파일확장자명 `CD_FILE_EXTN`
 
-적용 컬럼: `ATCH_FILE_DTL.FILE_EXTN_NM`, `ATCH_FILE_DTL.ACTL_FILE_EXTN_NM` — **강제하지 않는 참고 목록**
+적용 컬럼: `OS_ATCH_FILE_DTL.FILE_EXTN_NM`, `OS_ATCH_FILE_DTL.ACTL_FILE_EXTN_NM` — **강제하지 않는 참고 목록**
 
 참고 목록이다. 파일명 확장자는 열린 집합이라(jpg·zip·xlsx가 실제로 들어온다) 값을 강제하지 않는다. 아래는 detect.DocFormat이 판정하는 값들이다
 
@@ -479,17 +479,17 @@ synonyms.json의 value_type이 정의처다
 
 ### 공고종류코드 `CD_NOTI_KND`
 
-적용 컬럼: `NOTI_KND_TC.NOTI_KND_CD`, `ATCH_FILE_DTL.NOTI_KND_CD`
+적용 컬럼: `OS_NOTI_KND_TC.NOTI_KND_CD`, `OS_ATCH_FILE_DTL.NOTI_KND_CD`
 
 56종. 값 목록은 notice_types.json이 정의처이고 ReferenceSync가 테이블로 동기화한다 — 여기에 복사해 두면 두 곳이 어긋난다
 
-> 값 목록의 정의처는 `notice_types.json`이고 `NOTI_KND_TC` 테이블로 동기화됩니다 — 여기에 복사해 두면 두 곳이 어긋납니다.
+> 값 목록의 정의처는 `notice_types.json`이고 `OS_NOTI_KND_TC` 테이블로 동기화됩니다 — 여기에 복사해 두면 두 곳이 어긋납니다.
 
 ### 공고항목코드 `CD_NOTI_ITEM`
 
-적용 컬럼: `NOTI_ITEM_TC.NOTI_ITEM_CD`, `NOTI_ITEM_VAL_DTL.NOTI_ITEM_CD`
+적용 컬럼: `OS_NOTI_ITEM_TC.NOTI_ITEM_CD`, `OS_NOTI_ITEM_VAL_DTL.NOTI_ITEM_CD`
 
 표준항목 40종(+ 컬럼으로 직행하는 attachment 5종). 값 목록은 synonyms.json이 정의처다. 컬럼명이 아니라 행으로 쌓이는 코드 데이터이므로 표준단어로 분해될 필요가 없다
 
-> 값 목록의 정의처는 `synonyms.json`이고 `NOTI_ITEM_TC` 테이블로 동기화됩니다 — 여기에 복사해 두면 두 곳이 어긋납니다.
+> 값 목록의 정의처는 `synonyms.json`이고 `OS_NOTI_ITEM_TC` 테이블로 동기화됩니다 — 여기에 복사해 두면 두 곳이 어긋납니다.
 

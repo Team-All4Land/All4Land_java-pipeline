@@ -9,7 +9,7 @@ import java.util.Optional;
  * <p>단계 이름이 <b>콘솔 출력과 DB 값을 겸하고 있었다.</b> 콘솔에는 "(추출) 읽지 못했습니다"처럼
  * 한글이 나가야 읽히고, DB에는 표준코드가 들어가야 집계가 된다. 한 문자열로 둘을 겸하면
  * 둘 중 하나는 반드시 어색해지므로 여기서 가른다 — {@link #label()}은 사람이 읽고
- * {@link #code()}는 {@code ATCH_FILE_DTL.FAIL_STEP_CD}로 간다.
+ * {@link #code()}는 {@code OS_ATCH_FILE_DTL.FAIL_STEP_CD}로 간다.
  *
  * <p>허용값은 표준코드 {@code CD_FAIL_STEP}이며 {@code db/standard_terms.json}에 등재돼 있다.
  */

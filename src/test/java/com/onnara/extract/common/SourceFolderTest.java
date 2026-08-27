@@ -129,7 +129,7 @@ class SourceFolderTest {
 
         SourceFolder.Parsed parsed = SourceFolder.parse("72_2_전자관보_" + agency).orElseThrow();
         assertEquals("새만금개발청", parsed.agncyNm());
-        assertEquals(SourceFolder.AGNCY_KND_GAZETTE, parsed.kndCd(),
+        assertEquals(SourceFolder.INSTT_KND_GAZETTE, parsed.kndCd(),
                 "전자관보는 기관 종류가 아니라 수집 경로다");
         assertEquals(72, parsed.folderNo());
         assertEquals(2, parsed.subNo());

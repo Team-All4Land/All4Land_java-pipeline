@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
  *
  * <p>이 이름이 "어느 기관 게시판을 긁었는가"에 대한 <b>유일한</b> 근거다 — 첨부파일 안에는
  * 없다. 본문에서 읽은 기관명은 발령 주체이지 수집처가 아니라서 서로 다를 수 있다
- * ({@code ATCH_FILE_DTL.BODY_AGNCY_NM}).
+ * ({@code OS_ATCH_FILE_DTL.BODY_AGNCY_NM}).
  *
  * <p>기관 <b>번호</b>는 여기서 정하지 않는다. 한 번호 아래 이름이 갈리는 경우가 있어
  * 폴더 하나만 봐서는 확정할 수 없기 때문이다 — {@link AgencyRegistry}가 배치 전체를 보고 정한다.
@@ -48,7 +48,7 @@ public final class SourceFolder {
      */
     private static final Pattern GAZETTE_REMARK = Pattern.compile("\"([^\"]+?)고시\"");
 
-    // 아래 두 묶음은 표준코드 CD_BBS_STTS·CD_AGNCY_KND의 값이다(db/standard_terms.json).
+    // 아래 두 묶음은 표준코드 CD_BBS_STTS·CD_INSTT_KND의 값이다(db/standard_terms.json).
     // 폴더명을 읽는 정규식은 한글 그대로 두고 판정 결과만 코드로 옮긴다 — 정규식이 보는 것은
     // 사람이 지은 폴더 이름이지 코드가 아니다.
 
@@ -59,16 +59,16 @@ public final class SourceFolder {
     public static final String BBS_STTS_CLOSED = "CLSD";
 
     /** 기관종류코드 — 지방해양수산청. */
-    public static final String AGNCY_KND_MOF = "MOF";
+    public static final String INSTT_KND_MOF = "MOF";
 
     /** 기관종류코드 — 지자체. */
-    public static final String AGNCY_KND_LOCAL = "LOCL";
+    public static final String INSTT_KND_LOCAL = "LOCL";
 
     /** 기관종류코드 — 중앙행정기관. */
-    public static final String AGNCY_KND_CENTRAL = "CNTL";
+    public static final String INSTT_KND_CENTRAL = "CNTL";
 
-    /** 기관종류코드 — 전자관보 경유 수집. 기관 자체 게시판({@link #AGNCY_KND_CENTRAL})과 구분한다. */
-    public static final String AGNCY_KND_GAZETTE = "GZT";
+    /** 기관종류코드 — 전자관보 경유 수집. 기관 자체 게시판({@link #INSTT_KND_CENTRAL})과 구분한다. */
+    public static final String INSTT_KND_GAZETTE = "GZT";
 
     /**
      * 파싱 결과.
@@ -122,7 +122,7 @@ public final class SourceFolder {
             }
             // 전자관보는 기관명이 아니라 수집 경로다 — 이름에서 빼고 종류로 옮긴다
             if (i == 0 && part.equals(GAZETTE_PREFIX) && end > 1) {
-                kind = AGNCY_KND_GAZETTE;
+                kind = INSTT_KND_GAZETTE;
                 continue;
             }
             if (name.length() > 0) {
@@ -216,13 +216,13 @@ public final class SourceFolder {
      */
     private static String kindOf(String name) {
         if (name.endsWith("지방해양수산청")) {
-            return AGNCY_KND_MOF;
+            return INSTT_KND_MOF;
         }
         if (name.endsWith("시청") || name.endsWith("군청") || name.endsWith("구청")
                 || name.endsWith("도청") || name.endsWith("시") || name.endsWith("군")
                 || name.endsWith("구") || name.endsWith("도")) {
-            return AGNCY_KND_LOCAL;
+            return INSTT_KND_LOCAL;
         }
-        return AGNCY_KND_CENTRAL;
+        return INSTT_KND_CENTRAL;
     }
 }
