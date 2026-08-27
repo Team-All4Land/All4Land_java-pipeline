@@ -192,6 +192,7 @@ erDiagram
         D_SN   NOTI_SN            PK,FK "고시공고일련번호"
         D_SN   ATCH_SN            PK    "첨부일련번호"
         D_NM   ATCH_FILE_NM             "첨부파일명"
+        D_PATH ATCH_FILE_PATH           "첨부파일경로 · 실제 원본의 절대경로"
         D_CD   PROC_STTS_CD             "처리상태코드 · OK 정상 / FAIL 실패 / SKIP 적재제외"
         D_CD   FAIL_STEP_CD             "실패단계코드 · DTCT 판별 / EXTC 추출 / TBIT 표해석 / MAPP 매핑 / SAVE 저장"
         D_CD   FAIL_KND_CD              "실패종류코드 · FailureKind가 정의처"
@@ -261,7 +262,7 @@ erDiagram
 | 크롤로그 | `OS_CRWL_LOG_DTL` | 하루치 수집에서 기관 하나를 긁은 결과. 성공도 남겨 "오늘 이 기관을 돌긴 했나"에 답한다. 크롤러만 아는 것만 담고 `OS_NOTI_BAS`에서 유도되는 값은 담지 않는다 |
 | 공고종류 | `OS_NOTI_KND_TC` | 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다 |
 | 공고항목 | `OS_NOTI_ITEM_TC` | 표준항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다 |
-| 첨부파일 | `OS_ATCH_FILE_DTL` | 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
+| 첨부파일 | `OS_ATCH_FILE_DTL` | 파일 1건. 실제 원본 절대경로, 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태 |
 | 첨부이미지 | `OS_ATCH_IMG_DTL` | 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다 |
 | 공고항목값 | `OS_NOTI_ITEM_VAL_DTL` | 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다 |
 | 고시공고라벨값 | `OS_NOTI_LBL_VAL_DTL` | 표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — `OS_NOTI_ITEM_TC`로 가는 FK가 없는 것이 이 테이블의 전부다 |

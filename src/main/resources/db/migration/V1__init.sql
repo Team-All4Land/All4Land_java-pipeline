@@ -281,6 +281,7 @@ CREATE TABLE OS_ATCH_FILE_DTL (
     NOTI_SN            D_SN  NOT NULL,
     ATCH_SN            D_SN  NOT NULL,
     ATCH_FILE_NM       D_NM  NOT NULL,
+    ATCH_FILE_PATH     D_PATH,
     PROC_STTS_CD       D_CD  NOT NULL,
     FAIL_STEP_CD       D_CD,
     FAIL_KND_CD        D_CD,
@@ -306,6 +307,8 @@ COMMENT ON TABLE OS_ATCH_FILE_DTL IS
     '첨부파일 — 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.ATCH_SN IS
     '첨부일련번호. 첨부가 1건인 게시물은 파일명에 순번이 없어 항상 1이다. 결번은 버그가 아니라 미수집 신호이므로 다시 매겨 메우지 않는다';
+COMMENT ON COLUMN OS_ATCH_FILE_DTL.ATCH_FILE_PATH IS
+    '첨부파일경로 — 파이프라인이 실제로 읽은 원본 첨부파일의 정규화된 절대경로';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.PROC_STTS_CD IS
     '처리상태코드(CD_PROC_STTS): OK 정상 / FAIL 실패 / SKIP 적재제외. FAIL·SKIP도 행으로 남긴다 — 성공만 적재하면 "추출 0건인 기관"이 DB에서 보이지 않는다';
 COMMENT ON COLUMN OS_ATCH_FILE_DTL.FAIL_STEP_CD IS

@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 표준 스키마 JSON(§5): {"atch_file_nm", "records": [...], "images": [...]}.
+ * 표준 스키마 JSON(§5): {"atch_file_nm", "atch_file_path", "records": [...], "images": [...]}.
  *
  * <p>file_extn / scan_yn / engn_nm은 DbLoader가 OS_ATCH_FILE_DTL 컬럼(§6)을 채우는 데
  * 필요해 함께 실어 나른다.
@@ -20,13 +20,15 @@ import java.util.List;
  * 두고 결과를 스키마 JSON에 남겨야, {@code pipeline}으로 한 번에 돌리든 {@code map} → {@code load}로
  * 나눠 돌리든 같은 파일이 같은 결정을 받는다.
  */
-@JsonPropertyOrder({"atch_file_nm", "noti_sn", "atch_sn", "source_board", "noti_knd_cd",
+@JsonPropertyOrder({"atch_file_nm", "atch_file_path", "noti_sn", "atch_sn", "source_board", "noti_knd_cd",
         "file_extn_nm", "actl_file_extn_nm",
         "scan_yn", "extc_engn_nm", "body_char_cnt", "excl_rsn_ctnt", "records", "images"})
 public class SchemaResult {
 
     /** 원본 파일명 — 파일 단위 레코드 묶음의 키. */
     private String atchFileNm;
+    /** 원본 첨부파일의 정규화된 절대경로(OS_ATCH_FILE_DTL.ATCH_FILE_PATH). */
+    private String atchFilePath;
     /** 게시물 순번 — 파일명 앞자리. 크롤 산출물이 아니면 음수(0이면 아직 미확정). */
     private int notiSn;
     /** 첨부 순번 — 파일명 두 번째 자리. 크롤 산출물이 아니면 1. */
@@ -77,6 +79,17 @@ public class SchemaResult {
     /** 원본 파일명을 설정한다. */
     public void setAtchFileNm(String atchFileNm) {
         this.atchFileNm = atchFileNm;
+    }
+
+    /** 원본 첨부파일의 절대경로를 반환한다. */
+    @JsonProperty("atch_file_path")
+    public String getAtchFilePath() {
+        return atchFilePath;
+    }
+
+    /** 원본 첨부파일의 절대경로를 설정한다. */
+    public void setAtchFilePath(String atchFilePath) {
+        this.atchFilePath = atchFilePath;
     }
 
     /** 게시물 순번(파일명 앞자리). */
