@@ -17,7 +17,19 @@ import java.util.stream.Stream;
 /**
  * 입력 폴더 한 벌을 훑어 기관 목록과 파일별 수집처를 확정한다.
  *
- * <p>기관번호는 <b>폴더 하나만 봐서는 정할 수 없다.</b> 보통은 폴더명 앞 번호가 곧 기관번호지만,
+ * <p><b>기관의 정의처는 크롤러 수집 결과 엑셀의 검증요약 시트다</b> — 거기 실린
+ * {@code 번호}(1 · 12_1 · 72_2)와 {@code 기관명}(목포시청_지난자료)이 기관을 정한다.
+ * 이 클래스가 읽는 폴더명은 크롤 산출물이 아닌 파일(수동 수집분, {@code samples/})에만 남는
+ * <b>폴백</b>이다. 규약을 두 벌 유지하지 않아도 되는 이유는, 검증요약의 두 칸을 {@code _}로
+ * 이으면({@code 72_1} + {@code 전자관보_농림축산식품부}) 폴더명과 글자 하나까지 같은 형식이
+ * 되어 {@link SourceFolder}가 양쪽을 그대로 읽기 때문이다 — 08.07 산출물의 90행이 전부
+ * 파싱되고 게시완료 16기관·전자관보 2기관도 정확히 갈렸다.
+ *
+ * <p>수집결과 시트의 지자체명이 곧 검증요약의 기관명이지만 <b>전자관보만은 예외</b>다 —
+ * 게시물 쪽 지자체명이 "전자관보" 한 값이라 검증요약의 두 줄 중 어느 쪽인지 가릴 수 없다.
+ * 그 행만 비고를 읽어 발령 기관을 얻는다({@link SourceFolder#gazetteAgencyOf}).
+ *
+ * <p>기관번호는 <b>행 하나만 봐서는 정할 수 없다.</b> 보통은 앞 번호가 곧 기관번호지만,
  * 한 번호 아래에 서로 다른 기관이 들어앉는 경우가 있다:
  * <pre>
  * 72_1_전자관보_농림축산식품부
@@ -26,11 +38,13 @@ import java.util.stream.Stream;
  * 이때는 72를 아무도 쓰지 않고 최대번호 뒤로 새 번호를 발급한다(→ 73, 74). 이름이 같은
  * {@code 12_1_목포시청}·{@code 12_2_목포시청_지난자료}는 게시판만 둘인 한 기관이므로 12 하나다.
  *
- * <p>발급 순서가 {@code (폴더번호, 하위번호, 이름)} 오름차순으로 고정돼 있어, 같은 폴더 집합이면
+ * <p>발급 순서가 {@code (폴더번호, 하위번호, 이름)} 오름차순으로 고정돼 있어, 같은 입력이면
  * 매 실행 같은 번호가 나온다 — 재적재가 멱등하려면 이 성질이 있어야 한다.
  *
- * <p>파일이 한 건도 없는 폴더도 기관으로 등록한다. 성공한 파일만 적재하면 "첨부 401건 중 추출
- * 0건"인 기관이 DB에서 아예 보이지 않는다는 문제를, 폴더가 통째로 비었을 때도 똑같이 막는다.
+ * <p>결과가 0건인 기관도 등록한다. 성공한 파일만 적재하면 "첨부 401건 중 추출 0건"인 기관이
+ * DB에서 아예 보이지 않는다는 문제를, 폴더가 통째로 비었을 때도 똑같이 막는다. 이 성질이
+ * {@code OS_CRWL_LOG_DTL.INSTT_SN}을 FK로 둘 수 있는 근거이기도 하다 — 수집에 실패해 게시물이
+ * 하나도 없는 기관도 부모 행이 있으므로 그 실패 로그가 FK 위반으로 거부되지 않는다.
  */
 public final class AgencyRegistry {
 
@@ -47,10 +61,10 @@ public final class AgencyRegistry {
     /**
      * 파일 한 건의 수집처 — 어느 기관의 어느 게시판에서 긁어 왔는가.
      *
-     * @param agncyNo   기관번호({@code NOTI_BAS.AGNCY_SN})
-     * @param agncyNm 기관명({@code AGNCY_BAS.AGNCY_NM})
-     * @param kndCd   기관 종류({@code AGNCY_BAS.AGNCY_KND_CD})
-     * @param boardCd  게시판 구분({@code NOTI_BAS.BBS_STTS_CD})
+     * @param agncyNo   기관번호({@code OS_NOTI_BAS.INSTT_SN})
+     * @param agncyNm 기관명({@code OS_INSTT_BAS.INSTT_NM})
+     * @param kndCd   기관 종류({@code OS_INSTT_BAS.INSTT_KND_CD})
+     * @param boardCd  게시판 구분({@code OS_NOTI_BAS.BBS_STTS_CD})
      */
     public record SourceBoard(
             @JsonProperty("agncy_no") int agncyNo,

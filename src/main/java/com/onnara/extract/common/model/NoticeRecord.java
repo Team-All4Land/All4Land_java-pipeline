@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.onnara.extract.common.Synonyms;
+import com.onnara.extract.common.NoticeItems;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -76,7 +76,7 @@ public record NoticeRecord(
     }
 
     // ── 편의 접근자 ──────────────────────────────────────────────────
-    // 문서 메타(ATCH_FILE_DTL 컬럼이 되는 5개)와 자주 쓰는 처분 값들.
+    // 문서 메타(OS_ATCH_FILE_DTL 컬럼이 되는 5개)와 자주 쓰는 처분 값들.
 
     /** 고시·공고를 발령한 행정기관명. */
     public String bodyAgncyNm() {
@@ -130,12 +130,12 @@ public record NoticeRecord(
 
     /** 점용·사용 기간 시작일(ISO). */
     public String workPeriodStart() {
-        return fields.get(Synonyms.WORK_PRD_ST);
+        return fields.get(NoticeItems.WORK_PRD_ST);
     }
 
     /** 점용·사용 기간 종료일(ISO). */
     public String workPeriodEnd() {
-        return fields.get(Synonyms.WORK_PRD_EN);
+        return fields.get(NoticeItems.WORK_PRD_EN);
     }
 
     /** 허가·승인 대상자 성명. */
@@ -208,7 +208,7 @@ public record NoticeRecord(
          */
         public NoticeRecord build() {
             Map<String, String> ordered = new LinkedHashMap<>();
-            for (String itemCd : Synonyms.fieldOrder()) {
+            for (String itemCd : NoticeItems.fieldOrder()) {
                 String value = fields.get(itemCd);
                 if (value != null) {
                     ordered.put(itemCd, value);

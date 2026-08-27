@@ -5,7 +5,7 @@ import com.onnara.extract.common.DbStandard;
 import com.onnara.extract.common.AttributeRows;
 import com.onnara.extract.common.Errors;
 import com.onnara.extract.common.SourceFileName;
-import com.onnara.extract.common.Synonyms;
+import com.onnara.extract.common.NoticeItems;
 import com.onnara.extract.common.model.NoticeRecord;
 import com.onnara.extract.common.model.RawImage;
 import com.onnara.extract.common.model.SchemaResult;
@@ -34,16 +34,16 @@ import java.util.Map;
  * <p>성공한 파일만 넣지 않는다 — 실패·적재제외도 {@code PROC_STTS_CD}를 달아 행으로 남긴다.
  * 성공만 적재하면 "첨부 401건 중 추출 0건"인 기관이 DB에서 아예 보이지 않는다.
  *
- * <p>기관은 첨부보다 <b>먼저</b> 한 번에 넣는다 — {@code NOTI_BAS.AGNCY_SN}가 FK라
+ * <p>기관은 첨부보다 <b>먼저</b> 한 번에 넣는다 — {@code OS_NOTI_BAS.INSTT_SN}가 FK라
  * 순서가 뒤바뀌면 첫 적재가 FK 위반으로 죽는다({@link ReferenceSync}를 앞세우는 것과 같은 이유).
  */
 public final class DbLoader implements AutoCloseable {
 
     /** 기관 행 — 입력 폴더명에서 확정한 목록을 배치 시작에 한 번 반영한다. */
     private static final String UPSERT_AGENCY = """
-            INSERT INTO AGNCY_BAS (AGNCY_SN, AGNCY_NM, AGNCY_KND_CD) VALUES (?, ?, ?)
-            ON CONFLICT (AGNCY_SN) DO UPDATE SET
-                AGNCY_NM = EXCLUDED.AGNCY_NM, AGNCY_KND_CD = EXCLUDED.AGNCY_KND_CD
+            INSERT INTO OS_INSTT_BAS (INSTT_SN, INSTT_NM, INSTT_KND_CD) VALUES (?, ?, ?)
+            ON CONFLICT (INSTT_SN) DO UPDATE SET
+                INSTT_NM = EXCLUDED.INSTT_NM, INSTT_KND_CD = EXCLUDED.INSTT_KND_CD
             """;
 
     /**
@@ -54,15 +54,15 @@ public final class DbLoader implements AutoCloseable {
      * 이미 채운 값이 날아가면 안 된다. 새 정보가 있으면 이기고, 없으면 기존을 지킨다.
      */
     private static final String INSERT_NOTICE = """
-            INSERT INTO NOTI_BAS (NOTI_SN, AGNCY_SN, BBS_STTS_CD) VALUES (?, ?, ?)
+            INSERT INTO OS_NOTI_BAS (NOTI_SN, INSTT_SN, BBS_STTS_CD) VALUES (?, ?, ?)
             ON CONFLICT (NOTI_SN) DO UPDATE SET
-                AGNCY_SN = COALESCE(EXCLUDED.AGNCY_SN, NOTI_BAS.AGNCY_SN),
-                BBS_STTS_CD = COALESCE(EXCLUDED.BBS_STTS_CD, NOTI_BAS.BBS_STTS_CD)
+                INSTT_SN = COALESCE(EXCLUDED.INSTT_SN, OS_NOTI_BAS.INSTT_SN),
+                BBS_STTS_CD = COALESCE(EXCLUDED.BBS_STTS_CD, OS_NOTI_BAS.BBS_STTS_CD)
             """;
 
     /** 멱등 재적재를 위한 기존 첨부 삭제(이미지·항목값은 CASCADE로 함께 정리). */
     private static final String DELETE_ATTACHMENT =
-            "DELETE FROM ATCH_FILE_DTL WHERE NOTI_SN = ? AND ATCH_SN = ?";
+            "DELETE FROM OS_ATCH_FILE_DTL WHERE NOTI_SN = ? AND ATCH_SN = ?";
 
     /**
      * 첨부 1행 — 파일 메타 + 문서 단위 메타 + 추출 상태.
@@ -71,7 +71,7 @@ public final class DbLoader implements AutoCloseable {
      * 값을 적재 로직과 따로 동기화하면 언젠가 둘이 어긋난다.
      */
     private static final String INSERT_ATTACHMENT = """
-            INSERT INTO ATCH_FILE_DTL (
+            INSERT INTO OS_ATCH_FILE_DTL (
                 NOTI_SN, ATCH_SN, ATCH_FILE_NM, PROC_STTS_CD,
                 FAIL_STEP_CD, FAIL_KND_CD, FAIL_MSG_CTNT, EXCL_RSN_CTNT,
                 FILE_EXTN_NM, ACTL_FILE_EXTN_NM, SCAN_YN, EXTC_ENGN_NM,
@@ -81,19 +81,19 @@ public final class DbLoader implements AutoCloseable {
 
     /** 이미지 1행(첨부당 N건, 배치 실행). */
     private static final String INSERT_IMAGE = """
-            INSERT INTO ATCH_IMG_DTL (NOTI_SN, ATCH_SN, IMG_SN, IMG_CPTN_CTNT, IMG_FILE_PATH)
+            INSERT INTO OS_ATCH_IMG_DTL (NOTI_SN, ATCH_SN, IMG_SN, IMG_CPTN_CTNT, IMG_FILE_PATH)
             VALUES (?, ?, ?, ?, ?)
             """;
 
     /** 항목값 1행(레코드당 N건, 배치 실행). */
     private static final String INSERT_ATTRIBUTE = """
-            INSERT INTO NOTI_ITEM_VAL_DTL (NOTI_SN, ATCH_SN, DSPS_SN, NOTI_ITEM_CD, RPT_SN, ITEM_VAL_CTNT)
+            INSERT INTO OS_NOTI_ITEM_VAL_DTL (NOTI_SN, ATCH_SN, DSPS_SN, NOTI_ITEM_CD, RPT_SN, ITEM_VAL_CTNT)
             VALUES (?, ?, ?, ?, ?, ?)
             """;
 
     /** 라벨값 1행(레코드당 N건, 배치 실행) — 표준항목으로 매핑되지 못한 값. */
     private static final String INSERT_LABEL = """
-            INSERT INTO NOTI_LBL_VAL_DTL (NOTI_SN, ATCH_SN, DSPS_SN, ITEM_LBL_NM, ITEM_VAL_CTNT)
+            INSERT INTO OS_NOTI_LBL_VAL_DTL (NOTI_SN, ATCH_SN, DSPS_SN, ITEM_LBL_NM, ITEM_VAL_CTNT)
             VALUES (?, ?, ?, ?, ?)
             """;
 
@@ -410,7 +410,7 @@ public final class DbLoader implements AutoCloseable {
      * <p>{@code DSPS_SN}은 항목값과 같은 번호를 쓴다 — 같은 처분에서 나온 값이므로 나란히
      * 놓고 봐야 "이 처분에서 무엇이 표준항목으로 갔고 무엇이 라벨로 남았는지"가 읽힌다.
      *
-     * <p>이 테이블에는 {@code NOTI_ITEM_TC}로 가는 FK가 없다. 있으면 사전에 없는 라벨이
+     * <p>이 테이블에는 {@code OS_NOTI_ITEM_TC}로 가는 FK가 없다. 있으면 사전에 없는 라벨이
      * FK 위반을 내고, 배치 삽입이라 그 첨부의 항목값·이미지가 통째로 롤백된다.
      */
     private int insertLabels(SourceFileName.Parsed name, List<AttributeRows.Split> split)
@@ -479,9 +479,9 @@ public final class DbLoader implements AutoCloseable {
     /**
      * 첨부 1건을 적재한 결과.
      *
-     * @param records NOTI_ITEM_VAL_DTL에 넣은 항목값 행 수
-     * @param labels  NOTI_LBL_VAL_DTL에 넣은 라벨값 행 수
-     * @param images  ATCH_IMG_DTL에 넣은 이미지 행 수
+     * @param records OS_NOTI_ITEM_VAL_DTL에 넣은 항목값 행 수
+     * @param labels  OS_NOTI_LBL_VAL_DTL에 넣은 라벨값 행 수
+     * @param images  OS_ATCH_IMG_DTL에 넣은 이미지 행 수
      */
     public record Counts(int records, int labels, int images) {
     }

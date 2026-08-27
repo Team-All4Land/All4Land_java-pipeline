@@ -260,12 +260,12 @@ public final class Mapper {
      * extras에 보존한다({@link Labels#acceptableExtra} 오탐 가드 적용).
      */
     private static void applyLabel(NoticeRecord.Builder builder, String label, String value) {
-        Optional<String> itemCd = Synonyms.canonicalFor(label);
+        Optional<String> itemCd = NoticeItems.canonicalFor(label);
         if (itemCd.isPresent()) {
             builder.set(itemCd.get(), value);
             return;
         }
-        String normalized = Synonyms.normalizeLabel(label);
+        String normalized = NoticeItems.normalizeLabel(label);
         if (Labels.acceptableExtra(normalized, value)) {
             builder.extra(normalized, value);
         }
@@ -313,7 +313,7 @@ public final class Mapper {
         List<Labels.Numbered> current = new ArrayList<>();
         Set<String> filled = new HashSet<>();
         for (Labels.Numbered pair : Labels.scanNumbered(lines)) {
-            String itemCd = Synonyms.canonicalFor(pair.label())
+            String itemCd = NoticeItems.canonicalFor(pair.label())
                     .filter(Mapper::isDispositionField).orElse(null);
             if (pair.number() == 1 && itemCd != null && filled.contains(itemCd)) {
                 blocks.add(current);
@@ -331,7 +331,7 @@ public final class Mapper {
 
     /** 처분 단위 항목인지 — 문서 메타(기관·고시번호·제목 등)는 블록 경계 근거가 될 수 없다. */
     private static boolean isDispositionField(String itemCd) {
-        return Synonyms.field(itemCd).map(Synonyms.FieldSpec::isAttribute).orElse(false);
+        return NoticeItems.field(itemCd).map(NoticeItems.FieldSpec::isAttribute).orElse(false);
     }
 
     // ── ④ 정규화 ─────────────────────────────────────────────────
@@ -345,16 +345,16 @@ public final class Mapper {
         normalizeDate(builder, "NOTI_DT");
         normalizeDate(builder, "APV_DT");
 
-        String period = builder.get(Synonyms.WORK_PRD);
+        String period = builder.get(NoticeItems.WORK_PRD);
         if (period != null) {
-            builder.overwrite(Synonyms.WORK_PRD, null);
+            builder.overwrite(NoticeItems.WORK_PRD, null);
             Optional<String[]> halves = Dates.splitRange(period);
             if (halves.isPresent()) {
                 Dates.toIso(halves.get()[0]).ifPresent(v -> builder.set("WORK_PRD_ST", v));
                 Dates.toIso(halves.get()[1]).ifPresent(v -> builder.set("WORK_PRD_EN", v));
             }
             if (!builder.has("WORK_PRD_ST") && !builder.has("WORK_PRD_EN")) {
-                builder.extra(Synonyms.WORK_PRD, period);
+                builder.extra(NoticeItems.WORK_PRD, period);
             }
         }
 

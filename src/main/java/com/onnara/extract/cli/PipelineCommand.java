@@ -232,8 +232,8 @@ public class PipelineCommand implements Callable<Integer> {
     /**
      * 커넥션 풀을 열어 스키마를 최신화하고 3계층으로 적재한다.
      *
-     * <p>{@link ReferenceSync}는 반드시 적재보다 먼저 돈다 — {@code NOTI_ITEM_VAL_DTL}이
-     * {@code NOTI_ITEM_TC}을 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
+     * <p>{@link ReferenceSync}는 반드시 적재보다 먼저 돈다 — {@code OS_NOTI_ITEM_VAL_DTL}이
+     * {@code OS_NOTI_ITEM_TC}을 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
      *
      * <p>실패 건도 함께 넘긴다. 성공한 파일만 적재하면 "첨부 401건 중 추출 0건"인 기관이
      * DB에서 아예 보이지 않아, 추출 누락과 애초에 없던 자료를 구분할 수 없다.
@@ -246,7 +246,7 @@ public class PipelineCommand implements Callable<Integer> {
             ReferenceSync.Counts reference = ReferenceSync.sync(dataSource);
             try (DbLoader loader = new DbLoader(dataSource)) {
                 // 파일이 0건인 폴더도 기관으로 남긴다 — 그래야 "긁었는데 아무것도 못 건진 기관"이
-                // DB에서 보인다. 첨부보다 먼저 넣어야 NOTI_BAS.AGNCY_SN FK가 걸리지 않는다
+                // DB에서 보인다. 첨부보다 먼저 넣어야 OS_NOTI_BAS.INSTT_SN FK가 걸리지 않는다
                 int agencies = loader.loadAgencies(registry.agencies());
                 LoadStats stats = loader.loadAll(schemas, toFailedAttachments(registry, failures));
                 System.out.printf("사전 동기화: 표준항목 %d종, 공고종류 %d종, 기관 %d곳%n",

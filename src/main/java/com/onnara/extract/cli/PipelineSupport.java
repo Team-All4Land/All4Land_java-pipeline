@@ -38,7 +38,7 @@ final class PipelineSupport {
     private PipelineSupport() {
     }
 
-    /** 결과 raw 문서 + 실제 사용된 엔진 식별자(§6 ATCH_FILE_DTL.EXTC_ENGN_NM). */
+    /** 결과 raw 문서 + 실제 사용된 엔진 식별자(§6 OS_ATCH_FILE_DTL.EXTC_ENGN_NM). */
     record ExtractResult(RawDocument raw, String engine) {
     }
 
@@ -71,7 +71,7 @@ final class PipelineSupport {
      * {@code images} 메타만 남긴다 — 사진 속 글자를 본문에 섞지 않는다.
      *
      * @param outputDir 스키마/원시 JSON이 저장될 기준 폴더 — 이미지는 {@code outputDir/images}에 저장되고
-     *                  {@code RawImage.path}는 저장된 이미지의 절대경로로 기록된다(ATCH_IMG_DTL.IMG_FILE_PATH 적재용).
+     *                  {@code RawImage.path}는 저장된 이미지의 절대경로로 기록된다(OS_ATCH_IMG_DTL.IMG_FILE_PATH 적재용).
      */
     static ExtractResult extractOne(Path file, Extractor forcedExtractor, Path outputDir,
                                     boolean saveImages, ScanOcrRunner scanRunner) throws IOException {
@@ -184,7 +184,7 @@ final class PipelineSupport {
         }
     }
 
-    /** 저장된 이미지 파일의 절대 경로 문자열(ATCH_IMG_DTL.IMG_FILE_PATH 적재용, 구분자는 '/'). */
+    /** 저장된 이미지 파일의 절대 경로 문자열(OS_ATCH_IMG_DTL.IMG_FILE_PATH 적재용, 구분자는 '/'). */
     private static String absolutePath(Path path) {
         return path.toAbsolutePath().normalize().toString().replace('\\', '/');
     }

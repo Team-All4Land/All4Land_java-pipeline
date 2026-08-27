@@ -9,7 +9,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -37,6 +39,17 @@ class DbStandardTest {
     /** 스키마를 세우는 마이그레이션. 하나뿐이므로 이것이 곧 최종 스키마다. */
     private static final String V1 = "/db/migration/V1__init.sql";
 
+    /** 주제영역(업무코드) — 해양공간. 모든 테이블 이름이 이것으로 시작한다. */
+    private static final String BUSINESS_CODE = "OS";
+
+    /** 제약조건·인덱스 이름 — {@code [테이블명]_[유형][두자리]}. 기본키만 일련번호가 없다. */
+    private static final Pattern CONSTRAINT_DECL = Pattern.compile(
+            "CONSTRAINT\\s+([A-Z][A-Z0-9_]*)", Pattern.CASE_INSENSITIVE);
+
+    /** {@code CREATE INDEX 이름 ON} — 인덱스 한 건. */
+    private static final Pattern INDEX_DECL = Pattern.compile(
+            "CREATE\\s+(?:UNIQUE\\s+)?INDEX\\s+([A-Z][A-Z0-9_]*)", Pattern.CASE_INSENSITIVE);
+
     /** 표준화 이전 이름 — 소스 어디에도 남아 있으면 안 된다. */
     private static final List<String> RETIRED = List.of(
             "TB_AGNCY", "TB_NOTI", "TB_NOTI_KND", "TB_NOTI_ITEM",
@@ -45,7 +58,11 @@ class DbStandardTest {
             "ITEM_CD", "ITEM_NM", "SRS_NM", "VAL_TY_CD", "CORE_YN",
             "FILE_NM", "STTS_CD", "FAIL_STEP", "FAIL_KND", "FAIL_MSG", "EXCL_RSN",
             "FILE_EXTN", "REAL_EXTN", "ENGN_NM", "NOTI_YMD", "REG_DT",
-            "IMG_CPTN", "FILE_PATH", "ITEM_VAL");
+            "IMG_CPTN", "FILE_PATH", "ITEM_VAL",
+            // 표준 명명규칙(OFBD-2210-01 §3.2.3)으로 옮기기 전 이름
+            "AGNCY_BAS", "AGNCY_SN", "AGNCY_NM", "AGNCY_KND_CD", "AGNCY_BBS_URL", "CD_AGNCY_KND",
+            "NOTI_BAS", "CRWL_LOG_DTL", "NOTI_KND_TC", "NOTI_ITEM_TC", "ATCH_FILE_DTL",
+            "ATCH_IMG_DTL", "NOTI_ITEM_VAL_DTL", "NOTI_LBL_VAL_DTL", "iso_daterange");
 
     /**
      * 옛 이름 검사에서 빼는 경로 — <b>옛 이름을 적는 것이 제 일인 파일들</b>이다.
@@ -73,9 +90,13 @@ class DbStandardTest {
     private static final Pattern COLUMN_DECL = Pattern.compile(
             "^\\s+([A-Z][A-Z0-9_]*)\\s+(D_[A-Z]+)\\b", Pattern.MULTILINE);
 
-    /** 테이블 본문의 PK 제약 — 이름을 직접 주므로 컬럼 목록을 그대로 읽을 수 있다. */
+    /**
+     * 테이블 본문의 PK 제약 — 이름을 직접 주므로 컬럼 목록을 그대로 읽을 수 있다.
+     *
+     * <p>이름이 {@code [테이블명]_PK}라 꼬리로 가른다(OFBD-2210-01 §3.2.3).
+     */
     private static final Pattern PK_DECL = Pattern.compile(
-            "CONSTRAINT\\s+PK_[A-Z0-9_]+\\s+PRIMARY\\s+KEY\\s*\\(([^)]*)\\)",
+            "CONSTRAINT\\s+[A-Z0-9_]+_PK\\s+PRIMARY\\s+KEY\\s*\\(([^)]*)\\)",
             Pattern.CASE_INSENSITIVE);
 
     @Test
@@ -85,7 +106,7 @@ class DbStandardTest {
         assertFalse(DbStandard.domains().isEmpty(), "표준도메인이 비어 있습니다");
         assertFalse(DbStandard.terms().isEmpty(), "표준용어가 비어 있습니다");
         assertFalse(DbStandard.codes().isEmpty(), "표준코드가 비어 있습니다");
-        assertEquals(8, DbStandard.tables().size(), "테이블 수가 스키마와 다릅니다");
+        assertEquals(9, DbStandard.tables().size(), "테이블 수가 스키마와 다릅니다");
     }
 
     @Test
@@ -116,8 +137,10 @@ class DbStandardTest {
             if (suffixes.stream().noneMatch(s -> name.endsWith("_" + s))) {
                 problems.add(name + ": 등록된 유형 접미사로 끝나지 않습니다 — " + suffixes);
             }
-            if (name.startsWith("TB_") || name.startsWith("TC_")) {
-                problems.add(name + ": 접두사를 쓰지 않기로 했습니다 — 유형은 접미사가 지시합니다");
+            // [업무코드]_[테이블의미] — 해양공간(OS)이 이 스키마의 업무코드다(OFBD-2210-01 §3.2.3).
+            // 크롤러 DB의 OS_PUBLIC_WATERS_NOTICE도 같은 코드를 쓴다.
+            if (!name.startsWith(BUSINESS_CODE + "_")) {
+                problems.add(name + ": 업무코드 " + BUSINESS_CODE + "_로 시작하지 않습니다");
             }
         }
         assertTrue(problems.isEmpty(), () -> "표준 위반:\n  " + String.join("\n  ", problems));
@@ -283,6 +306,95 @@ class DbStandardTest {
             tables.put(name, new Table(name, List.copyOf(order), Map.copyOf(domains), pk));
         }
         return tables;
+    }
+
+    /**
+     * 제약조건·인덱스 이름이 표준 형식인지 — {@code [테이블명]_[유형][두자리]}.
+     *
+     * <p>OFBD-2210-01 §3.2.3이 정한 형식이다. 기본키만 일련번호가 없고(테이블당 하나뿐이므로),
+     * 나머지는 테이블마다 01부터 매긴다. 일련번호는 이름만 봐서 무엇을 위한 것인지 알려 주지
+     * 못하므로 인덱스에는 {@code COMMENT ON INDEX}를 함께 단다 — 그것도 여기서 검사한다.
+     */
+    @Test
+    @DisplayName("제약조건·인덱스 이름이 [테이블명]_[유형][두자리] 형식이다")
+    void constraintNamesFollowTheStandard() throws IOException {
+        String sql = readMigration();
+        Set<String> tables = new LinkedHashSet<>();
+        DbStandard.tables().forEach(t -> tables.add(t.physical()));
+
+        List<String> problems = new ArrayList<>();
+        Matcher constraint = CONSTRAINT_DECL.matcher(sql);
+        while (constraint.find()) {
+            String name = constraint.group(1).toUpperCase(Locale.ROOT);
+            String owner = tables.stream().filter(t -> name.startsWith(t + "_"))
+                    .max(Comparator.comparingInt(String::length)).orElse(null);
+            if (owner == null) {
+                problems.add(name + ": 테이블명으로 시작하지 않습니다");
+                continue;
+            }
+            String tail = name.substring(owner.length() + 1);
+            if (!tail.equals("PK") && !tail.matches("(FK|UK|CK)\\d{2}")) {
+                problems.add(name + ": 꼬리가 PK / FK·UK·CK+두자리가 아닙니다 — " + tail);
+            }
+        }
+
+        Matcher index = INDEX_DECL.matcher(sql);
+        while (index.find()) {
+            String name = index.group(1).toUpperCase(Locale.ROOT);
+            String owner = tables.stream().filter(t -> name.startsWith(t + "_"))
+                    .max(Comparator.comparingInt(String::length)).orElse(null);
+            if (owner == null || !name.substring(owner.length() + 1).matches("(IX|UK)\\d{2}")) {
+                problems.add(name + ": [테이블명]_IX00 형식이 아닙니다");
+            } else if (!sql.contains("COMMENT ON INDEX " + name + " IS")) {
+                // 일련번호가 뜻을 지웠으므로 주석이 그 자리를 메워야 한다
+                problems.add(name + ": COMMENT ON INDEX가 없습니다 — 이름만으로는 용도를 알 수 없습니다");
+            }
+        }
+
+        // 이름 길이는 컬럼과 같은 30바이트를 넘지 않는다
+        Matcher all = Pattern.compile("CONSTRAINT\\s+([A-Z][A-Z0-9_]*)|CREATE\\s+INDEX\\s+([A-Z][A-Z0-9_]*)",
+                Pattern.CASE_INSENSITIVE).matcher(sql);
+        while (all.find()) {
+            String name = all.group(1) != null ? all.group(1) : all.group(2);
+            if (name.getBytes(StandardCharsets.UTF_8).length > 30) {
+                problems.add(name + ": 30바이트를 넘습니다");
+            }
+        }
+        assertTrue(problems.isEmpty(), () -> "명명규칙 위반:\n  " + String.join("\n  ", problems));
+    }
+
+    /**
+     * 금칙어가 논리명에 새어 들어오지 않았는지.
+     *
+     * <p>지침은 이음동의어 중 하나만 표준어로 쓰고 나머지는 금칙어로 등록해 사용을 막으라고
+     * 한다(OFBD-3210-02 §1.4.1). 금칙어를 문서로만 두면 다시 새어 들어오므로 여기서 잡는다.
+     *
+     * <p>검사 대상은 <b>논리명뿐</b>이다. 설명문까지 훑으면 "에러 원인"처럼 금칙어를 설명하려고
+     * 쓴 문장이 걸려 오탐만 낸다 — 규칙이 지켜야 할 것은 이름이지 산문이 아니다.
+     */
+    @Test
+    @DisplayName("금칙어가 논리명에 들어 있지 않다")
+    void bannedWordsStayOutOfLogicalNames() {
+        Map<String, String> banned = new LinkedHashMap<>();
+        for (DbStandard.Word w : DbStandard.words()) {
+            w.banned().forEach(b -> banned.put(b, w.term()));
+        }
+        assertFalse(banned.isEmpty(), "금칙어가 하나도 등재돼 있지 않습니다");
+
+        List<String> names = new ArrayList<>();
+        DbStandard.terms().forEach(t -> names.add(t.logical()));
+        DbStandard.tables().forEach(t -> names.add(t.logical()));
+        DbStandard.codes().forEach(c -> names.add(c.name()));
+
+        List<String> problems = new ArrayList<>();
+        for (String name : names) {
+            banned.forEach((bad, good) -> {
+                if (name.contains(bad)) {
+                    problems.add(name + ": 금칙어 \"" + bad + "\" — 표준어는 \"" + good + "\"입니다");
+                }
+            });
+        }
+        assertTrue(problems.isEmpty(), () -> "금칙어 위반:\n  " + String.join("\n  ", problems));
     }
 
     @Test

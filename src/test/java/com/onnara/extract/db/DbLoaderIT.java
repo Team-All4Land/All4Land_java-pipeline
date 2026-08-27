@@ -67,7 +67,7 @@ class DbLoaderIT {
         dataSource = new HikariDataSource(config);
 
         DbSchema.migrate(dataSource);
-        // NOTI_ITEM_VAL_DTL이 NOTI_ITEM_TC을 참조하므로 적재 전에 사전이 있어야 한다
+        // OS_NOTI_ITEM_VAL_DTL이 OS_NOTI_ITEM_TC을 참조하므로 적재 전에 사전이 있어야 한다
         ReferenceSync.sync(dataSource);
     }
 
@@ -75,19 +75,19 @@ class DbLoaderIT {
      * 테스트가 넣은 게시물과 기관을 지우고 풀을 닫는다(각 테스트 후).
      * 첨부·이미지·항목값은 CASCADE로 함께 정리된다.
      *
-     * <p>기관은 게시물보다 <b>나중에</b> 지운다 — {@code NOTI_BAS.AGNCY_SN}가 FK라 순서를
+     * <p>기관은 게시물보다 <b>나중에</b> 지운다 — {@code OS_NOTI_BAS.INSTT_SN}가 FK라 순서를
      * 뒤집으면 참조 위반으로 정리가 실패하고 다음 테스트가 더러운 DB를 물려받는다.
      */
     @AfterEach
     void tearDown() throws SQLException {
         try (var conn = dataSource.getConnection()) {
             try (PreparedStatement ps = conn.prepareStatement(
-                    "DELETE FROM NOTI_BAS WHERE NOTI_SN >= ?")) {
+                    "DELETE FROM OS_NOTI_BAS WHERE NOTI_SN >= ?")) {
                 ps.setInt(1, NOTICE_BASE);
                 ps.executeUpdate();
             }
             try (PreparedStatement ps = conn.prepareStatement(
-                    "DELETE FROM AGNCY_BAS WHERE AGNCY_SN >= ?")) {
+                    "DELETE FROM OS_INSTT_BAS WHERE INSTT_SN >= ?")) {
                 ps.setInt(1, AGENCY_BASE);
                 ps.executeUpdate();
             }
@@ -98,13 +98,13 @@ class DbLoaderIT {
     /** 사전이 DB로 동기화되고, 계열·주요 여부까지 실려 오는지 검증한다. */
     @Test
     void syncsDictionaryIntoReferenceTables() throws SQLException {
-        assertEquals(40, count("SELECT count(*) FROM NOTI_ITEM_TC"));
-        assertEquals(56, count("SELECT count(*) FROM NOTI_KND_TC"));
-        assertEquals(6, count("SELECT count(*) FROM NOTI_ITEM_TC WHERE CORE_ITEM_YN = 'Y'"));
+        assertEquals(40, count("SELECT count(*) FROM OS_NOTI_ITEM_TC"));
+        assertEquals(56, count("SELECT count(*) FROM OS_NOTI_KND_TC"));
+        assertEquals(6, count("SELECT count(*) FROM OS_NOTI_ITEM_TC WHERE CORE_ITEM_YN = 'Y'"));
 
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT ITEM_SRS_NM, ITEM_VAL_TY_CD FROM NOTI_ITEM_TC WHERE NOTI_ITEM_CD = 'AREA'");
+                     "SELECT ITEM_SRS_NM, ITEM_VAL_TY_CD FROM OS_NOTI_ITEM_TC WHERE NOTI_ITEM_CD = 'AREA'");
              ResultSet rs = ps.executeQuery()) {
             assertTrue(rs.next());
             assertEquals("면적", rs.getString("ITEM_SRS_NM"));
@@ -128,7 +128,7 @@ class DbLoaderIT {
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement("""
                      SELECT PROC_STTS_CD, NOTI_KND_CD, NOTI_NO, NOTI_DT, NOTI_TTL
-                       FROM ATCH_FILE_DTL WHERE NOTI_SN = ? AND ATCH_SN = ?""")) {
+                       FROM OS_ATCH_FILE_DTL WHERE NOTI_SN = ? AND ATCH_SN = ?""")) {
             ps.setInt(1, NOTICE_BASE + 1);
             ps.setInt(2, 1);
             try (ResultSet rs = ps.executeQuery()) {
@@ -142,7 +142,7 @@ class DbLoaderIT {
         }
 
         // 처분 건수는 컬럼이 아니라 자식 테이블에서 나온다
-        assertEquals(1, count("SELECT count(DISTINCT DSPS_SN) FROM NOTI_ITEM_VAL_DTL"
+        assertEquals(1, count("SELECT count(DISTINCT DSPS_SN) FROM OS_NOTI_ITEM_VAL_DTL"
                 + " WHERE NOTI_SN = " + (NOTICE_BASE + 1)));
 
         assertEquals("367,120.2㎡", attribute(NOTICE_BASE + 1, "AREA"));
@@ -151,10 +151,10 @@ class DbLoaderIT {
         assertEquals("[2025-09-01,2028-08-31]", attribute(NOTICE_BASE + 1, "WORK_PRD"));
         // 문서 메타는 항목값으로 중복 저장하지 않는다
         assertNull(attribute(NOTICE_BASE + 1, "BODY_AGNCY_NM"),
-                "본문 기관명은 적재하지 않는다 — 기관 추적은 AGNCY_BAS로 한다");
+                "본문 기관명은 적재하지 않는다 — 기관 추적은 OS_INSTT_BAS로 한다");
         assertNull(attribute(NOTICE_BASE + 1, "NOTI_DT"));
 
-        assertEquals(1, count("SELECT count(*) FROM ATCH_IMG_DTL WHERE NOTI_SN = "
+        assertEquals(1, count("SELECT count(*) FROM OS_ATCH_IMG_DTL WHERE NOTI_SN = "
                 + (NOTICE_BASE + 1)));
 
         // 표준항목으로 매핑되지 못한 라벨은 버려지지 않고 라벨 테이블에 남는다
@@ -165,7 +165,7 @@ class DbLoaderIT {
      * 사전에 없는 항목코드가 들어와도 첨부가 통째로 롤백되지 않아야 한다.
      *
      * <p>{@code map}과 {@code load}를 따로 돌릴 때 생기는 상황이다 — 옛 산출물이 옛 코드를
-     * 들고 들어온다. 그것을 표준항목 행으로 만들면 {@code NOTI_ITEM_TC} FK를 위반하고,
+     * 들고 들어온다. 그것을 표준항목 행으로 만들면 {@code OS_NOTI_ITEM_TC} FK를 위반하고,
      * 배치 삽입이라 그 첨부의 항목값·이미지·첨부 행이 함께 사라진다. 라벨로 돌리면 값도
      * 남고 옛 코드가 집계에 떠서 산출물이 낡았다는 사실까지 드러난다.
      */
@@ -185,13 +185,13 @@ class DbLoaderIT {
             assertEquals(0, stats.filesFailed());
         }
 
-        assertEquals(1, count("SELECT count(*) FROM ATCH_FILE_DTL WHERE NOTI_SN = " + notiSn),
+        assertEquals(1, count("SELECT count(*) FROM OS_ATCH_FILE_DTL WHERE NOTI_SN = " + notiSn),
                 "첨부 행이 살아남아야 한다");
         assertEquals("2025-09-01 ~ 2028-08-31", label(notiSn, "WORK_PERIOD"),
                 "사전에 없는 코드는 라벨 원문 그대로 남는다");
         assertEquals("여수시 돌산읍 인근 공유수면", attributeOf(notiSn, 2, "LOC"),
                 "같은 레코드의 표준항목은 정상 적재된다");
-        assertEquals(0, count("SELECT count(*) FROM NOTI_ITEM_VAL_DTL WHERE NOTI_SN = " + notiSn
+        assertEquals(0, count("SELECT count(*) FROM OS_NOTI_ITEM_VAL_DTL WHERE NOTI_SN = " + notiSn
                 + " AND NOTI_ITEM_CD = 'WORK_PERIOD'"),
                 "옛 코드가 표준항목 행으로 새면 안 된다");
     }
@@ -206,11 +206,11 @@ class DbLoaderIT {
             loader.loadAll(List.of(schema), List.of());
         }
 
-        assertEquals(1, count("SELECT count(*) FROM ATCH_FILE_DTL WHERE NOTI_SN = "
+        assertEquals(1, count("SELECT count(*) FROM OS_ATCH_FILE_DTL WHERE NOTI_SN = "
                 + (NOTICE_BASE + 2)));
-        assertEquals(1, count("SELECT count(*) FROM ATCH_IMG_DTL WHERE NOTI_SN = "
+        assertEquals(1, count("SELECT count(*) FROM OS_ATCH_IMG_DTL WHERE NOTI_SN = "
                 + (NOTICE_BASE + 2)));
-        assertEquals(1, count("SELECT count(*) FROM NOTI_ITEM_VAL_DTL WHERE NOTI_SN = "
+        assertEquals(1, count("SELECT count(*) FROM OS_NOTI_ITEM_VAL_DTL WHERE NOTI_SN = "
                 + (NOTICE_BASE + 2) + " AND NOTI_ITEM_CD = 'AREA'"));
     }
 
@@ -230,8 +230,8 @@ class DbLoaderIT {
             loader.loadAll(List.of(sample(notice, 3, "900003_3_고시문.hml")), List.of());
         }
 
-        assertEquals(3, count("SELECT count(*) FROM ATCH_FILE_DTL WHERE NOTI_SN = " + notice));
-        assertEquals(3, count("SELECT count(*) FROM NOTI_ITEM_VAL_DTL WHERE NOTI_SN = "
+        assertEquals(3, count("SELECT count(*) FROM OS_ATCH_FILE_DTL WHERE NOTI_SN = " + notice));
+        assertEquals(3, count("SELECT count(*) FROM OS_NOTI_ITEM_VAL_DTL WHERE NOTI_SN = "
                 + notice + " AND NOTI_ITEM_CD = 'AREA'"));
     }
 
@@ -249,7 +249,7 @@ class DbLoaderIT {
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement("""
                      SELECT PROC_STTS_CD, FAIL_STEP_CD, FAIL_KND_CD, FAIL_MSG_CTNT, FILE_EXTN_NM
-                       FROM ATCH_FILE_DTL WHERE ATCH_FILE_NM = ?""")) {
+                       FROM OS_ATCH_FILE_DTL WHERE ATCH_FILE_NM = ?""")) {
             ps.setString(1, "900004_1_깨진문서.hwp");
             try (ResultSet rs = ps.executeQuery()) {
                 assertTrue(rs.next());
@@ -261,7 +261,7 @@ class DbLoaderIT {
             }
         }
 
-        assertEquals(0, count("SELECT count(*) FROM NOTI_ITEM_VAL_DTL WHERE NOTI_SN = "
+        assertEquals(0, count("SELECT count(*) FROM OS_NOTI_ITEM_VAL_DTL WHERE NOTI_SN = "
                 + (NOTICE_BASE + 4)), "실패 건은 항목값을 남기지 않는다");
 
         // 실패 건에도 기관이 붙어야 한다 — 안 붙이면 그 기관의 실패가 "기관 미상"으로 새어
@@ -286,7 +286,7 @@ class DbLoaderIT {
              PreparedStatement ps = conn.prepareStatement("""
                      SELECT DSPS_SN, max(ITEM_VAL_CTNT) FILTER (WHERE NOTI_ITEM_CD = 'LOC') AS loc,
                             max(ITEM_VAL_CTNT) FILTER (WHERE NOTI_ITEM_CD = 'APLC_NM') AS who
-                       FROM NOTI_ITEM_VAL_DTL WHERE NOTI_SN = ?
+                       FROM OS_NOTI_ITEM_VAL_DTL WHERE NOTI_SN = ?
                       GROUP BY DSPS_SN ORDER BY DSPS_SN""")) {
             ps.setInt(1, NOTICE_BASE + 5);
             try (ResultSet rs = ps.executeQuery()) {
@@ -321,18 +321,18 @@ class DbLoaderIT {
             loader.loadAll(List.of(schema), List.of());
         }
 
-        assertEquals(3, count("SELECT count(DISTINCT DSPS_SN) FROM NOTI_ITEM_VAL_DTL"
+        assertEquals(3, count("SELECT count(DISTINCT DSPS_SN) FROM OS_NOTI_ITEM_VAL_DTL"
                 + " WHERE NOTI_SN = " + notice));
         // 면적은 두 행뿐인데도 장소와의 짝이 유지된다
-        assertEquals(2, count("SELECT count(*) FROM NOTI_ITEM_VAL_DTL"
+        assertEquals(2, count("SELECT count(*) FROM OS_NOTI_ITEM_VAL_DTL"
                 + " WHERE NOTI_SN = " + notice + " AND NOTI_ITEM_CD = 'AREA'"));
 
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement("""
                      SELECT max(ITEM_VAL_CTNT) FILTER (WHERE NOTI_ITEM_CD = 'AREA') AS area
-                       FROM NOTI_ITEM_VAL_DTL
+                       FROM OS_NOTI_ITEM_VAL_DTL
                       WHERE NOTI_SN = ? AND DSPS_SN = (
-                            SELECT DSPS_SN FROM NOTI_ITEM_VAL_DTL
+                            SELECT DSPS_SN FROM OS_NOTI_ITEM_VAL_DTL
                              WHERE NOTI_SN = ? AND NOTI_ITEM_CD = 'LOC' AND ITEM_VAL_CTNT = '여수')""")) {
             ps.setInt(1, notice);
             ps.setInt(2, notice);
@@ -344,7 +344,7 @@ class DbLoaderIT {
     }
 
     /**
-     * 입력 폴더에서 읽은 기관과 게시판이 AGNCY_BAS·NOTI_BAS로 들어가야 한다.
+     * 입력 폴더에서 읽은 기관과 게시판이 OS_INSTT_BAS·OS_NOTI_BAS로 들어가야 한다.
      *
      * <p>같은 기관이 게시판을 둘 운영하면 기관 행은 하나고 {@code BBS_STTS_CD}만 갈린다 —
      * 기관을 쪼개면 "목포시청 수집 현황"이 두 줄로 나뉜다.
@@ -361,12 +361,12 @@ class DbLoaderIT {
 
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT AGNCY_NM, AGNCY_KND_CD FROM AGNCY_BAS WHERE AGNCY_SN = ?")) {
+                     "SELECT INSTT_NM, INSTT_KND_CD FROM OS_INSTT_BAS WHERE INSTT_SN = ?")) {
             ps.setInt(1, AGENCY_BASE + 1);
             try (ResultSet rs = ps.executeQuery()) {
                 assertTrue(rs.next());
-                assertEquals("목포시청", rs.getString("AGNCY_NM"));
-                assertEquals("LOCL", rs.getString("AGNCY_KND_CD"));
+                assertEquals("목포시청", rs.getString("INSTT_NM"));
+                assertEquals("LOCL", rs.getString("INSTT_KND_CD"));
             }
         }
 
@@ -392,7 +392,7 @@ class DbLoaderIT {
         }
 
         assertEquals(0, agencyOf(NOTICE_BASE + 8), "기관 미상은 NULL로 남는다");
-        assertEquals(1, count("SELECT count(*) FROM ATCH_FILE_DTL WHERE NOTI_SN = "
+        assertEquals(1, count("SELECT count(*) FROM OS_ATCH_FILE_DTL WHERE NOTI_SN = "
                 + (NOTICE_BASE + 8)));
     }
 
@@ -407,9 +407,9 @@ class DbLoaderIT {
                     List.of(new AgencyRegistry.Agency(AGENCY_BASE + 2, "포항시청", "LOCL"))));
         }
 
-        assertEquals(1, count("SELECT count(*) FROM AGNCY_BAS WHERE AGNCY_SN = "
+        assertEquals(1, count("SELECT count(*) FROM OS_INSTT_BAS WHERE INSTT_SN = "
                 + (AGENCY_BASE + 2)));
-        assertEquals(0, count("SELECT count(*) FROM NOTI_BAS WHERE AGNCY_SN = "
+        assertEquals(0, count("SELECT count(*) FROM OS_NOTI_BAS WHERE INSTT_SN = "
                 + (AGENCY_BASE + 2)));
     }
 
@@ -434,14 +434,14 @@ class DbLoaderIT {
 
     /** 게시물의 기관번호를 읽는다(NULL이면 0). */
     private int agencyOf(int notiSn) throws SQLException {
-        return count("SELECT coalesce(AGNCY_SN, 0) FROM NOTI_BAS WHERE NOTI_SN = " + notiSn);
+        return count("SELECT coalesce(INSTT_SN, 0) FROM OS_NOTI_BAS WHERE NOTI_SN = " + notiSn);
     }
 
     /** 게시물의 게시판 구분을 읽는다(없으면 null). */
     private String boardOf(int notiSn) throws SQLException {
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT BBS_STTS_CD FROM NOTI_BAS WHERE NOTI_SN = ?")) {
+                     "SELECT BBS_STTS_CD FROM OS_NOTI_BAS WHERE NOTI_SN = ?")) {
             ps.setInt(1, notiSn);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getString(1) : null;
@@ -453,7 +453,7 @@ class DbLoaderIT {
     private String attribute(int notiSn, String attrCode) throws SQLException {
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT ITEM_VAL_CTNT FROM NOTI_ITEM_VAL_DTL WHERE NOTI_SN = ? AND NOTI_ITEM_CD = ?")) {
+                     "SELECT ITEM_VAL_CTNT FROM OS_NOTI_ITEM_VAL_DTL WHERE NOTI_SN = ? AND NOTI_ITEM_CD = ?")) {
             ps.setInt(1, notiSn);
             ps.setString(2, attrCode);
             try (ResultSet rs = ps.executeQuery()) {
@@ -466,7 +466,7 @@ class DbLoaderIT {
     private String label(int notiSn, String itemLblNm) throws SQLException {
         try (var conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT ITEM_VAL_CTNT FROM NOTI_LBL_VAL_DTL WHERE NOTI_SN = ? AND ITEM_LBL_NM = ?")) {
+                     "SELECT ITEM_VAL_CTNT FROM OS_NOTI_LBL_VAL_DTL WHERE NOTI_SN = ? AND ITEM_LBL_NM = ?")) {
             ps.setInt(1, notiSn);
             ps.setString(2, itemLblNm);
             try (ResultSet rs = ps.executeQuery()) {
@@ -478,7 +478,7 @@ class DbLoaderIT {
     /** 특정 처분(DSPS_SN)의 항목값 한 건을 읽는다 — 없으면 null. */
     private String attributeOf(int notiSn, int dspsSn, String attrCode) throws SQLException {
         try (var conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT ITEM_VAL_CTNT FROM NOTI_ITEM_VAL_DTL"
+             PreparedStatement ps = conn.prepareStatement("SELECT ITEM_VAL_CTNT FROM OS_NOTI_ITEM_VAL_DTL"
                      + " WHERE NOTI_SN = ? AND DSPS_SN = ? AND NOTI_ITEM_CD = ?")) {
             ps.setInt(1, notiSn);
             ps.setInt(2, dspsSn);

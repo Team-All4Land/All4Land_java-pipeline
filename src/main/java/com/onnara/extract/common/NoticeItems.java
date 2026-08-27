@@ -15,20 +15,25 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * 라벨 동의어 사전 + 라벨 정규화.
+ * 공고항목 사전 — 고시문 라벨을 표준항목으로 모은다.
+ *
+ * <p>{@link NoticeTypes}와 짝이다. 저쪽이 <b>문서의 종류</b>를 제목으로 판정한다면
+ * 이쪽은 <b>문서 안의 항목</b>을 라벨로 판정한다. 두 사전 모두 표준어 하나에 동의어 여럿을
+ * 매다는 같은 모양이고, {@code ReferenceSync}가 각각 {@code OS_NOTI_ITEM_TC}와
+ * {@code OS_NOTI_KND_TC}로 동기화한다.
  *
  * <p>고시문마다 같은 필드를 다른 라벨로 부르므로(예: 고시일자/공고일자),
  * 정규화한 라벨을 itemCd 필드명으로 매핑한다. 매핑 안 된 라벨은 extras에
  * 보존되며, 빈도가 쌓이면 사전에 추가한다(§9 동의어 보강 절차).
  *
- * <p>사전 본문은 {@code src/main/resources/synonyms.json}이 단일 정의처다 —
+ * <p>사전 본문은 {@code src/main/resources/notice_items.json}이 단일 정의처다 —
  * 필드 설명·예시까지 함께 담아 {@code dict} 서브커맨드가 검토용 문서를 생성한다.
  * 동의어는 사람이 읽는 형태로 적고 로드 시 {@link #normalizeLabel}로 정규화하므로,
  * 사전 편집자는 정규화 규칙을 몰라도 된다.
  *
  * <p>{@code work_period}는 가상 필드 — Mapper가 기간을 start/end로 분리한다.
  */
-public final class Synonyms {
+public final class NoticeItems {
 
     /** 기간 가상 필드명 — Mapper가 시작/종료로 분리하므로 레코드에는 그대로 남지 않는다. */
     public static final String WORK_PRD = "WORK_PRD";
@@ -42,11 +47,11 @@ public final class Synonyms {
     /** 문서 단위 메타 — attachments 테이블의 컬럼이 된다(고시번호·고시일자·제목·고시자·기관). */
     public static final String SCOPE_ATTACHMENT = "attachment";
 
-    /** 처분 단위 값 — NOTI_ITEM_VAL_DTL 테이블의 행이 된다(표준항목 40종). */
+    /** 처분 단위 값 — OS_NOTI_ITEM_VAL_DTL 테이블의 행이 된다(표준항목 40종). */
     public static final String SCOPE_ATTRIBUTE = "attribute";
 
     /** 사전 리소스 경로 — 클래스패스 기준. */
-    private static final String RESOURCE = "/synonyms.json";
+    private static final String RESOURCE = "/notice_items.json";
 
     // 선행 기호·번호: "□" "○" "※" "-" "·" 등 머리기호와 "1." "1)" "5 "(점 생략) "가." "①".
     // 머리기호는 겹쳐 나오기도 해("□ ○ 면적") 반복 허용한다.
@@ -84,13 +89,13 @@ public final class Synonyms {
      * @param itemCd   표준 필드명(= NoticeRecord 필드 키)
      * @param itemNm     사람이 읽는 필드 표시명
      * @param scope       저장 계층: {@link #SCOPE_ATTACHMENT}(문서 메타 → attachments 컬럼) 또는
-     *                    {@link #SCOPE_ATTRIBUTE}(처분 단위 값 → NOTI_ITEM_VAL_DTL 행).
-     *                    NOTI_ITEM_TC 테이블로 동기화되는 것은 후자뿐이다
+     *                    {@link #SCOPE_ATTRIBUTE}(처분 단위 값 → OS_NOTI_ITEM_VAL_DTL 행).
+     *                    OS_NOTI_ITEM_TC 테이블로 동기화되는 것은 후자뿐이다
      * @param series      같은 뜻을 문맥별로 다르게 부르는 항목들의 묶음(면적/기간/위치/인적/주소/
      *                    날짜/연락/사유). 누락 검증을 항목이 아니라 계열 단위로 하기 위한 축이며,
      *                    계열이 없는 단독 항목은 null
      * @param valTyCd     값의 성격 — 표준코드 CD_ITEM_VAL_TY(TEXT / DATE / DTRG / NUM).
-     *                    정규화 방식을 정하고 NOTI_ITEM_TC.ITEM_VAL_TY_CD로 동기화된다
+     *                    정규화 방식을 정하고 OS_NOTI_ITEM_TC.ITEM_VAL_TY_CD로 동기화된다
      * @param core        전역 주요 항목(전수 표본 출현율 60% 이상) 여부 — 누락 검증 가중치용
      * @param virtual     NoticeRecord에 대응 필드가 없는 가상 필드 여부(work_period)
      * @param description 필드가 무엇을 담는지에 대한 설명
@@ -105,7 +110,7 @@ public final class Synonyms {
                             List<String> synonyms, List<String> rawSynonyms,
                             List<String> examples, String notes) {
 
-        /** 이 필드가 처분 단위 값인지 — NOTI_ITEM_TC 동기화 대상 판정에 쓴다. */
+        /** 이 필드가 처분 단위 값인지 — OS_NOTI_ITEM_TC 동기화 대상 판정에 쓴다. */
         public boolean isAttribute() {
             return SCOPE_ATTRIBUTE.equals(scope);
         }
@@ -123,7 +128,7 @@ public final class Synonyms {
     }
 
     /** 인스턴스화 방지 — 정적 사전·함수만 제공하는 유틸리티 클래스. */
-    private Synonyms() {
+    private NoticeItems() {
     }
 
     /** 사전에 정의된 필드 목록을 파일 순서대로 반환한다(문서 생성용). */
@@ -159,16 +164,16 @@ public final class Synonyms {
      * 조용히 덮어써지는 매핑 충돌을 배포 전에 잡기 위함이다.
      */
     private static List<FieldSpec> loadFields(JsonNode root) {
-        JsonNode fieldsNode = root.path("fields");
-        if (!fieldsNode.isArray() || fieldsNode.isEmpty()) {
-            throw new IllegalStateException(RESOURCE + ": fields 배열이 비어 있습니다");
+        JsonNode itemsNode = root.path("items");
+        if (!itemsNode.isArray() || itemsNode.isEmpty()) {
+            throw new IllegalStateException(RESOURCE + ": items 배열이 비어 있습니다");
         }
 
         List<FieldSpec> specs = new ArrayList<>();
         Map<String, String> seenSynonyms = new LinkedHashMap<>();
         Set<String> seenCanonicals = new LinkedHashSet<>();
 
-        for (JsonNode node : fieldsNode) {
+        for (JsonNode node : itemsNode) {
             String itemCd = node.path("canonical").asText("").trim();
             if (itemCd.isEmpty()) {
                 throw new IllegalStateException(RESOURCE + ": canonical이 없는 필드 항목이 있습니다");
@@ -229,7 +234,7 @@ public final class Synonyms {
 
     /** 사전 리소스를 JSON 트리로 읽는다. 누락·파싱 실패는 기동 중단. */
     private static JsonNode readResource() {
-        try (InputStream in = Synonyms.class.getResourceAsStream(RESOURCE)) {
+        try (InputStream in = NoticeItems.class.getResourceAsStream(RESOURCE)) {
             if (in == null) {
                 throw new IllegalStateException("동의어 사전 리소스를 찾을 수 없습니다: " + RESOURCE);
             }

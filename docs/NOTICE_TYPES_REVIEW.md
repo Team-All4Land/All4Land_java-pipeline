@@ -57,7 +57,7 @@
 2. `src/main/resources/notice_types.json`의 `types`에 한 줄 추가합니다.
    `priority`는 낮게 잡습니다. 기존 규칙보다 먼저 걸리면 멀쩡히 가려지던 문서를 가로챕니다.
 3. `mvn test`로 기존 분류가 바뀌지 않았는지 확인합니다.
-4. 파이프라인을 다시 돌리면 `ReferenceSync`가 `NOTI_KND_TC`까지 반영합니다 —
+4. 파이프라인을 다시 돌리면 `ReferenceSync`가 `OS_NOTI_KND_TC`까지 반영합니다 —
    마이그레이션은 필요 없습니다.
 
 **자동 등록은 하지 않습니다.** 제목에서 코드를 만들어 넣으면 오타와 서식 변형이 각각

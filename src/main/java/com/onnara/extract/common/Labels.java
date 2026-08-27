@@ -126,7 +126,7 @@ public final class Labels {
      * {@value #MAX_EXTRA_LABEL_LEN}자 이하이고, 숫자가 없으며, 괄호 짝이 맞는
      * 경우만 채택한다(예: "…비응항(좌표", "(담당자" 제외).
      *
-     * @param normalizedLabel {@link Synonyms#normalizeLabel}을 거친 라벨
+     * @param normalizedLabel {@link NoticeItems#normalizeLabel}을 거친 라벨
      */
     public static boolean acceptableExtra(String normalizedLabel, String value) {
         if (normalizedLabel == null || normalizedLabel.isEmpty()

@@ -4,7 +4,12 @@
 텍스트·표·이미지를 추출하고, 표준 필드 스키마로 정규화한 뒤 **PostgreSQL DB에 적재**하는
 파이프라인의 **Java 구현** 구조.
 
-파이프라인 흐름·계약(raw JSON, 표준 스키마, DB 2테이블)은 Python 버전과 동일하다.
+파이프라인 흐름·계약(raw JSON, 표준 스키마, DB 적재)은 Python 버전과 동일하다.
+앞단에는 크롤러가 붙어 수집 결과 엑셀과 첨부파일 폴더를 내놓는다. 엑셀은 시트 3장이고
+그중 **수집결과**가 게시물(`OS_NOTI_BAS`)을, **검증요약**이 기관(`OS_INSTT_BAS`)과 크롤
+기록(`OS_CRWL_LOG_DTL`)을 채운다. 특이사항 시트는 수집결과의 파생이라 적재하지 않는다.
+기관·게시물의 정의처는 이 엑셀이고, 폴더명 파싱은 수동 수집분 폴백이다. 전자관보 게시물만은
+지자체명이 한 값("전자관보")이라 비고에서 발령 기관을 읽는다(`SourceFolder.gazetteAgencyOf`).
 단, **PaddleOCR-VL은 Java에서 직접 구동할 수 없으므로 Python CLI 스크립트로
 분리**하고, Java 파이프라인이 **서브프로세스로 실행**한다.
 
@@ -46,7 +51,8 @@ Mapper.mapToSchema (문단 메타·라벨 + 표 해석 결과 적용 + 값 정�
         ▼
 DbLoader (PostgreSQL JDBC + HikariCP)
         ▼
-PostgreSQL (AGNCY_BAS → NOTI_BAS → ATCH_FILE_DTL → NOTI_ITEM_VAL_DTL) + images/ 폴더
+PostgreSQL (OS_INSTT_BAS → OS_NOTI_BAS → OS_ATCH_FILE_DTL → OS_NOTI_ITEM_VAL_DTL) + images/ 폴더
+                    └ 기관별 크롤 기록은 OS_CRWL_LOG_DTL (OS_INSTT_BAS로 FK)
 ```
 
 핵심 원칙 유지: **판별(detect) → 추출(engine) → 매핑(common) → 적재(db) 4계층 분리**.
@@ -103,7 +109,7 @@ extract-java/
 │   │   ├── ImageFormats.java    #   저장 확장자 판별 — 매직바이트 + 컨테이너 힌트 폴백 (§4.2)
 │   │   ├── DocumentSize.java    #   본문 글자 수 측정 (문단 + 표 셀, 공백 제외)
 │   │   ├── LoadPolicy.java      #   적재 여부 판정 — 안내문류 차단 (map.max-body-chars, §5)
-│   │   ├── Synonyms.java        #   동의어 사전 로더(resources/synonyms.json) + normalizeLabel
+│   │   ├── NoticeItems.java        #   공고항목 사전 로더(resources/notice_items.json) + normalizeLabel
 │   │   ├── Labels.java          #   "라벨 : 값" 줄 스캔 + extras 라벨 채택 기준 (문단·표 공용)
 │   │   ├── Mapper.java          #   mapToSchema(RawDocument) → SchemaResult
 │   │   ├── Heuristics.java      #   고시문 제목 추정(guessTitleFromTables), 캡션 매칭
@@ -111,7 +117,7 @@ extract-java/
 │   │   └── Address.java         #   주소 추출 휴리스틱
 │   │
 │   ├── docs/                    # ★ 검토용 문서 생성 (사전·미매핑 라벨 리포트)
-│   │   ├── SynonymsDoc.java     #   synonyms.json → docs/SYNONYMS.md
+│   │   ├── NoticeItemsDoc.java     #   notice_items.json → docs/NOTICE_ITEMS.md
 │   │   └── ExtrasReport.java    #   *.schema.json 집계 → docs/EXTRAS_REVIEW.md
 │   │
 │   ├── engine/                  # ★ 2차 분기: 확장자별 네이티브 추출 엔진
@@ -146,11 +152,11 @@ extract-java/
 │
 ├── .env.example                # 리눅스 서버 배포용 환경변수 예시 (.env로 복사; 우선순위 OS 환경변수 > .env > properties)
 ├── docs/                       # 생성 문서 (dict 서브커맨드 산출물 — 손으로 고치지 않는다)
-│   ├── SYNONYMS.md             #   동의어 사전 검토 문서
+│   ├── NOTICE_ITEMS.md             #   동의어 사전 검토 문서
 │   └── EXTRAS_REVIEW.md        #   미매핑 라벨 빈도 + 표준 필드 채움률
 ├── src/main/resources/
 │   ├── application.properties   # db.url=jdbc:postgresql://... , 풀 설정, ocr.cli.* 등 (기본값)
-│   ├── synonyms.json           # ★ 동의어 사전 본문 (단일 정의처 — 설명·예시 포함)
+│   ├── notice_items.json           # ★ 공고항목 사전 (단일 정의처 — 동의어·설명·예시 포함)
 │   └── db/migration/           # Flyway 마이그레이션 (V1__init.sql = §6 DDL — 도메인 18 + 7테이블)
 │
 ├── src/test/java/...            # JUnit 5 — detect / mapper / 각 extractor / scan / db
@@ -262,6 +268,31 @@ hwpxlib은 `"Invalid byte 1 of 1-byte UTF-8 sequence"`를 던진다. 예외 메�
 집계는 `ScanSurvey.byFailureKind(sampleLimit)`가 갈래별 건수와 예시 파일로 낸다.
 `detect --failures <경로>`는 실패 전건을 JSON으로 떨궈 재처리 대상을 그대로 넘길 수 있게 한다.
 
+#### 갈래별 대응
+
+무엇이 실패했는지는 `docs/DB_STANDARD.md`의 `CD_FAIL_KND`가 코드와 이름으로 갖고 있다.
+여기 적는 것은 **그래서 무엇을 해야 하는가**다 — 코드 사전이 담을 수 없는 정보다.
+
+| 갈래 | 뜻 | 대응 |
+|---|---|---|
+| `HWP3_LEGACY` | 한글 3.0인데 자체 파서가 못 읽음 | 손상 여부 확인(구버전이라서가 아님) |
+| `NOT_COMPOUND_FILE` | `.hwp`인데 아는 서명이 하나도 없음 | 헤더 손상 또는 지원 대상 아닌 형식 |
+| `NOT_ZIP` | `.hwpx`인데 아는 서명이 하나도 없음 | 헤더 손상 또는 지원 대상 아닌 형식 |
+| `PASSWORD_PROTECTED` | 열기 암호(HWP 암호설정 비트 / HWPX PBKDF2) | 암호 해제본 확보 — **한글에서도 안 열림** |
+| `DRM_PROTECTED` | DRM 보안 문서 | **사용자도 못 엶** — DRM 해제본 확보 |
+| `DISTRIBUTION_UNSUPPORTED` | 배포용인데 본문 해석 실패 | 개별 확인 — 암호 문제가 아님 |
+| `ENCRYPTED` | 암호화는 분명한데 갈래 미상 | 원본 상태 확인 |
+| `ZIP_CORRUPT` / `XML_PARSE` | 컨테이너·본문 XML 손상 | 원본 재수집 |
+| `DOCUMENT_PARSE` | 컨테이너는 정상, 내부 구조에서 깨짐 | 개별 확인(라이브러리 미지원 레코드일 수 있음) |
+| `PDF_LOAD` | PDF를 열지 못함 | 서명 유무를 상세에서 확인 |
+| `EMPTY_FILE` / `FILE_ACCESS` | 0바이트 / 경로·권한 문제 | 수집 단계 점검 |
+| `OUT_OF_MEMORY` | 파일 하나가 힙을 다 씀 | `-Xmx` 상향 또는 해당 파일 제외 |
+
+갈래는 **파일 앞부분의 매직바이트**(라우팅과 같은 `DocFormat`)와 **원인 체인의 맨 끝 예외**
+
+`OUT_OF_MEMORY`가 갈래로 있는 이유는 `ScanSurvey.of`가 `Exception`이 아니라 `Throwable`을
+잡기 때문이다. 파일 하나가 힙을 다 써도 그 건만 세고 배치는 계속 간다.
+
 ## 4. 공통 계약: raw JSON 형식 (Python 버전과 동일)
 
 모든 추출 경로(네이티브 Extractor, OCR CLI 결과)는 아래 형식을 출력해야 한다.
@@ -291,7 +322,7 @@ Java에서는 `common/model/RawDocument.java`(Jackson)가 이 계약의 단일 �
 - `caption`(표·이미지)은 선택 필드다. **캡션이 없으면 키 자체가 나오지 않는다**
   (`@JsonInclude(NON_NULL)`) — 그래야 캡션 없는 문서의 산출물이 이 필드가 생기기 전과
   바이트 단위로 같아 Python 호환이 유지된다(§4.2).
-- 이미지 `path`(저장된 이미지의 절대경로)는 DB 적재(`ATCH_IMG_DTL.IMG_FILE_PATH`)에 필요하므로 필수.
+- 이미지 `path`(저장된 이미지의 절대경로)는 DB 적재(`OS_ATCH_IMG_DTL.IMG_FILE_PATH`)에 필요하므로 필수.
   `ocr_text`는 선택 필드 — 현재 Java 파이프라인은 채우지 않지만 계약 호환을 위해 유지.
 - 이미지 추출 대상 판정(§4.1): 정보가 없는 이미지·도장은 저장하지 않는다.
   스캔본은 CLI 측 seal 레이블에 맡긴다.
@@ -541,44 +572,83 @@ span이 없으면(PDF·OCR) 옆 칸과 내용이 같은 것을 병합으로 간�
 
 ## 6. DB 스키마 (PostgreSQL — resources/db/migration/)
 
-기관 → 게시물 → 첨부파일 → (처분) 항목값의 4계층 EAV 스키마다. `DbLoader`가 PostgreSQL
-JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
-(`resources/db/standard_terms.json`)에 맞춰 표준도메인과 7테이블을 세운다. 스키마를 고칠
-때는 파일을 얹지 않고 `V1`을 고친 뒤 DB를 다시 만든다(README "개발 DB 초기화").
+기관 → 게시물 → 첨부파일 → (처분) 항목값의 4계층 EAV 스키마이고, 옆에 크롤 실행 기록이
+하나 붙는다. `DbLoader`가 PostgreSQL JDBC 드라이버로 적재하고, `V1__init.sql` 하나가
+DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 20개와 9테이블을 세운다. 스키마를 고칠
+때는 파일을 얹지 않고 `V1`을 고친 뒤 DB를 다시 만든다(§6.5).
 
-**ERD와 컬럼별 설명은 [README의 데이터베이스 스키마 절](README.md#데이터베이스-스키마-postgresql)에
-있다.** 여기서는 구성만 적는다 — 같은 표를 두 문서에 옮겨 적으면 반드시 한쪽이 뒤처진다.
+**ERD와 엔터티 목록은 [README의 데이터 모델 절](README.md#데이터-모델)에 있다.** 여기서는 구성만 적는다 — 같은 표를 두 문서에 옮겨 적으면 반드시 한쪽이 뒤처진다.
 
 ### 6.1 이름 규칙
 
 물리명은 `[수식어] + … + [분류어]` 조합이고 마지막 낱말(분류어)이 도메인을 지시한다
-(`NM` → `D_NM` = `VARCHAR(300)`). 테이블은 접두사 없이 `[의미] + [유형 접미사]`이며
+(`NM` → `D_NM` = `VARCHAR(300)`). 테이블은 `[업무코드]_[의미]_[유형 접미사]`이고 업무코드는
+해양공간을 뜻하는 `OS`다(데이터 표준화 지침 OFBD-2210-01 §3.2.3). 제약조건·인덱스는
+`[테이블명]_PK` · `[테이블명]_FK01` · `[테이블명]_IX01` 형식이며
 기준 `_BAS` · 명세 `_DTL` · 코드 `_TC`를 쓴다. 낱말·도메인·용어·코드는 전부
 `standard_terms.json`이 단일 정의처이고, `DbStandardTest`가 DDL과 대조한다.
 
 ### 6.2 구성
 
-**기관** `AGNCY_BAS` — 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다
+**기관** `OS_INSTT_BAS` — 고시·공고를 수집한 기관 게시판. 입력 폴더 하나가 한 행이다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
-| 기관일련번호 | `AGNCY_SN` | `D_SN` | PK
-| 기관명 | `AGNCY_NM` | `D_NM` |
-| 기관종류코드 | `AGNCY_KND_CD` | `D_CD` |
+| 기관일련번호 | `INSTT_SN` | `D_SN` | PK
+| 기관명 | `INSTT_NM` | `D_NM` |
+| 기관종류코드 | `INSTT_KND_CD` | `D_CD` |
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**고시공고게시물** `NOTI_BAS` — 게시물. 크롤링 대상이 첨부파일뿐이라 게시물 자체의 정보는 없고 같은 게시물의 첨부를 묶는 키로만 쓴다
+**고시공고게시물** `OS_NOTI_BAS` — 게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
-| 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK
-| 기관일련번호 | `AGNCY_SN` | `D_SN` |
+| 고시공고일련번호 | `NOTI_SN` | `D_SN` | PK · 엑셀의 번호
+| 기관일련번호 | `INSTT_SN` | `D_SN` |
 | 게시상태코드 | `BBS_STTS_CD` | `D_CD` |
+| 원문키내용 | `SRC_KEY_CTNT` | `D_CTNT` |
+| 원문키해시 | `SRC_KEY_HASH` | `D_HASH` | UNIQUE · 중복 수집 차단
+| 게시물URL | `BBS_URL` | `D_URL` |
+| 게시물제목 | `BBS_TTL` | `D_TTL` |
+| 크롤종류코드 | `CRWL_KND_CD` | `D_CD` |
+| 담당부서명 | `CHRG_DEPT_NM` | `D_NM` |
+| 담당자명 | `CHRG_PSN_NM` | `D_NM` |
+| 전화번호 | `TEL_NO` | `D_NO` |
+| 고시번호 | `NOTI_NO` | `D_NO` | 게시판이 표기한 값
+| 고시일자 | `NOTI_DT` | `D_DT` | 게시판이 표기한 값
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**공고종류** `NOTI_KND_TC` — 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다
+크롤러가 준 컬럼에는 `NOT NULL`이 없다 — 크롤 산출물이 아닌 파일은 음수 `NOTI_SN`으로
+같은 테이블에 들어오고 그 행에는 원문키도 URL도 없다.
+
+**크롤로그** `OS_CRWL_LOG_DTL` — 하루치 수집에서 기관 하나를 긁은 결과
+
+| 논리명 | 물리명 | 도메인 | 엑셀 출처 |
+|---|---|---|---|
+| 크롤로그일련번호 | `CRWL_LOG_SN` | `D_SN` | PK
+| 기관일련번호 | `INSTT_SN` | `D_SN` | FK · 번호
+| 크롤일자 | `CRWL_DT` | `D_DT` | 이 수집이 돈 날
+| 크롤종류코드 | `CRWL_KND_CD` | `D_CD` | (엑셀에 없음)
+| 크롤상태코드 | `CRWL_STTS_CD` | `D_CD` | 판정
+| 크롤단계코드 | `CRWL_STEP_CD` | `D_CD` | 실패 시
+| 기관게시판URL | `INSTT_BBS_URL` | `D_URL` | 사이트 URL
+| 고시공고건수 | `NOTI_CNT` | `D_CNT` | 고시공고 건수
+| 첨부파일건수 | `ATCH_FILE_CNT` | `D_CNT` | 첨부파일 다운로드 건수
+| 실패메시지내용 | `FAIL_MSG_CTNT` | `D_CTNT` | 실패 시
+| 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
+| 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
+
+크롤러만 아는 것(자기 집계·상태·언제 돌았나)만 담는다. 수집 기간은 `min/max(OS_NOTI_BAS.NOTI_DT)`로
+그대로 나오고, 게시상태는 운영 단계에서 전부 `POST`라 가를 값이 없어 둘 다 빼냈다 —
+게시완료 게시판까지 뒤진 것은 과거 데이터를 전수로 긁던 첫 수집 때뿐이고 그건 이미 끝났다.
+성공도 행으로 남긴다 — 실패만 적재하면 "돌았는데 새 고시가 없었다"와 "아예 안 돌았다"가
+둘 다 "행 없음"이 돼 조용한 수집 누락을 못 잡는다. `INSTT_SN`은 FK다: 이 레포는 결과가
+0건이어도 기관을 등록하므로(`AgencyRegistry`) FK가 막을 일이 없고, 그래서 기관명을 여기
+중복해 담지 않는다.
+
+**공고종류** `OS_NOTI_KND_TC` — 공고종류 56종. 한 기관이 평균 12종을 발행하므로 기관으로는 종류를 구분할 수 없다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -588,7 +658,7 @@ JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**공고항목** `NOTI_ITEM_TC` — 표준항목 40종. synonyms.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다
+**공고항목** `OS_NOTI_ITEM_TC` — 표준항목 40종. notice_items.json이 단일 정의처이며 ReferenceSync가 기동 시 upsert한다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -600,7 +670,7 @@ JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**첨부파일** `ATCH_FILE_DTL` — 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
+**첨부파일** `OS_ATCH_FILE_DTL` — 파일 1건. 문서 단위 메타(고시번호·고시일자·제목)와 추출 상태
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -623,7 +693,7 @@ JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**첨부이미지** `ATCH_IMG_DTL` — 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다
+**첨부이미지** `OS_ATCH_IMG_DTL` — 이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -635,7 +705,7 @@ JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
-**공고항목값** `NOTI_ITEM_VAL_DTL` — 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다
+**공고항목값** `OS_NOTI_ITEM_VAL_DTL` — 항목값. 40개 표준항목을 전부 동등하게 행으로 담는다
 
 | 논리명 | 물리명 | 도메인 | |
 |---|---|---|---|
@@ -655,13 +725,139 @@ JDBC 드라이버로 적재하고, `V1__init.sql` 하나가 DB 표준 사전
   정리되므로 재적재가 안전하다.
 - **실패·적재제외도 행으로 남긴다**(`PROC_STTS_CD`). 성공만 적재하면 "첨부 401건 중 추출
   0건"인 기관이 DB에서 아예 보이지 않는다.
-- **사전 동기화(`ReferenceSync`)가 적재보다 먼저** 돈다 — `NOTI_ITEM_VAL_DTL`이
-  `NOTI_ITEM_TC`를 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
-  기관도 같은 이유로 첨부보다 먼저 넣는다(`NOTI_BAS.AGNCY_SN`가 FK).
+- **사전 동기화(`ReferenceSync`)가 적재보다 먼저** 돈다 — `OS_NOTI_ITEM_VAL_DTL`이
+  `OS_NOTI_ITEM_TC`를 참조하므로 순서가 뒤바뀌면 첫 적재가 FK 위반으로 실패한다.
+  기관도 같은 이유로 첨부보다 먼저 넣는다(`OS_NOTI_BAS.INSTT_SN`가 FK).
 - **스키마 마이그레이션은 Flyway**로 관리한다(`resources/db/migration/V*.sql`). 런타임에
   `ALTER TABLE`로 컬럼을 자동 추가하지 않고 버전 파일을 얹어 이력을 남긴다.
 - 배치 적재는 **트랜잭션 + `addBatch`/`executeBatch`**로 수행하고, 파일 단위 실패는
   세이브포인트 롤백 후 다음 파일로 계속 진행한다(배치 격리).
+
+### 6.4 자주 쓰는 질의
+
+미수집 첨부는 컬럼이 아니라 **첨부순번 결번**으로 잡습니다:
+
+```sql
+SELECT NOTI_SN, count(*) AS 수집, max(ATCH_SN) AS 최대순번
+  FROM OS_ATCH_FILE_DTL GROUP BY NOTI_SN HAVING count(*) <> max(ATCH_SN);
+```
+
+어느 라벨을 사전에 올릴지는 이 한 줄로 고릅니다 — 전에는 `dict --review`로 문서를 다시 만들어야
+보이던 것입니다:
+
+```sql
+SELECT ITEM_LBL_NM, count(*) AS 건수, count(DISTINCT NOTI_SN) AS 문서수
+  FROM OS_NOTI_LBL_VAL_DTL GROUP BY 1 ORDER BY 2 DESC LIMIT 20;
+```
+
+기관별 수집 현황은 폴더명이 채운 `INSTT_SN`로 봅니다:
+
+```sql
+-- 기관·게시판별 수집·성공 건수
+SELECT A.INSTT_NM, A.INSTT_KND_CD, N.BBS_STTS_CD,
+       count(*) AS 첨부, count(*) FILTER (WHERE F.PROC_STTS_CD = 'OK') AS 성공
+  FROM OS_ATCH_FILE_DTL F JOIN OS_NOTI_BAS N USING (NOTI_SN) JOIN OS_INSTT_BAS A USING (INSTT_SN)
+ GROUP BY 1, 2, 3 ORDER BY 1, 3;
+
+-- 긁긴 했는데 첨부가 한 건도 없는 기관
+SELECT A.INSTT_NM FROM OS_INSTT_BAS A
+  LEFT JOIN OS_NOTI_BAS N USING (INSTT_SN) WHERE N.NOTI_SN IS NULL;
+
+-- 기관이 안 붙은 게시물 = 입력 루트 직속이거나 폴더명 규약 위반
+SELECT count(*) FROM OS_NOTI_BAS WHERE INSTT_SN IS NULL;
+```
+
+"긁긴 했는데 아무것도 못 건진 기관"과 "아예 못 긁은 기관"은 크롤로그로 갈립니다 —
+첨부 테이블만 봐서는 둘이 똑같이 0건으로 보입니다:
+
+```sql
+-- 어느 단계에서 몇 번 넘어졌나
+SELECT A.INSTT_NM, L.CRWL_STEP_CD, count(*) AS 실패
+  FROM OS_CRWL_LOG_DTL L LEFT JOIN OS_INSTT_BAS A USING (INSTT_SN)
+ WHERE L.CRWL_STTS_CD = 'FAIL' GROUP BY 1, 2 ORDER BY 3 DESC;
+
+-- 크롤은 성공했는데 게시물이 한 건도 안 생긴 기관
+SELECT DISTINCT A.INSTT_NM
+  FROM OS_CRWL_LOG_DTL L JOIN OS_INSTT_BAS A USING (INSTT_SN)
+  LEFT JOIN OS_NOTI_BAS N USING (INSTT_SN)
+ WHERE L.CRWL_STTS_CD = 'OK' AND N.NOTI_SN IS NULL;
+
+-- 크롤러가 지금까지 수집했다고 집계한 누계 vs 실제 적재된 누계 = 수집 누락 후보.
+-- 두 쪽을 각각 접은 뒤 견준다 — 로그와 게시물을 곧장 조인하면 행이 서로 곱해진다.
+WITH 크롤러 AS (SELECT INSTT_SN, sum(NOTI_CNT) AS 집계 FROM OS_CRWL_LOG_DTL GROUP BY 1),
+     실제   AS (SELECT INSTT_SN, count(*) AS 건수
+                  FROM OS_NOTI_BAS WHERE INSTT_SN IS NOT NULL GROUP BY 1)
+SELECT A.INSTT_NM, c.집계, coalesce(r.건수, 0) AS 실제
+  FROM 크롤러 c JOIN OS_INSTT_BAS A USING (INSTT_SN)
+  LEFT JOIN 실제 r USING (INSTT_SN)
+ WHERE c.집계 <> coalesce(r.건수, 0);
+
+-- 오늘 안 돈 기관 = 스케줄 누락
+SELECT A.INSTT_NM FROM OS_INSTT_BAS A
+ WHERE NOT EXISTS (SELECT 1 FROM OS_CRWL_LOG_DTL L
+                    WHERE L.INSTT_SN = A.INSTT_SN AND L.CRWL_DT = current_date);
+```
+
+08.07 산출물을 실제로 밀어 넣으면 첫 질의가 **2건**을 돌려줍니다 — 영광군청 465/466과
+양양군청 120/121입니다. 나머지 71개 기관은 크롤러 집계와 적재 행수가 정확히 맞습니다.
+
+### 6.5 개발 DB 초기화
+
+스키마를 고쳤거나(=`V1__init.sql`을 손댔거나) 이전 버전 스키마가 남아 있으면 DB를 비우고
+다시 만듭니다. 이관 SQL은 없습니다 — 파이프라인이 원본 파일에서 전건을 다시 만들어 내므로
+DB는 파생물입니다.
+
+```bash
+# 1) 스키마를 통째로 비우고 다시 만든다
+psql -U extract -d extract -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+
+# 2) 파이프라인이 기동하면서 Flyway가 V1을 적용한다 (DDL을 손으로 돌릴 일은 없습니다)
+java -jar target/extract-pipeline-1.0.0.jar pipeline -i input -o out
+```
+
+**테이블만 지우면 안 됩니다.** 표준도메인(`D_SN`·`D_CD` …)과 `FC_OS_ISO_DATERANGE` 함수는 테이블이
+아니라 스키마 객체라 `DROP TABLE`로는 사라지지 않고, 남아 있으면 재적용이 이렇게 죽습니다:
+
+```
+ERROR: type "d_sn" already exists
+```
+
+Flyway 이력 테이블(`flyway_schema_history`)도 함께 지워져야 `V1`이 다시 돕니다.
+`DROP SCHEMA public CASCADE`는 이 셋을 한 번에 처리합니다.
+
+비었는지 확인하려면:
+
+```
+\dt    -- 테이블 0개 ("Did not find any relations.")
+\dD    -- 도메인 0개
+\df    -- 함수 0개
+```
+
+**`must be owner of schema public`이 나면** 스키마 소유자가 아닙니다. 슈퍼유저로 한 번
+넘겨주거나, 아래처럼 DB를 통째로 다시 만듭니다.
+
+```bash
+psql -U postgres -d extract -c 'ALTER SCHEMA public OWNER TO extract;'
+```
+
+**DB를 통째로 다시 만들 때**는 접속 세션이 남아 있으면 `DROP DATABASE`가 실패하므로 먼저
+끊습니다.
+
+```bash
+psql -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+                      WHERE datname = 'extract' AND pid <> pg_backend_pid();"
+psql -U postgres -c 'DROP DATABASE extract;' \
+                 -c 'CREATE DATABASE extract OWNER extract;'
+```
+
+> **되돌리기는 없습니다.** Flyway Community에는 undo가 없으므로 스키마를 고치는 길은 위
+> 재생성 하나뿐입니다. `V1`을 고쳤는데 DB를 안 지우면 Flyway가 체크섬 불일치로 **적재 전에**
+> 멈추므로 데이터는 건드리지 않습니다 — 아래 메시지를 보면 DB를 다시 만들면 됩니다.
+>
+> ```
+> Validate failed: Migrations have failed validation
+> Migration checksum mismatch for migration version 1
+> ```
 
 
 ## 7. OCR CLI 계약 (PaddleOCR-VL CLI ↔ ScanOcrRunner)
@@ -708,7 +904,7 @@ Python 의존성을 최소화한다.
 
 **OCR 경로는 스캔 판정(§3) 파일 전용이다.** 네이티브 문서에 붙임 현장사진·위치도·표
 캡처가 들어 있어도 `PipelineSupport`는 그 이미지를 `images/`에 저장하고 `images` 메타
-(`ATCH_IMG_DTL` 적재용)만 기록한다 — 서브프로세스를 띄우지 않는다.
+(`OS_ATCH_IMG_DTL` 적재용)만 기록한다 — 서브프로세스를 띄우지 않는다.
 
 한동안은 네이티브 경로에서도 삽입 이미지를 OCR해 본문 뒤에 이어 붙였다. 그 방식은
 다음을 대가로 치렀고, 그래서 걷어냈다.
@@ -724,7 +920,7 @@ Python 의존성을 최소화한다.
 
 그 대가로 포기하는 것은 분명히 적어 둔다: **본문이 사진 안에만 있는 네이티브 문서는 그
 내용이 추출되지 않는다.** 사진 속 텍스트가 필요해지면 별도 단계로 다루고(적재된
-`ATCH_IMG_DTL.IMG_FILE_PATH`로 이미지에 접근할 수 있다), 추출 본문에 섞지 않는다.
+`OS_ATCH_IMG_DTL.IMG_FILE_PATH`로 이미지에 접근할 수 있다), 추출 본문에 섞지 않는다.
 
 - **실패 등급**: 스캔본은 이미지가 유일한 본문 출처라 OCR 실패를 `[실패]`로 격리한다.
   네이티브 경로에는 OCR이 없으므로 스크립트 부재가 영향을 주지 않는다.
@@ -752,7 +948,7 @@ java -jar extract.jar <서브커맨드> [옵션]
 | `render raw.json\|폴더 -o out/` | 표 복원 전용 (raw JSON → HTML, 검수용 — §5.2) |
 | `map raw.json -o out/` | 매핑 전용 (raw JSON → 스키마 JSON) |
 | `load out/*.schema.json` | DB 적재 전용 (재적재·스키마 변경 시 단독 실행) |
-| `dict [-o docs/SYNONYMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 (§9.1) |
+| `dict [-o docs/NOTICE_ITEMS.md] [--review out/]` | 동의어 사전·미매핑 라벨 검토 문서 생성 (§9.1) |
 
 - 공통 옵션 의미는 Python 버전과 동일 (`--raw`: 원시 결과 포함,
   `--tables`: 표 해석 중간 결과 포함, `--no-images`: 이미지 저장 생략).
@@ -801,7 +997,7 @@ java -jar extract.jar <서브커맨드> [옵션]
 3. **레지스트리 연결**: `ExtractorRegistry`에 등록. CLI·pipeline은 수정 불필요
    (확장자 라우팅이 레지스트리 기반이므로).
 4. **동의어 보강**: 새 문서에서 매핑 안 된 라벨이 `extras`에 남으면
-   `src/main/resources/synonyms.json`에 추가 (절차는 §9.1).
+   `src/main/resources/notice_items.json`에 추가 (절차는 §9.1).
 5. **DB는 수정 불필요**: raw JSON 계약만 지키면 `DbLoader`가 그대로 동작.
 6. **테스트**: `src/test/resources/fixtures/`에 픽스처 추가, JUnit 회귀 테스트 작성.
    Python 버전 픽스처를 공유해 두 구현의 결과를 교차 검증.
@@ -812,20 +1008,20 @@ java -jar extract.jar <서브커맨드> [옵션]
 기관마다 같은 필드를 다른 라벨로 부른다(`고시일자` / `공고일자` / `공시일자`).
 문서를 일일이 보고 판별하는 대신, **매핑 안 된 라벨을 전량 모아 빈도로 판단**한다.
 
-사전 본문은 `src/main/resources/synonyms.json` 하나다. Java 코드에 사전을 두지 않는
+사전 본문은 `src/main/resources/notice_items.json` 하나다. Java 코드에 사전을 두지 않는
 이유는 검토자가 코드를 열지 않고 고칠 수 있어야 하고, 필드 설명·예시를 사전과 같은
 곳에 두어야 문서와 사전이 어긋나지 않기 때문이다.
 
 ```
 1) 전량 처리        java -jar extract.jar pipeline -i input/ -o out/ --tables
 2) 리포트 생성      java -jar extract.jar dict --review out/
-                    → docs/SYNONYMS.md       (사전 검토 문서)
+                    → docs/NOTICE_ITEMS.md       (사전 검토 문서)
                     → docs/EXTRAS_REVIEW.md  (미매핑 라벨 빈도 + 필드 채움률)
 3) 검토·판단        빈도 높은 라벨이 기존 필드와 같은 뜻인가?
                       같음   → 해당 필드의 synonyms에 추가
                       다름   → 여러 기관에서 반복되면 새 표준 컬럼 승격 검토
                       드묾   → extras에 두고 다음 검토 때 재확인
-4) 사전 수정        src/main/resources/synonyms.json
+4) 사전 수정        src/main/resources/notice_items.json
 5) 회귀 확인        mvn test   (중복 등재는 기동 시 오류로 중단됨)
 6) 재적재           pipeline 재실행 — 파일 단위 멱등 적재라 기존 문서도 갱신되어
                     extras에 있던 값이 표준 컬럼으로 승격된다
