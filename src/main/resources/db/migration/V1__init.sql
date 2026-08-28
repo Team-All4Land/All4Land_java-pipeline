@@ -219,7 +219,7 @@ CREATE TABLE OS_CRWL_LOG_DTL (
         REFERENCES OS_INSTT_BAS(INSTT_SN)
 );
 COMMENT ON TABLE OS_CRWL_LOG_DTL IS
-    '크롤로그 — 하루치 수집에서 기관 하나를 긁은 결과. 성공도 행으로 남겨 "오늘 이 기관을 돌았나"에 답한다. 크롤러만 아는 것(자기 집계·상태·언제 돌았나)만 담고, OS_NOTI_BAS에서 유도되는 값은 담지 않는다';
+    '크롤로그 — 하루치 수집에서 기관 하나를 긁은 결과. 성공도 행으로 남겨 "오늘 이 기관을 돌았나"에 답한다. 크롤러만 아는 것(자기 집계·상태·언제 돌았나)만 담고, OS_NOTI_BAS에서 유도되는 값은 담지 않는다. 쌓기만 하고 고치지 않는 로그라 감사 컬럼을 면제받는다 — 시간 축은 CRWL_DT 하나다';
 COMMENT ON COLUMN OS_CRWL_LOG_DTL.CRWL_LOG_SN IS
     '크롤로그일련번호 — 크롤러가 발급한 값을 그대로 받는다. 크롤러 쪽은 BIGSERIAL이지만 하루에 기관 수(현재 90) 규모라 일련번호(INTEGER)로 넘칠 일이 없다. 여기서 BIGINT 도메인을 새로 만들면 분류어 SN이 도메인 둘을 가리켜 표준이 무너진다';
 COMMENT ON COLUMN OS_CRWL_LOG_DTL.INSTT_SN IS
