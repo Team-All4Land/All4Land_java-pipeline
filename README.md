@@ -180,13 +180,10 @@ erDiagram
         D_DT   CRWL_DT           "크롤일자 · 이 수집이 돈 날"
         D_CD   CRWL_KND_CD       "크롤종류코드 · SAMPLE / FULL_CRAWL / DAILY_NEW"
         D_CD   CRWL_STTS_CD      "크롤상태코드 · OK 수집완료 / FAIL 실패"
-        D_CD   CRWL_STEP_CD      "크롤단계코드 · 넘어진 단계, 성공 행은 비어 있음"
         D_URL  INSTT_BBS_URL     "기관게시판URL · 긁은 게시판 목록 주소"
         D_CNT  NOTI_CNT          "고시공고건수 · 크롤러 집계, 실제 행수와 대조용"
         D_CNT  ATCH_FILE_CNT     "첨부파일건수 · 크롤러가 내려받은 첨부 수"
         D_CTNT FAIL_MSG_CTNT     "실패메시지내용 · 실패 원인"
-        D_DTM  FRST_REG_DTM      "최초등록일시"
-        D_DTM  LAST_CHG_DTM      "최종변경일시"
     }
     OS_ATCH_FILE_DTL["첨부파일 · OS_ATCH_FILE_DTL"] {
         D_SN   NOTI_SN            PK,FK "고시공고일련번호"

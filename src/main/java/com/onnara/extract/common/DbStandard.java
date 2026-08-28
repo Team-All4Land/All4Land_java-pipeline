@@ -22,14 +22,21 @@ import java.util.Set;
  * <p><b>로드 시점에 사전 자체의 정합성을 검증한다.</b> 사전이 틀린 채 통과하면 그 사전으로
  * 검증한 DDL도 함께 틀리므로, 여기서 막지 않으면 검증이 있다는 착각만 남는다. 검증 항목:
  * 논리명·물리명 1:1, 모든 물리명이 표준단어로만 분해됨, 분류어가 지시하는 도메인과 용어의
- * 도메인 일치, 테이블 구성 컬럼이 전부 등록된 용어임, 감사 컬럼 존재, 예약어 회피.
+ * 도메인 일치, 테이블 구성 컬럼이 전부 등록된 용어임, 감사 컬럼 존재(면제 선언은 양방향으로),
+ * 예약어 회피.
  */
 public final class DbStandard {
 
     /** 사전 리소스 경로 — 클래스패스 기준. */
     private static final String RESOURCE = "/db/standard_terms.json";
 
-    /** 전 테이블에 같은 이름으로 강제하는 공통 관리(감사) 컬럼. */
+    /**
+     * 전 테이블에 같은 이름으로 강제하는 공통 관리(감사) 컬럼.
+     *
+     * <p>예외는 사전이 {@code "audit": false}로 선언한 테이블뿐이다 — 쌓기만 하고 고치지
+     * 않는 로그는 최종변경일시가 최초등록일시와 영원히 같아 두 컬럼이 아무것도 알려 주지
+     * 못한다. 면제를 선언해 놓고 컬럼을 남겨 두는 것도 오류로 잡는다.
+     */
     public static final List<String> AUDIT_COLUMNS = List.of("FRST_REG_DTM", "LAST_CHG_DTM");
 
     /** 분류어 — 물리명의 마지막 낱말이며 도메인 하나를 지시한다. */
@@ -153,9 +160,12 @@ public final class DbStandard {
      * @param description 무엇의 단위인지
      * @param primaryKey  PK 구성 컬럼 물리명
      * @param columns     구성 컬럼 물리명(DDL 선언 순서)
+     * @param audit       감사 컬럼({@code AUDIT_COLUMNS})을 두는 테이블인지. 사전이 적지
+     *                    않으면 {@code true}다 — 면제받으려면 테이블이 스스로
+     *                    {@code "audit": false}라고 밝혀야 한다
      */
     public record TableSpec(String logical, String physical, String suffix, String description,
-                            List<String> primaryKey, List<String> columns) {
+                            List<String> primaryKey, List<String> columns, boolean audit) {
     }
 
     /**
@@ -425,7 +435,8 @@ public final class DbStandard {
         for (JsonNode n : require(root, "tables")) {
             list.add(new TableSpec(text(n, "logical"), text(n, "physical"), text(n, "suffix"),
                     n.path("description").asText(""),
-                    strings(n, "primaryKey"), strings(n, "columns")));
+                    strings(n, "primaryKey"), strings(n, "columns"),
+                    n.path("audit").asBoolean(true)));
         }
         return List.copyOf(list);
     }
@@ -546,8 +557,12 @@ public final class DbStandard {
                 }
             }
             for (String audit : AUDIT_COLUMNS) {
-                if (!table.columns().contains(audit)) {
+                boolean present = table.columns().contains(audit);
+                if (table.audit() && !present) {
                     errors.add(table.physical() + ": 감사 컬럼이 없습니다 — " + audit);
+                } else if (!table.audit() && present) {
+                    errors.add(table.physical()
+                            + ": 감사 면제(audit:false) 테이블인데 감사 컬럼이 있습니다 — " + audit);
                 }
             }
         }

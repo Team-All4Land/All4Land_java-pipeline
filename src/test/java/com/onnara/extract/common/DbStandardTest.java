@@ -180,14 +180,25 @@ class DbStandardTest {
         assertTrue(problems.isEmpty(), () -> String.join("\n  ", problems));
     }
 
+    /**
+     * 감사 컬럼은 전 테이블 강제지만, 사전이 {@code audit:false}로 선언한 테이블은 면제다 —
+     * 쌓기만 하고 고치지 않는 로그({@code OS_CRWL_LOG_DTL})가 그렇다.
+     *
+     * <p>면제는 <b>양방향으로</b> 검사한다. 있어야 할 곳에 없는 것만 잡으면 면제를 선언해
+     * 놓고 컬럼은 그대로 둔 테이블이 조용히 통과해, 플래그가 거짓말을 하게 된다.
+     */
     @Test
-    @DisplayName("감사 컬럼이 전 테이블에 같은 이름으로 있다")
+    @DisplayName("감사 컬럼이 면제받지 않은 전 테이블에 같은 이름으로 있다")
     void auditColumnsEverywhere() {
         List<String> problems = new ArrayList<>();
         for (DbStandard.TableSpec table : DbStandard.tables()) {
             for (String audit : DbStandard.AUDIT_COLUMNS) {
-                if (!table.columns().contains(audit)) {
+                boolean present = table.columns().contains(audit);
+                if (table.audit() && !present) {
                     problems.add(table.physical() + ": " + audit + "이(가) 없습니다");
+                } else if (!table.audit() && present) {
+                    problems.add(table.physical() + ": 감사 면제 테이블인데 " + audit
+                            + "이(가) 남아 있습니다");
                 }
             }
         }
