@@ -133,6 +133,23 @@ SELECT F.ATCH_FILE_NM, V.ITEM_VAL_CTNT
    AND FC_OS_ISO_DATERANGE(V.ITEM_VAL_CTNT) && '[2026-01-01,2027-01-01)'::daterange;
 ```
 
+흔한 조회까지 매번 피벗을 손으로 쓰게 두지는 않습니다. 그 여섯은 성기지 않으므로 컬럼으로
+펴도 NULL 밭이 되지 않고, 여섯뿐이라 항목이 늘어도 뷰가 따라 커지지 않습니다.
+`OS_ATCH_CORE_ITEM_VW`가 그 자리입니다 — 첨부파일 1건이 한 행이고, 기관·담당부서·담당자·
+공고종류에 주요 6항목과 이미지 개수가 붙습니다. 처리상태가 정상(`OK`)인 첨부는 전부 담으므로,
+여섯 칸이 모두 빈 행은 곧 "이 파일에서 주요항목을 하나도 못 뽑았다"는 뜻이 됩니다.
+
+```sql
+SELECT INSTT_NM, CHRG_DEPT_NM, NOTI_KND_NM, LOC_VAL_CTNT, AREA_VAL_CTNT, ATCH_IMG_CNT
+  FROM OS_ATCH_CORE_ITEM_VW
+ WHERE INSTT_NM = '목포시청';
+```
+
+**대가는 처분 짝입니다.** 뷰는 첨부 단위라 목록표 문서의 장소·면적·성명이 처분별로 갈리지 않고
+한 칸에 `' | '`로 합쳐집니다. 값이 사라지는 것은 아니지만(뷰는 원본을 가리지 않습니다) **이
+뷰만 보고 짝을 읽으면 틀립니다** — 짝이 필요하면 `OS_NOTI_ITEM_VAL_DTL`을 `DSPS_SN`으로 묶어야
+합니다. 뷰가 펴는 여섯이 `notice_items.json`의 `is_core`와 어긋나면 `DbStandardTest`가 막습니다.
+
 ## 고시번호와 허가번호는 다른 것입니다
 
 한 고시문에 번호가 둘 나옵니다. 같아 보이지만 다른 값입니다. 크롤러가 붙으면서

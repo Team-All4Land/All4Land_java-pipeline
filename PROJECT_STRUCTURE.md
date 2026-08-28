@@ -575,7 +575,7 @@ span이 없으면(PDF·OCR) 옆 칸과 내용이 같은 것을 병합으로 간�
 
 기관 → 게시물 → 첨부파일 → (처분) 항목값의 4계층 EAV 스키마이고, 옆에 크롤 실행 기록이
 하나 붙는다. `DbLoader`가 PostgreSQL JDBC 드라이버로 적재하고, `V1__init.sql` 하나가
-DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 20개와 9테이블을 세운다. 스키마를 고칠
+DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 20개와 9테이블, 뷰 1개를 세운다. 스키마를 고칠
 때는 파일을 얹지 않고 `V1`을 고친 뒤 DB를 다시 만든다(§6.5).
 
 **ERD와 엔터티 목록은 [README의 데이터 모델 절](README.md#데이터-모델)에 있다.** 여기서는 구성만 적는다 — 같은 표를 두 문서에 옮겨 적으면 반드시 한쪽이 뒤처진다.
@@ -586,7 +586,7 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 (`NM` → `D_NM` = `VARCHAR(300)`). 테이블은 `[업무코드]_[의미]_[유형 접미사]`이고 업무코드는
 해양공간을 뜻하는 `OS`다(데이터 표준화 지침 OFBD-2210-01 §3.2.3). 제약조건·인덱스는
 `[테이블명]_PK` · `[테이블명]_FK01` · `[테이블명]_IX01` 형식이며
-기준 `_BAS` · 명세 `_DTL` · 코드 `_TC`를 쓴다. 낱말·도메인·용어·코드는 전부
+기준 `_BAS` · 명세 `_DTL` · 코드 `_TC`를 쓰고, 저장되지 않는 파생 객체인 뷰만 `_VW`다. 낱말·도메인·용어·코드는 전부
 `standard_terms.json`이 단일 정의처이고, `DbStandardTest`가 DDL과 대조한다.
 
 ### 6.2 구성
@@ -725,6 +725,35 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
 | 최초등록일시 | `FRST_REG_DTM` | `D_DTM` |
 | 최종변경일시 | `LAST_CHG_DTM` | `D_DTM` |
 
+**첨부주요항목(뷰)** `OS_ATCH_CORE_ITEM_VW` — 첨부파일 1건이 한 행. EAV로 담은 항목값 중
+주요 6항목만 다시 컬럼으로 편 요약이다. 처리상태가 정상(`OK`)인 첨부만 담는다
+
+| 논리명 | 물리명 | 도메인 | |
+|---|---|---|---|
+| 고시공고일련번호 | `NOTI_SN` | `D_SN` | 키
+| 첨부일련번호 | `ATCH_SN` | `D_SN` | 키
+| 기관명 | `INSTT_NM` | `D_NM` |
+| 담당부서명 | `CHRG_DEPT_NM` | `D_NM` |
+| 담당자명 | `CHRG_PSN_NM` | `D_NM` |
+| 공고종류명 | `NOTI_KND_NM` | `D_NM` |
+| 점용·사용 장소 | `LOC_VAL_CTNT` | `TEXT` |
+| 점용·사용 면적 | `AREA_VAL_CTNT` | `TEXT` |
+| 점용·사용 목적 | `PRPS_VAL_CTNT` | `TEXT` |
+| 허가·승인 대상자 성명 | `APLC_NM_VAL_CTNT` | `TEXT` |
+| 점용·사용 기간 | `WORK_PRD_VAL_CTNT` | `TEXT` |
+| 허가·승인 대상자 주소 | `APLC_ADDR_VAL_CTNT` | `TEXT` |
+| 첨부이미지건수 | `ATCH_IMG_CNT` | `D_CNT` |
+
+여섯 항목 컬럼은 `[공고항목코드]_VAL_CTNT`다. 앞자리는 `notice_items.json`이 정의처인 표준코드라
+표준단어로 분해되지 않고(사전 `conventions.row_data_scope`), 꼬리 `CTNT`가 분류어 규칙을 지킨다.
+뷰는 저장되지 않으므로 사전의 테이블 목록에도 표준용어에도 등재하지 않는다 — 대신
+`DbStandardTest`가 뷰가 편 여섯이 `notice_items.json`의 `is_core`와 같은지 대조한다.
+
+**한 첨부에 처분이 여럿이면 여섯 항목은 한 칸에 `' | '`로 합쳐진다.** 중복은 지우고 값 자체로
+정렬한다. 장소·면적·성명의 짝은 이 뷰에서 보이지 않으므로, 짝이 필요한 질의는
+`OS_NOTI_ITEM_VAL_DTL`을 `DSPS_SN`으로 묶어야 한다. `ATCH_IMG_CNT`는 처분 수만큼 부풀지 않는다 —
+항목값과 이미지를 각각 먼저 접은 뒤 붙이기 때문이고, 이미지가 없으면 NULL이 아니라 0이다.
+
 ### 6.3 적재 규칙
 
 - **멱등 단위는 첨부파일이다.** 게시물 단위로 지우면 파일을 한 건씩 처리하는 도중 같은
@@ -741,6 +770,20 @@ DB 표준 사전(`resources/db/standard_terms.json`)에 맞춰 표준도메인 2
   세이브포인트 롤백 후 다음 파일로 계속 진행한다(배치 격리).
 
 ### 6.4 자주 쓰는 질의
+
+기관·담당자와 주요 6항목을 한 줄로 보는 것은 뷰가 이미 접어 둡니다:
+
+```sql
+-- 목포시청이 낸 점용·사용 허가의 장소·면적·기간
+SELECT INSTT_NM, CHRG_DEPT_NM, NOTI_KND_NM,
+       LOC_VAL_CTNT, AREA_VAL_CTNT, WORK_PRD_VAL_CTNT, ATCH_IMG_CNT
+  FROM OS_ATCH_CORE_ITEM_VW WHERE INSTT_NM = '목포시청' ORDER BY NOTI_SN, ATCH_SN;
+
+-- 정상 처리됐는데 주요항목을 하나도 못 뽑은 첨부 = 추출 품질 점검 대상
+SELECT NOTI_SN, ATCH_SN, INSTT_NM, NOTI_KND_NM FROM OS_ATCH_CORE_ITEM_VW
+ WHERE LOC_VAL_CTNT IS NULL AND AREA_VAL_CTNT IS NULL AND PRPS_VAL_CTNT IS NULL
+   AND APLC_NM_VAL_CTNT IS NULL AND WORK_PRD_VAL_CTNT IS NULL AND APLC_ADDR_VAL_CTNT IS NULL;
+```
 
 미수집 첨부는 컬럼이 아니라 **첨부순번 결번**으로 잡습니다:
 

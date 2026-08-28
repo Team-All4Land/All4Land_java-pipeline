@@ -120,6 +120,7 @@
     { "suffix": "BAS", "term": "기준",       "description": "기준·마스터. 기관·상품 같은 원장성 테이블", "used": true },
     { "suffix": "DTL", "term": "명세",       "description": "거래·명세. 발생 건을 행으로 쌓는 테이블", "used": true },
     { "suffix": "TC",  "term": "코드",       "description": "코드 테이블", "used": true },
+    { "suffix": "VW",  "term": "뷰",        "description": "저장되지 않는 파생 객체. 테이블이 아니므로 사전의 tables에는 등재하지 않는다", "used": true },
     { "suffix": "HIS", "term": "이력",       "description": "변경 이력", "used": false },
     { "suffix": "SUM", "term": "요약",       "description": "배치 집계·요약", "used": false },
     { "suffix": "MAP", "term": "매핑",       "description": "N:M 관계 해소", "used": false }

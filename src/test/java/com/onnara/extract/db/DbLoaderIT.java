@@ -25,9 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 실제 PostgreSQL을 요구하는 통합 테스트 — 기본 빌드({@code mvn test})에서는 제외된다.
  *
- * <p>실행: {@code mvn test -Dgroups=db
+ * <p>실행: {@code mvn test -Dgroups=db -DexcludedGroups=
  * -Ddb.test.url=jdbc:postgresql://localhost:5432/extract
  * -Ddb.test.user=extract -Ddb.test.password=extract}
+ *
+ * <p>{@code -DexcludedGroups=}를 빠뜨리면 pom의 기본 제외가 그대로 살아 한 건도 돌지 않는다 —
+ * 실패가 아니라 "Tests run: 0"으로 조용히 끝나므로 통과한 것으로 오해하기 쉽다.
  *
  * <p>테스트가 쓰는 게시물 순번은 {@link #NOTICE_BASE} 이상의 고정 구간이다 — 크롤 순번
  * (83~21,751)이나 폴백 음수 구간과 겹치지 않아, 실 데이터가 든 DB에서도 안전하다.
@@ -439,6 +442,133 @@ class DbLoaderIT {
     }
 
     /**
+     * 주요항목 요약 뷰는 첨부파일 1건을 한 행으로 낸다.
+     *
+     * <p>처분이 여럿인 목록표 문서도 한 행이다 — 여섯 항목이 처분별로 갈리지 않고 한 칸에
+     * 합쳐진다. 그 합침이 실제로 일어나는지, 그리고 이미지 개수가 처분 수만큼 부풀지 않는지가
+     * 이 테스트가 지키는 두 가지다. 뒤엣것은 서브쿼리를 먼저 접지 않으면 바로 깨진다.
+     */
+    @Test
+    void coreItemViewSummarisesEachAttachmentAsOneRow() throws SQLException {
+        int single = NOTICE_BASE + 20;
+        int listed = NOTICE_BASE + 21;
+
+        SchemaResult one = sample(single, 1, "900020_1_고시문.hml", OPEN_BOARD);
+
+        SchemaResult many = new SchemaResult("900021_1_목록고시.hml", "hml", false, "hml-dom");
+        many.setSourceBoard(OPEN_BOARD);
+        many.setNotiSn(listed);
+        many.setAtchSn(1);
+        many.getRecords().add(record("갑 부두", "100㎡", "가나상사"));
+        many.getRecords().add(record("을 부두", "200㎡", "다라수산"));
+        // 처분 2 × 이미지 2 — 서브쿼리를 먼저 접지 않으면 여기서 4가 나온다
+        many.getImages().add(image("900021_1_목록고시.hml", 0));
+        many.getImages().add(image("900021_1_목록고시.hml", 1));
+
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            loader.loadAll(List.of(one, many), List.of());
+        }
+
+        assertEquals(1, count("SELECT count(*) FROM OS_ATCH_CORE_ITEM_VW WHERE NOTI_SN = " + single));
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement("""
+                     SELECT INSTT_NM, NOTI_KND_NM, LOC_VAL_CTNT, AREA_VAL_CTNT, PRPS_VAL_CTNT,
+                            APLC_NM_VAL_CTNT, WORK_PRD_VAL_CTNT, APLC_ADDR_VAL_CTNT, ATCH_IMG_CNT
+                       FROM OS_ATCH_CORE_ITEM_VW WHERE NOTI_SN = ? AND ATCH_SN = ?""")) {
+            ps.setInt(1, single);
+            ps.setInt(2, 1);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals("목포시청", rs.getString("INSTT_NM"));
+                assertEquals("변경허가", rs.getString("NOTI_KND_NM"),
+                        "공고종류는 코드가 아니라 이름으로 편다");
+                assertEquals("군산시 비응로 107 인근 공유수면", rs.getString("LOC_VAL_CTNT"));
+                assertEquals("367,120.2㎡", rs.getString("AREA_VAL_CTNT"));
+                assertEquals("청소년 해양종합레포츠 교육", rs.getString("PRPS_VAL_CTNT"));
+                assertEquals("한국해양소년단 전북연맹", rs.getString("APLC_NM_VAL_CTNT"));
+                assertEquals("[2025-09-01,2028-08-31]", rs.getString("WORK_PRD_VAL_CTNT"),
+                        "기간은 daterange 리터럴 원문 그대로 온다 — 비교는 FC_OS_ISO_DATERANGE()로 한다");
+                assertEquals("군산시 비응로 107", rs.getString("APLC_ADDR_VAL_CTNT"));
+                assertEquals(1, rs.getInt("ATCH_IMG_CNT"));
+            }
+        }
+
+        assertEquals(1, count("SELECT count(*) FROM OS_ATCH_CORE_ITEM_VW WHERE NOTI_SN = " + listed),
+                "처분이 둘이어도 첨부가 하나면 한 행이다");
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT LOC_VAL_CTNT, APLC_NM_VAL_CTNT, ATCH_IMG_CNT"
+                             + " FROM OS_ATCH_CORE_ITEM_VW WHERE NOTI_SN = ?")) {
+            ps.setInt(1, listed);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                assertEquals("갑 부두 | 을 부두", rs.getString("LOC_VAL_CTNT"),
+                        "처분별 값은 첨부 단위로 합쳐진다 — 짝은 여기서 보이지 않는다");
+                assertEquals("가나상사 | 다라수산", rs.getString("APLC_NM_VAL_CTNT"));
+                assertEquals(2, rs.getInt("ATCH_IMG_CNT"),
+                        "이미지 개수가 처분 수만큼 부풀면 안 된다 — 2이지 4가 아니다");
+            }
+        }
+    }
+
+    /**
+     * 뷰가 담는 행의 범위 — 처리상태가 정상(OK)인 첨부는 전부, 실패·적재제외는 하나도.
+     *
+     * <p>주요 6항목을 하나도 못 뽑은 첨부도 남는다는 것이 핵심이다. 그 행까지 빼면 "이 파일에서
+     * 주요항목을 못 뽑았다"와 "이 파일은 아예 안 들어왔다"가 둘 다 "행 없음"이 돼 구별되지
+     * 않는다 — 크롤로그가 성공도 행으로 남기는 것과 같은 이유다.
+     */
+    @Test
+    void coreItemViewKeepsOkAttachmentsAndDropsFailedOrSkipped() throws SQLException {
+        int bareSn = NOTICE_BASE + 22;
+        int skippedSn = NOTICE_BASE + 23;
+        int failedSn = NOTICE_BASE + 24;
+
+        // 표준항목이지만 주요항목은 아닌 값 하나만 든 첨부 — 취소 고시문이 이렇게 생겼다
+        SchemaResult bare = new SchemaResult("900022_1_취소고시.hml", "hml", false, "hml-dom");
+        bare.setSourceBoard(OPEN_BOARD);
+        bare.setNotiSn(bareSn);
+        bare.setAtchSn(1);
+        bare.getRecords().add(new NoticeRecord.Builder().set("APV_NO", "제2026-3호").build());
+
+        SchemaResult excluded = sample(skippedSn, 1, "900023_1_이용안내.pdf", OPEN_BOARD);
+        excluded.setExclRsnCtnt("본문 8,355자 (임계 5,000자 초과)");
+
+        DbLoader.FailedAttachment failure = new DbLoader.FailedAttachment(
+                "900024_1_깨진문서.hwp", "/srv/input/900024_1_깨진문서.hwp",
+                LoadStep.EXTRACT.code(), "ZIP_CORRUPT", "IOException: 중앙 디렉터리를 찾을 수 없음",
+                OPEN_BOARD);
+
+        try (DbLoader loader = new DbLoader(dataSource)) {
+            loader.loadAll(List.of(bare, excluded), List.of(failure));
+        }
+
+        assertEquals("제2026-3호", attribute(bareSn, "APV_NO"), "주요항목이 아닌 값은 들어가 있다");
+        try (var conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement("""
+                     SELECT LOC_VAL_CTNT, AREA_VAL_CTNT, PRPS_VAL_CTNT, APLC_NM_VAL_CTNT,
+                            WORK_PRD_VAL_CTNT, APLC_ADDR_VAL_CTNT, ATCH_IMG_CNT
+                       FROM OS_ATCH_CORE_ITEM_VW WHERE NOTI_SN = ?""")) {
+            ps.setInt(1, bareSn);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "주요항목을 하나도 못 뽑아도 정상 첨부는 뷰에 남는다");
+                assertNull(rs.getString("LOC_VAL_CTNT"));
+                assertNull(rs.getString("AREA_VAL_CTNT"));
+                assertNull(rs.getString("PRPS_VAL_CTNT"));
+                assertNull(rs.getString("APLC_NM_VAL_CTNT"));
+                assertNull(rs.getString("WORK_PRD_VAL_CTNT"));
+                assertNull(rs.getString("APLC_ADDR_VAL_CTNT"));
+                assertEquals(0, rs.getInt("ATCH_IMG_CNT"));
+            }
+        }
+
+        assertEquals(0, count("SELECT count(*) FROM OS_ATCH_CORE_ITEM_VW WHERE NOTI_SN = "
+                + skippedSn), "적재제외(SKIP) 첨부는 뷰에 담지 않는다");
+        assertEquals(0, count("SELECT count(*) FROM OS_ATCH_CORE_ITEM_VW WHERE NOTI_SN = "
+                + failedSn), "추출 실패(FAIL) 첨부는 뷰에 담지 않는다");
+    }
+
+    /**
      * 입력 폴더에서 읽은 기관과 게시판이 OS_INSTT_BAS·OS_NOTI_BAS로 들어가야 한다.
      *
      * <p>같은 기관이 게시판을 둘 운영하면 기관 행은 하나고 {@code BBS_STTS_CD}만 갈린다 —
@@ -632,6 +762,13 @@ class DbLoaderIT {
         image.setPath("/srv/extract/out/images/" + atchFileNm + "_img0.png");
         schema.getImages().add(image);
         return schema;
+    }
+
+    /** 첨부 하나에 딸린 이미지 한 건. */
+    private static RawImage image(String atchFileNm, int index) {
+        RawImage image = new RawImage(atchFileNm + "_img" + index + ".png", 100);
+        image.setPath("/srv/extract/out/images/" + atchFileNm + "_img" + index + ".png");
+        return image;
     }
 
     /** 목록표 한 행에 해당하는 레코드. */

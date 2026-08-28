@@ -482,3 +482,92 @@ CREATE INDEX OS_NOTI_ITEM_VAL_DTL_IX03
     ON OS_NOTI_ITEM_VAL_DTL USING gist (FC_OS_ISO_DATERANGE(ITEM_VAL_CTNT))
     WHERE NOTI_ITEM_CD = 'WORK_PRD';
 COMMENT ON INDEX OS_NOTI_ITEM_VAL_DTL_IX03 IS '공사기간 겹침 판정용 GiST. 기간은 사전순 트릭이 통하지 않는다';
+
+-- ---------------------------------------------------------------------------
+-- 4. 뷰
+-- ---------------------------------------------------------------------------
+-- EAV로 담은 항목값을 다시 컬럼으로 펴는 자리다. 40항목을 전부 펴지는 않는다 — 그러면 맨
+-- 위에서 EAV를 고른 이유를 그대로 되돌리는 것이 된다. 여기서 펴는 것은 전역 출현율 60%를
+-- 넘는 주요 6항목(OS_NOTI_ITEM_TC.CORE_ITEM_YN='Y')뿐이고, 그 여섯은 성기지 않다.
+--
+-- 한 행이 첨부파일 1건이다. 그래서 처분이 여럿인 목록표 문서는 여섯 항목이 처분별로 갈리지
+-- 않고 한 칸에 합쳐진다 — 장소·면적·성명의 짝이 이 뷰에서는 보이지 않는다. 값이 사라지는
+-- 것은 아니다(뷰는 원본을 가리지 않는다). 짝이 필요한 질의는 이 뷰가 아니라
+-- OS_NOTI_ITEM_VAL_DTL을 DSPS_SN으로 묶어 봐야 한다.
+--
+-- 처리상태가 정상(OK)인 첨부는 전부 담는다. 처리상태코드는 OK·FAIL·SKIP 셋뿐이므로 이 조건이
+-- 곧 "추출 실패와 항목값 적재제외만 뺀 나머지"다. 여섯 항목을 하나도 뽑지 못한 첨부도 여섯
+-- 칸이 NULL인 행으로 남는다 — 위에서 "값을 하나도 못 넣은 첨부"라고 부른 그 부류이고, 그
+-- 행이 곧 추출 품질 점검 대상이다.
+--
+-- 꼬리 _VW가 뷰를 지시한다(표준 사전 tableSuffixes). 뷰는 저장되지 않는 파생 객체이므로
+-- 사전의 테이블 목록에도 표준용어에도 등재하지 않는다 — 사전이 정하는 것은 저장되는 컬럼의
+-- 이름이고, 이 뷰의 컬럼은 이미 사전이 정한 이름들에서 나온다.
+CREATE VIEW OS_ATCH_CORE_ITEM_VW AS
+SELECT F.NOTI_SN,
+       F.ATCH_SN,
+       I.INSTT_NM,
+       N.CHRG_DEPT_NM,
+       N.CHRG_PSN_NM,
+       K.NOTI_KND_NM,
+       V.LOC_VAL_CTNT,
+       V.AREA_VAL_CTNT,
+       V.PRPS_VAL_CTNT,
+       V.APLC_NM_VAL_CTNT,
+       V.WORK_PRD_VAL_CTNT,
+       V.APLC_ADDR_VAL_CTNT,
+       COALESCE(G.ATCH_IMG_CNT, 0)::D_CNT AS ATCH_IMG_CNT
+  FROM OS_ATCH_FILE_DTL F
+  JOIN OS_NOTI_BAS      N ON N.NOTI_SN = F.NOTI_SN
+  -- 기관·공고종류는 LEFT다. 둘 다 NULL을 허용하는 컬럼이라(폴더 규약 밖에서 온 파일,
+  -- 56종에 자리가 없는 제목) INNER로 묶으면 멀쩡한 첨부가 조용히 빠진다.
+  LEFT JOIN OS_INSTT_BAS   I ON I.INSTT_SN    = N.INSTT_SN
+  LEFT JOIN OS_NOTI_KND_TC K ON K.NOTI_KND_CD = F.NOTI_KND_CD
+  -- 항목값과 이미지를 각각 먼저 접은 뒤 붙인다. 둘을 그냥 조인하면 항목값 행수 × 이미지
+  -- 행수로 불어나 이미지 개수가 뻥튀기된다.
+  --
+  -- 항목값도 LEFT다. 정상 처리된 첨부인데 여섯 항목이 하나도 안 나오는 경우가 있다 — 준공
+  -- 문서의 면적은 AREA가 아니라 CMPL_AREA로 가고(계열이 갈린다), 취소 고시문은 취소일자
+  -- 하나로 끝난다. INNER로 묶으면 그런 첨부가 뷰에서 통째로 사라져 "이 파일에서 주요항목을
+  -- 못 뽑았다"를 여기서 셀 수 없게 된다.
+  LEFT JOIN (
+      SELECT NOTI_SN, ATCH_SN,
+             string_agg(DISTINCT ITEM_VAL_CTNT, ' | ' ORDER BY ITEM_VAL_CTNT)
+                 FILTER (WHERE NOTI_ITEM_CD = 'LOC')       AS LOC_VAL_CTNT,
+             string_agg(DISTINCT ITEM_VAL_CTNT, ' | ' ORDER BY ITEM_VAL_CTNT)
+                 FILTER (WHERE NOTI_ITEM_CD = 'AREA')      AS AREA_VAL_CTNT,
+             string_agg(DISTINCT ITEM_VAL_CTNT, ' | ' ORDER BY ITEM_VAL_CTNT)
+                 FILTER (WHERE NOTI_ITEM_CD = 'PRPS')      AS PRPS_VAL_CTNT,
+             string_agg(DISTINCT ITEM_VAL_CTNT, ' | ' ORDER BY ITEM_VAL_CTNT)
+                 FILTER (WHERE NOTI_ITEM_CD = 'APLC_NM')   AS APLC_NM_VAL_CTNT,
+             string_agg(DISTINCT ITEM_VAL_CTNT, ' | ' ORDER BY ITEM_VAL_CTNT)
+                 FILTER (WHERE NOTI_ITEM_CD = 'WORK_PRD')  AS WORK_PRD_VAL_CTNT,
+             string_agg(DISTINCT ITEM_VAL_CTNT, ' | ' ORDER BY ITEM_VAL_CTNT)
+                 FILTER (WHERE NOTI_ITEM_CD = 'APLC_ADDR') AS APLC_ADDR_VAL_CTNT
+        FROM OS_NOTI_ITEM_VAL_DTL
+       WHERE NOTI_ITEM_CD IN ('LOC', 'AREA', 'PRPS', 'APLC_NM', 'WORK_PRD', 'APLC_ADDR')
+       GROUP BY NOTI_SN, ATCH_SN
+  ) V ON V.NOTI_SN = F.NOTI_SN AND V.ATCH_SN = F.ATCH_SN
+  LEFT JOIN (
+      SELECT NOTI_SN, ATCH_SN, count(*) AS ATCH_IMG_CNT
+        FROM OS_ATCH_IMG_DTL
+       GROUP BY NOTI_SN, ATCH_SN
+  ) G ON G.NOTI_SN = F.NOTI_SN AND G.ATCH_SN = F.ATCH_SN
+ WHERE F.PROC_STTS_CD = 'OK';
+
+COMMENT ON VIEW OS_ATCH_CORE_ITEM_VW IS
+    '첨부주요항목 — 첨부파일 1건이 한 행. 기관·담당부서·담당자·공고종류에 주요 6항목과 이미지 개수를 붙여 편 요약이다. 처리상태가 정상(OK)인 첨부만 담는다. 이름을 그대로 빌려 온 컬럼(NOTI_SN·ATCH_SN·INSTT_NM·CHRG_DEPT_NM·CHRG_PSN_NM·NOTI_KND_NM)은 뜻도 원본 그대로이므로 설명을 여기 되풀이하지 않는다 — 원본 테이블의 컬럼 주석을 보면 된다. 뷰에서 새로 생긴 컬럼만 아래에 설명한다';
+COMMENT ON COLUMN OS_ATCH_CORE_ITEM_VW.LOC_VAL_CTNT IS
+    '점용·사용 장소 — 공고항목 LOC. 한 첨부에 값이 여럿이면 중복을 지우고 '' | ''로 이었다. 그 구분자는 읽으라고 붙인 것이지 파싱하라고 둔 것이 아니다 — 처분별로 갈라 보려면 OS_NOTI_ITEM_VAL_DTL을 DSPS_SN으로 묶어야 한다';
+COMMENT ON COLUMN OS_ATCH_CORE_ITEM_VW.AREA_VAL_CTNT IS
+    '점용·사용 면적 — 공고항목 AREA. 준공·완료 수리 문서는 면적이 준공면적(CMPL_AREA)으로 가므로 이 칸이 빈다. 그것은 누락이 아니라 계열이 갈린 것이다';
+COMMENT ON COLUMN OS_ATCH_CORE_ITEM_VW.PRPS_VAL_CTNT IS
+    '점용·사용 목적 — 공고항목 PRPS. 목적과 사업내용을 한 칸에 적어 온 문서는 PRPS가 아니라 PRPS_CTNT로 가므로 여기 오지 않는다';
+COMMENT ON COLUMN OS_ATCH_CORE_ITEM_VW.APLC_NM_VAL_CTNT IS
+    '허가·승인 대상자 성명 — 공고항목 APLC_NM. 공고·처분 대상자 성명(SBJT_NM)이나 사업 시행자 성명(OPER_NM)과는 다른 것이다';
+COMMENT ON COLUMN OS_ATCH_CORE_ITEM_VW.WORK_PRD_VAL_CTNT IS
+    '점용·사용 기간 — 공고항목 WORK_PRD. daterange 리터럴 "[시작,종료]" 원문이므로 기간 비교는 문자열이 아니라 FC_OS_ISO_DATERANGE()로 해야 한다. 정규화에 실패한 값은 그 함수가 NULL을 돌려준다';
+COMMENT ON COLUMN OS_ATCH_CORE_ITEM_VW.APLC_ADDR_VAL_CTNT IS
+    '허가·승인 대상자 주소 — 공고항목 APLC_ADDR. 공고·처분 대상자 주소(SBJT_ADDR)와는 다른 것이다';
+COMMENT ON COLUMN OS_ATCH_CORE_ITEM_VW.ATCH_IMG_CNT IS
+    '첨부이미지건수 — 첨부 문서 안에서 뽑아낸 이미지 수. 첨부 자체가 이미지 파일인 것과는 다른 얘기이며 그쪽은 ACTL_FILE_EXTN_NM이 답한다. 이미지가 없으면 NULL이 아니라 0이다 — 세는 컬럼이 NULL이면 합계·평균이 조용히 어긋난다';
