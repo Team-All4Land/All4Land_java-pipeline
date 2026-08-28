@@ -134,7 +134,7 @@ DB를 다시 세우는 절차는
 
 ## 데이터 모델
 
-Flyway 마이그레이션 `V1__init.sql` 하나가 표준도메인 20개와 9테이블을 세웁니다.
+Flyway 마이그레이션 `V1__init.sql` 하나가 표준도메인 20개와 9테이블, 뷰 1개를 세웁니다.
 
 **ERD는 논리명과 물리명을 함께 적습니다.** 물리명은 영문 약어 조합이라 한눈에 뜻이 잡히지
 않고, 논리명은 SQL에 그대로 쓸 수 없기 때문입니다.
@@ -268,11 +268,28 @@ erDiagram
 **항목값은 컬럼이 아니라 행(EAV)으로 담습니다** —
 [왜 그런지](docs/DESIGN_NOTES.md#왜-값-컬럼이-아니라-eav인가).
 
+**흔히 쓰는 여섯 항목만 뷰로 폅니다.** `OS_ATCH_CORE_ITEM_VW`는 첨부파일 1건을 한 행으로 내고,
+기관·담당부서·담당자·공고종류에 주요 6항목(장소·면적·목적·성명·기간·주소)과 이미지 개수를
+붙입니다. 처리상태가 정상(`OK`)인 첨부만 담으므로, 여섯 칸이 모두 빈 행은 곧 "이 파일에서
+주요항목을 하나도 못 뽑았다"는 뜻입니다.
+
+```sql
+SELECT INSTT_NM, CHRG_DEPT_NM, CHRG_PSN_NM, NOTI_KND_NM,
+       LOC_VAL_CTNT, AREA_VAL_CTNT, PRPS_VAL_CTNT,
+       APLC_NM_VAL_CTNT, WORK_PRD_VAL_CTNT, APLC_ADDR_VAL_CTNT, ATCH_IMG_CNT
+  FROM OS_ATCH_CORE_ITEM_VW
+ ORDER BY NOTI_SN, ATCH_SN;
+```
+
+첨부 단위라 목록표 문서의 장소·면적·성명은 처분별로 갈리지 않고 한 칸에 `' | '`로 합쳐집니다 —
+짝이 필요하면 뷰가 아니라 `OS_NOTI_ITEM_VAL_DTL`을 `DSPS_SN`으로 묶어야 합니다.
+
 이름은 사람이 그때그때 짓지 않고 [DB 표준 사전](src/main/resources/db/standard_terms.json)에서
 조합해 만들고, `DbStandardTest`가 사전과 DDL을 대조합니다. 사전을 지나치고 컬럼을 보태면
 빌드가 막힙니다. 규칙은 사업 [데이터 표준화 지침]을 따릅니다:
 
-- 테이블은 `[업무코드]_[의미]_[유형접미사]` — 업무코드 `OS`는 **해양공간**입니다
+- 테이블은 `[업무코드]_[의미]_[유형접미사]` — 업무코드 `OS`는 **해양공간**이고,
+  접미사는 기준 `_BAS` · 명세 `_DTL` · 코드 `_TC`이며 뷰만 `_VW`입니다
 - 컬럼은 `[수식어]…[분류어]`이고 **마지막 낱말이 도메인을 지시**합니다(`…_NM` → `VARCHAR(300)`)
 - 제약조건·인덱스는 `[테이블명]_PK` · `_FK01` · `_IX01`
 

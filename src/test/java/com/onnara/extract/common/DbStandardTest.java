@@ -118,6 +118,17 @@ class DbStandardTest {
             "CONSTRAINT\\s+[A-Z0-9_]+_PK\\s+PRIMARY\\s+KEY\\s*\\(([^)]*)\\)",
             Pattern.CASE_INSENSITIVE);
 
+    /** 주요항목 요약 뷰. 여기 박힌 항목코드 여섯이 정의처와 어긋나면 뷰가 조용히 낡는다. */
+    private static final String CORE_ITEM_VIEW = "OS_ATCH_CORE_ITEM_VW";
+
+    /** 뷰 본문의 {@code NOTI_ITEM_CD = 'XXX'} — 피벗 한 칸이 무슨 항목인지. */
+    private static final Pattern VIEW_ITEM_EQ =
+            Pattern.compile("NOTI_ITEM_CD\\s*=\\s*'([A-Z_]+)'");
+
+    /** 뷰 본문의 {@code NOTI_ITEM_CD IN (…)} — 서브쿼리가 실제로 읽어 오는 항목 목록. */
+    private static final Pattern VIEW_ITEM_IN =
+            Pattern.compile("NOTI_ITEM_CD\\s+IN\\s*\\(([^)]*)\\)", Pattern.CASE_INSENSITIVE);
+
     @Test
     @DisplayName("사전이 로드되고 4대 구성이 모두 채워져 있다")
     void dictionaryLoads() {
@@ -587,6 +598,54 @@ class DbStandardTest {
         assertCodeGroupMatches("CD_ITEM_VAL_TY",
                 NoticeItems.fields().stream().map(NoticeItems.FieldSpec::valTyCd)
                         .filter(v -> v != null && !v.isBlank()).distinct().toList());
+    }
+
+    /**
+     * 주요항목 요약 뷰가 펴는 여섯 항목은 {@code notice_items.json}의 {@code is_core}를 SQL에
+     * 손으로 베낀 값이다. 정의처가 바뀌어도 뷰는 아무 말 없이 옛 여섯을 계속 펴므로, 그
+     * 어긋남은 질의 결과가 조용히 틀리는 방식으로만 드러난다 — {@code CD_FAIL_STEP}에 실측
+     * 0건인 값이 남아 있던 것과 같은 실패다.
+     *
+     * <p>세 곳을 한꺼번에 맞춘다: 사전({@code is_core}), 뷰가 편 여섯 칸, 그리고 서브쿼리가
+     * 읽어 올 항목을 추린 {@code IN} 목록. 뒤엣것이 빠지면 칸은 있는데 값이 영영 안 들어오는
+     * 컬럼이 생기고, 그것은 "그 문서에 그 항목이 없다"와 구별되지 않는다.
+     */
+    @Test
+    @DisplayName("주요항목 뷰가 펴는 항목이 사전의 주요항목과 같다")
+    void coreItemViewPivotsExactlyTheCoreItems() throws IOException {
+        String body = viewBody(readMigration(), CORE_ITEM_VIEW);
+
+        Set<String> expected = NoticeItems.fields().stream()
+                .filter(NoticeItems.FieldSpec::coreYn)
+                .map(NoticeItems.FieldSpec::itemCd)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+
+        Set<String> pivoted = new LinkedHashSet<>();
+        Matcher pivot = VIEW_ITEM_EQ.matcher(body);
+        while (pivot.find()) {
+            pivoted.add(pivot.group(1));
+        }
+
+        Matcher scan = VIEW_ITEM_IN.matcher(body);
+        assertTrue(scan.find(), CORE_ITEM_VIEW + ": NOTI_ITEM_CD IN (…) 목록이 없습니다");
+        Set<String> scanned = java.util.Arrays.stream(scan.group(1).split(","))
+                .map(part -> part.trim().replace("'", ""))
+                .filter(part -> !part.isEmpty())
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+
+        assertEquals(expected, pivoted, () -> CORE_ITEM_VIEW
+                + ": 뷰가 편 항목이 사전과 다릅니다 — notice_items.json의 is_core가 정의처입니다");
+        assertEquals(expected, scanned, () -> CORE_ITEM_VIEW
+                + ": IN 목록이 뷰가 편 항목과 다릅니다 — 값이 영영 안 들어오는 칸이 생깁니다");
+    }
+
+    /** V1에서 뷰 하나의 본문을 잘라 낸다 — {@code CREATE VIEW 이름 … ;}. */
+    private static String viewBody(String sql, String view) {
+        int start = sql.indexOf("CREATE VIEW " + view);
+        assertTrue(start >= 0, "V1이 만들지 않는 뷰입니다: " + view);
+        int end = sql.indexOf(';', start);
+        assertTrue(end > start, view + ": 뷰 정의가 세미콜론으로 끝나지 않습니다");
+        return sql.substring(start, end);
     }
 
     /** 사전 등재값과 정의처 값 집합을 양방향으로 대조한다. */
