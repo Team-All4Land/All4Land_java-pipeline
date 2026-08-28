@@ -50,6 +50,11 @@ class DbStandardTest {
     private static final Pattern INDEX_DECL = Pattern.compile(
             "CREATE\\s+(?:UNIQUE\\s+)?INDEX\\s+([A-Z][A-Z0-9_]*)", Pattern.CASE_INSENSITIVE);
 
+    /** {@code COMMENT ON TABLE 이름 IS '문장'} — 문장은 여러 줄로 이어질 수 있다. */
+    private static final Pattern TABLE_COMMENT = Pattern.compile(
+            "COMMENT\\s+ON\\s+TABLE\\s+([A-Z][A-Z0-9_]*)\\s+IS\\s+'((?:[^']|'')*)'",
+            Pattern.CASE_INSENSITIVE);
+
     /**
      * {@code COMMENT ON COLUMN}을 요구하지 않는 컬럼 — 전 테이블에 같은 뜻으로 박히는 감사
      * 컬럼뿐이다. 예외를 넓히면 검사가 무의미해지므로 여기에 무엇을 보태기 전에 정말 이름만으로
@@ -268,6 +273,54 @@ class DbStandardTest {
 
         assertTrue(problems.isEmpty(),
                 () -> "사전과 V1이 어긋납니다:\n  - " + String.join("\n  - ", problems));
+    }
+
+    /**
+     * DDL의 테이블 주석도 사전 설명과 같아야 한다.
+     *
+     * <p>이 검사가 없어 편차가 조용히 벌어졌다 — #26이 "원본 절대경로"를 사전에 넣었을 때
+     * {@code OS_ATCH_FILE_DTL}의 주석만 옛 문장으로 남았고, 다른 테이블도 하나씩 어긋나
+     * 있었다. DB에 붙어 {@code \d+}로 스키마를 읽는 사람에게는 이 주석이 사실상 유일한
+     * 설명이라, 여기가 옛 문장이면 사전을 갱신한 의미가 절반은 사라진다.
+     *
+     * <p>DDL의 두 관례를 모두 받는다 — {@code '설명'}과 {@code '논리명 — 설명'}. 설명이
+     * 이미 논리명으로 시작하면 앞에 또 붙이지 않는 편이 읽기 낫기 때문이다.
+     */
+    @Test
+    @DisplayName("V1의 테이블 주석이 사전 설명과 같다")
+    void tableCommentsMatchTheDictionary() throws IOException {
+        Map<String, String> comments = parseTableComments(readMigration());
+        List<String> problems = new ArrayList<>();
+
+        for (DbStandard.TableSpec spec : DbStandard.tables()) {
+            String actual = comments.get(spec.physical());
+            if (actual == null) {
+                problems.add(spec.physical() + ": COMMENT ON TABLE이 없습니다");
+                continue;
+            }
+            String bare = spec.description();
+            String prefixed = spec.logical() + " — " + bare;
+            if (!actual.equals(bare) && !actual.equals(prefixed)) {
+                problems.add(spec.physical() + ": 주석이 사전과 다릅니다\n      사전: " + bare
+                        + "\n      V1  : " + actual);
+            }
+        }
+
+        assertTrue(problems.isEmpty(), () -> "사전과 V1 주석이 어긋납니다:\n  - "
+                + String.join("\n  - ", problems)
+                + "\n  설명을 고칠 곳은 db/standard_terms.json입니다 — docs/DB_STANDARD.md는"
+                + " 거기서 생성됩니다.");
+    }
+
+    /** {@code COMMENT ON TABLE 이름 IS '문장'}을 읽어 낸다 — 문장 안의 {@code ''}는 따옴표 하나다. */
+    private static Map<String, String> parseTableComments(String sql) {
+        Map<String, String> comments = new LinkedHashMap<>();
+        Matcher comment = TABLE_COMMENT.matcher(sql);
+        while (comment.find()) {
+            comments.put(comment.group(1).toUpperCase(Locale.ROOT),
+                    comment.group(2).replace("''", "'"));
+        }
+        return comments;
     }
 
     @Test

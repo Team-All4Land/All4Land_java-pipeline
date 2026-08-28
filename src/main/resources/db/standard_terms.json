@@ -134,7 +134,7 @@
     },
     {
       "logical": "고시공고게시물", "physical": "OS_NOTI_BAS", "suffix": "BAS",
-      "description": "게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다",
+      "description": "게시물 1건. 크롤러 게시물 목록 엑셀 한 줄이 한 행이며, 같은 게시물의 첨부를 묶는 키를 겸한다. 첨부가 없거나 추출에 실패한 게시물도 제목·URL·담당자는 여기 남는다",
       "primaryKey": ["NOTI_SN"],
       "columns": ["NOTI_SN", "INSTT_SN", "BBS_STTS_CD",
                   "SRC_KEY_CTNT", "SRC_KEY_HASH", "BBS_URL", "BBS_TTL", "CRWL_KND_CD",
@@ -169,19 +169,19 @@
     },
     {
       "logical": "첨부이미지", "physical": "OS_ATCH_IMG_DTL", "suffix": "DTL",
-      "description": "이미지는 처분 레코드가 아니라 첨부파일의 속성이다 — 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다",
+      "description": "이미지는 처분 레코드가 아니라 첨부파일의 속성이다. 한 파일이 레코드 N건을 낳을 때 어느 레코드에 붙일지 정할 근거가 없다",
       "primaryKey": ["NOTI_SN", "ATCH_SN", "IMG_SN"],
       "columns": ["NOTI_SN", "ATCH_SN", "IMG_SN", "IMG_CPTN_CTNT", "IMG_FILE_PATH", "FRST_REG_DTM", "LAST_CHG_DTM"]
     },
     {
       "logical": "공고항목값", "physical": "OS_NOTI_ITEM_VAL_DTL", "suffix": "DTL",
-      "description": "항목값. 40개 표준항목을 전부 동등하게 행으로 담는다",
+      "description": "40개 표준항목을 전부 동등하게 행으로 담는다",
       "primaryKey": ["NOTI_SN", "ATCH_SN", "DSPS_SN", "NOTI_ITEM_CD", "RPT_SN"],
       "columns": ["NOTI_SN", "ATCH_SN", "DSPS_SN", "NOTI_ITEM_CD", "RPT_SN", "ITEM_VAL_CTNT", "FRST_REG_DTM", "LAST_CHG_DTM"]
     },
     {
       "logical": "고시공고라벨값", "physical": "OS_NOTI_LBL_VAL_DTL", "suffix": "DTL",
-      "description": "표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — OS_NOTI_ITEM_TC로 가는 FK가 없어야 표준항목 레지스트리를 지키면서 값을 잃지 않는다",
+      "description": "표준항목으로 매핑되지 못한 값. 라벨 원문을 키로 담는다 — OS_NOTI_ITEM_TC로 가는 FK가 없어야 표준항목 레지스트리를 지키면서 값을 잃지 않는다. 사전 보강 판단이 내려질 때까지 값을 들고 있는 자리다",
       "primaryKey": ["NOTI_SN", "ATCH_SN", "DSPS_SN", "ITEM_LBL_NM"],
       "columns": ["NOTI_SN", "ATCH_SN", "DSPS_SN", "ITEM_LBL_NM", "ITEM_VAL_CTNT", "FRST_REG_DTM", "LAST_CHG_DTM"]
     }

@@ -305,8 +305,8 @@ public final class DbLoader implements AutoCloseable {
             savepoint = conn.setSavepoint();
             // 사유는 우리 처리 방식("롤백했다")이 아니라 실패 원인 원문이어야 한다 —
             // 담당자가 손댈 수 있는 것은 제약 위반이나 값 길이이지 savepoint가 아니다.
-            loadFailure(new FailedAttachment(file.getAtchFileNm(), LoadStep.LOAD.code(),
-                    null, Errors.describe(cause), file.getSourceBoard()));
+            loadFailure(new FailedAttachment(file.getAtchFileNm(), file.getAtchFilePath(),
+                    LoadStep.LOAD.code(), null, Errors.describe(cause), file.getSourceBoard()));
             conn.releaseSavepoint(savepoint);
         } catch (Exception e) {
             rollbackQuietly(savepoint);

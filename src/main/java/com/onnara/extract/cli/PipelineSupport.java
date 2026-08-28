@@ -116,7 +116,7 @@ final class PipelineSupport {
      * 적재돼 기존 집계 쿼리와 값이 어긋난다. 두 축을 여기서 한 번에 정리해, 엔진은 형식 판정
      * 정책을 몰라도 되게 한다.
      */
-    private static RawDocument tagFormats(RawDocument raw, Path file, String format) {
+    static RawDocument tagFormats(RawDocument raw, Path file, String format) {
         raw.setAtchFilePath(absolutePath(file));
         raw.setFileExtnNm(extensionOf(file));
         raw.setActlFileExtnNm(format);
